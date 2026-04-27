@@ -1,0 +1,26 @@
+<UserControl x:Class="YMM43D.Preview.Views.Preview3DView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:YMM43D.Preview.Views"
+             xmlns:icons="clr-namespace:YukkuriMovieMaker.Resources.Icons;assembly=YukkuriMovieMaker.Plugin"
+             mc:Ignorable="d" 
+             d:DesignHeight="450" d:DesignWidth="600"
+             Background="Black">
+    <Grid x:Name="RootGrid">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="Auto"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- 3D表示 -->
+        <local:D3D11Host Grid.Column="0" x:Name="D3DHost" />
+
+        <!-- 
+            サイドバー（重ね合わせではなく、右側に配置） 
+            これならAirspace問題が起きず、安定して表示・操作が可能です。
+        -->
+        <local:Preview3DSidebar Grid.Column="1" VerticalAlignment="Stretch" />
+    </Grid>
+</UserControl>
