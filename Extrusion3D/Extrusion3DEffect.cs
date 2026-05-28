@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Windows.Media;
+using Vortice.Direct3D11;
 using YMM43D.Rendering;
 using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Controls;
@@ -56,13 +57,13 @@ namespace Extrusion3D
 
         protected override IEnumerable<IAnimatable> GetAnimatables() => [ Thickness, Attenuation ];
 
-        public void Draw(Vortice.Direct3D11.ID3D11DeviceContext d3dDc, System.Numerics.Matrix4x4 view, System.Numerics.Matrix4x4 projection, DrawContext3D drawContext)
+        public void Draw(ID3D11Device device,ID3D11DeviceContext d3dDc, System.Numerics.Matrix4x4 view, System.Numerics.Matrix4x4 projection, DrawContext3D drawContext)
         {
-            sharedSource?.Draw(d3dDc, view, projection, drawContext);
+            sharedSource?.Draw(device, d3dDc, view, projection, drawContext);
         }
 
         // I3DTextureProvider: PropertyMapper が item.VideoEffects から呼ぶ
-        public Vortice.Direct3D11.ID3D11ShaderResourceView? GetTexture(Vortice.Direct3D11.ID3D11Device device)
+        public ID3D11ShaderResourceView? GetTexture(ID3D11Device device)
         {
             return LastProcessor?.GetTexture(device);
         }

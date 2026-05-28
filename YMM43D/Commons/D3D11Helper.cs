@@ -3,7 +3,7 @@ using Vortice;
 using Vortice.Direct2D1;
 using Vortice.Direct3D11;
 
-namespace YMM43D.Rendering
+namespace YMM43D.Commons
 {
     public static class D3D11Helper
     {
@@ -17,8 +17,17 @@ namespace YMM43D.Rendering
             });
         }
 
-        public static ID3D11Buffer CreateBuffer<T>(ID3D11Device device, T[] data, BindFlags bindFlags) where T : unmanaged
+        public static ID3D11Buffer CreateBuffer<T>(ID3D11Device device, T[]? data, BindFlags bindFlags) where T : unmanaged
         {
+            if (data == null || data.Length == 0)
+            {
+                return device.CreateBuffer(new BufferDescription
+                {
+                    Usage = ResourceUsage.Default,
+                    BindFlags = bindFlags,
+                    ByteWidth = System.Runtime.InteropServices.Marshal.SizeOf<T>()
+                });
+            }
             return device.CreateBuffer(data, new BufferDescription
             {
                 Usage = ResourceUsage.Default,
@@ -48,28 +57,36 @@ namespace YMM43D.Rendering
                         }
                     }
                 }
-                else if (SharedGraphics.Devices != null)
+                else if (Rendering.SharedGraphics.Devices != null)
                 {
                     // CommandList などのビットマップでない画像をレンダリングしてテクスチャ化
                     try
                     {
-                        var devices = SharedGraphics.Devices;
+                        var devices = Rendering.SharedGraphics.Devices;
                         var d2dContext = devices?.DeviceContext;
-                        if (d2dContext == null) return null;
+                        if (d2dContext == null || d2dContext.NativePointer == IntPtr.Zero) return null;
+                        if (image == null || image.NativePointer == IntPtr.Zero) return null;
 
-                        // 描画範囲を正確に取得 (ここで NRE が発生することがあるため try-catch)
                         RawRectF bounds;
-                        try
+                        if (image is ID2D1Bitmap bitmap)
                         {
-                            bounds = d2dContext.GetImageLocalBounds(image);
+                            var size = bitmap.Size;
+                            bounds = new RawRectF(0, 0, size.Width, size.Height);
                         }
-                        catch
+                        else
                         {
-                            bounds = new RawRectF(0, 0, 1, 1);
+                            try
+                            {
+                                bounds = d2dContext.GetImageLocalBounds(image);
+                            }
+                            catch
+                            {
+                                bounds = new RawRectF(0, 0, 1, 1);
+                            }
                         }
 
-                        int width = (int)Math.Max(1, Math.Ceiling(bounds.Right - bounds.Left));
-                        int height = (int)Math.Max(1, Math.Ceiling(bounds.Bottom - bounds.Top));
+                        int width = (int)System.Math.Max(1, System.Math.Ceiling(bounds.Right - bounds.Left));
+                        int height = (int)System.Math.Max(1, System.Math.Ceiling(bounds.Bottom - bounds.Top));
 
                         // 1. 描画用デバイス（IndependentDevice）側で共有テクスチャを作成
                         var desc = new Texture2DDescription
@@ -84,21 +101,21 @@ namespace YMM43D.Rendering
                             BindFlags = BindFlags.RenderTarget | BindFlags.ShaderResource,
                             MiscFlags = ResourceOptionFlags.Shared
                         };
-                        
-                        // 【重要】using を使わない。SRV がテクスチャを参照し続けるため
+
+                        // SRV がテクスチャを参照し続けるためusing を使わない
                         var renderTexture = device.CreateTexture2D(desc);
 
-                        // 2. 共有ハンドルを介して YMM4 側のデバイスでテクスチャを開く
+                        // 共有ハンドルを介して YMM4側のデバイスでテクスチャを開く
                         using var dxgiResource = renderTexture.QueryInterface<Vortice.DXGI.IDXGIResource>();
                         nint sharedHandle = dxgiResource.SharedHandle;
-                        
+
                         ID3D11Device ymmDevice = devices!.D3D.Device;
                         using var sharedTexture = ymmDevice.OpenSharedResource<ID3D11Texture2D>(sharedHandle);
                         using var surface = sharedTexture.QueryInterface<Vortice.DXGI.IDXGISurface>();
-                        
-                        // 3. YMM4 側の D2D コンテキストで共有テクスチャに書き込む
+
+                        // YMM4側の D2D コンテキストで共有テクスチャに書き込む
                         using var tempBitmap = d2dContext.CreateBitmapFromDxgiSurface(surface);
-                        
+
                         lock (d2dContext)
                         {
                             var oldTarget = d2dContext.Target;
@@ -111,15 +128,15 @@ namespace YMM43D.Rendering
                             d2dContext.EndDraw();
                             d2dContext.Transform = oldTransform;
                             d2dContext.Target = oldTarget;
-                            
-                            // 【重要】書き込み完了を保証するため Flush する
+
+                            // 書き込み完了を保証するため Flush する
                             ymmDevice.ImmediateContext.Flush();
                         }
 
                         // 4. 描画用デバイス側のテクスチャから SRV を作成して返す
                         // renderTexture 自体は SRV 作成後に Release してもよいが、安全のためそのまま渡す
                         var srv = device.CreateShaderResourceView(renderTexture);
-                        renderTexture.Dispose(); // SRV が内部で参照を持つため Dispose しても native 側は維持される
+                        renderTexture.Dispose();
                         return srv;
                     }
                     catch (Exception)

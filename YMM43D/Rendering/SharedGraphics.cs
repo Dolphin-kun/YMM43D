@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using Vortice.Direct3D;
 using Vortice.Direct3D11;
 using YukkuriMovieMaker.Commons;
@@ -12,20 +11,29 @@ namespace YMM43D.Rendering
 
         private static ID3D11Device? independentDevice;
         private static ID3D11DeviceContext? independentContext;
+        private static int independentRefCount;
 
         private static readonly Lock syncLock = new();
-        private static readonly List<WeakReference<IDisposable>> cleanupList = [];
+        private static DisposeCollector? disposer;
 
         static SharedGraphics()
         {
-            AppDomain.CurrentDomain.ProcessExit += (s, e) => Dispose();
+            if (System.Windows.Application.Current != null)
+            {
+                System.Windows.Application.Current.Exit += (s, e) => Dispose();
+            }
+            else
+            {
+                AppDomain.CurrentDomain.ProcessExit += (s, e) => Dispose();
+            }
         }
 
         public static void RegisterForCleanup(IDisposable resource)
         {
             lock (syncLock)
             {
-                cleanupList.Add(new WeakReference<IDisposable>(resource));
+                disposer ??= new DisposeCollector();
+                disposer.Collect(resource);
             }
         }
 
@@ -35,17 +43,8 @@ namespace YMM43D.Rendering
             {
                 lock (syncLock)
                 {
-                    if (independentDevice == null)
-                    {
-                        D3D11.D3D11CreateDevice(
-                            null,
-                            DriverType.Hardware,
-                            DeviceCreationFlags.BgraSupport | DeviceCreationFlags.VideoSupport,
-                            [],
-                            out independentDevice,
-                            out independentContext).CheckError();
-                    }
-                    return independentDevice;
+                    EnsureIndependentDevice();
+                    return independentDevice!;
                 }
             }
         }
@@ -59,23 +58,57 @@ namespace YMM43D.Rendering
             }
         }
 
+        public static void AcquireIndependentDevice(out ID3D11Device device, out ID3D11DeviceContext context)
+        {
+            lock (syncLock)
+            {
+                EnsureIndependentDevice();
+                independentRefCount++;
+                device = independentDevice!;
+                context = independentContext!;
+            }
+        }
+
+        public static void ReleaseIndependentDevice()
+        {
+            lock (syncLock)
+            {
+                if (independentRefCount > 0) independentRefCount--;
+                if (independentRefCount == 0) DisposeIndependentDeviceCore();
+            }
+        }
+
+        private static void EnsureIndependentDevice()
+        {
+            if (independentDevice != null) return;
+
+            D3D11.D3D11CreateDevice(
+                null,
+                DriverType.Hardware,
+                DeviceCreationFlags.BgraSupport | DeviceCreationFlags.VideoSupport,
+                [],
+                out independentDevice,
+                out independentContext).CheckError();
+
+            disposer ??= new DisposeCollector();
+            disposer.Collect(independentDevice);
+            disposer.Collect(independentContext);
+        }
+
+        private static void DisposeIndependentDeviceCore()
+        {
+            disposer?.Dispose();
+            disposer = null;
+            independentContext = null;
+            independentDevice = null;
+        }
+
         public static void Dispose()
         {
             lock (syncLock)
             {
-                foreach (var weakRef in cleanupList.ToArray())
-                {
-                    if (weakRef.TryGetTarget(out var resource))
-                    {
-                        try { resource.Dispose(); } catch { }
-                    }
-                }
-                cleanupList.Clear();
-
-                independentContext?.Dispose();
-                independentDevice?.Dispose();
-                independentContext = null;
-                independentDevice = null;
+                independentRefCount = 0;
+                DisposeIndependentDeviceCore();
             }
         }
     }

@@ -1,10 +1,14 @@
 using System.Runtime.InteropServices;
 using Vortice.Direct3D11;
+using YukkuriMovieMaker.Commons;
+using YMM43D.Commons;
 
 namespace YMM43D.Rendering.Geometries
 {
     public class PlaneGeometry : I3DGeometry
     {
+        private readonly DisposeCollector disposer = new();
+
         public ID3D11Buffer VertexBuffer { get; }
         public ID3D11Buffer IndexBuffer { get; }
         public int IndexCount => 6;
@@ -31,13 +35,14 @@ namespace YMM43D.Rendering.Geometries
             ];
 
             VertexBuffer = D3D11Helper.CreateBuffer(device, vertices, BindFlags.VertexBuffer);
+            disposer.Collect(VertexBuffer);
             IndexBuffer = D3D11Helper.CreateBuffer(device, indices, BindFlags.IndexBuffer);
+            disposer.Collect(IndexBuffer);
         }
 
         public void Dispose()
         {
-            VertexBuffer?.Dispose();
-            IndexBuffer?.Dispose();
+            disposer.Dispose();
         }
     }
 }

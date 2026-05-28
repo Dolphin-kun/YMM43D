@@ -1,10 +1,13 @@
 using System;
 using Vortice.Direct3D11;
+using YukkuriMovieMaker.Commons;
 
 namespace YMM43D.Rendering.States
 {
     public class DepthStencilStates : IDisposable
     {
+        private readonly DisposeCollector disposer = new();
+
         public ID3D11DepthStencilState Default { get; }
         public ID3D11DepthStencilState NoDepth { get; }
 
@@ -16,6 +19,7 @@ namespace YMM43D.Rendering.States
                 DepthWriteMask = DepthWriteMask.All,
                 DepthFunc = ComparisonFunction.LessEqual
             });
+            disposer.Collect(Default);
 
             NoDepth = device.CreateDepthStencilState(new DepthStencilDescription
             {
@@ -23,12 +27,13 @@ namespace YMM43D.Rendering.States
                 DepthWriteMask = DepthWriteMask.Zero,
                 DepthFunc = ComparisonFunction.Always
             });
+            disposer.Collect(NoDepth);
         }
 
         public void Dispose()
         {
-            NoDepth.Dispose();
-            Default.Dispose();
+            disposer.Dispose();
+            GC.SuppressFinalize(this);
         }
     }
 }

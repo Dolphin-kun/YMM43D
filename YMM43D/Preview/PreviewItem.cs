@@ -3,7 +3,6 @@ using YukkuriMovieMaker.Project.Items;
 
 namespace YMM43D.Preview
 {
-    // アイテム本体 (IVideoItem) を保持するように拡張
     public class PreviewItem(I3DProvider provider, IVideoItem item, int frame, int length)
     {
         public I3DProvider Provider { get; } = provider;

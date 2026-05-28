@@ -1,7 +1,7 @@
 ﻿using YukkuriMovieMaker.Plugin.Shape;
 using YukkuriMovieMaker.Project;
 
-namespace YMM43D.Plugins.Shape3D
+namespace Shape3D
 {
     public class Shape3DPlugin: IShapePlugin
     {

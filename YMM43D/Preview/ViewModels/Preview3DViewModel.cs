@@ -1,9 +1,5 @@
-using System;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.Linq;
-using System.Windows.Input;
 using YMM43D.Rendering;
 using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Player.Video;
@@ -13,21 +9,18 @@ using YukkuriMovieMaker.Project.Items;
 
 namespace YMM43D.Preview.ViewModels
 {
-    public class Preview3DViewModel : Bindable, ITimelineToolViewModel
+    public class Preview3DViewModel : Bindable, ITimelineToolViewModel, IDisposable
     {
         #region Fields
         private Timeline? timeline;
         private TimelineToolInfo? toolInfo;
         private List<I3DProvider> lastProviders = [];
-        private bool isSettingsVisible = false;
-
         private SceneCamera sceneCamera = SceneCamera.Instance;
         private SceneCamera freeCamera = new();
-        private bool isLockToCamera = false;
+        private readonly CameraChangeTracker sceneCameraTracker = new();
         #endregion
 
         #region Properties
-        public string Title => "3Dプレビュー";
         public int CurrentFrame => timeline?.CurrentFrame ?? 0;
         public int FPS => timeline?.VideoInfo.FPS ?? 60;
         public ObservableCollection<PreviewItem> PreviewItems { get; } = [];
@@ -36,73 +29,82 @@ namespace YMM43D.Preview.ViewModels
         private object? scene;
         private TimelineSourceDescription? timelineSourceDescription;
 
-        public bool IsSettingsVisible
-        {
-            get => isSettingsVisible;
-            set => Set(ref isSettingsVisible, value);
-        }
 
         public SceneCamera SceneCamera => sceneCamera;
         public SceneCamera FreeCamera => freeCamera;
-
-        public bool IsLockToCamera
-        {
-            get => isLockToCamera;
-            set
-            {
-                if (Set(ref isLockToCamera, value))
-                {
-                    OnPropertyChanged(nameof(ActiveCamera));
-                }
-            }
-        }
-
-        public SceneCamera ActiveCamera => IsLockToCamera ? SceneCamera : FreeCamera;
-
-        public Preview3DSettingsViewModel SettingsViewModel { get; } = new();
-        #endregion
-
-        #region Commands
-        public ICommand ToggleSettingsCommand { get; }
-        public ICommand ResetCameraCommand { get; }
         #endregion
 
         public Preview3DViewModel()
         {
-            ToggleSettingsCommand = new ActionCommand(
-                _ => true,
-                _ => IsSettingsVisible = !IsSettingsVisible
-            );
+        }
 
-            ResetCameraCommand = new ActionCommand(
-                _ => true,
-                _ => SceneCamera.Reset()
-            );
+        public void RefreshOutputPreviewIfCameraChanged()
+        {
+            if (timeline == null)
+                return;
 
-            SettingsViewModel.Camera = SceneCamera;
+            int frame = timeline.CurrentFrame;
+            int length = timeline.Length;
+            int fps = timeline.VideoInfo.FPS;
+
+            SceneCamera.UpdateTimelineContext(frame, length, fps);
+
+            if (!sceneCameraTracker.HasChanged(SceneCamera, frame, length, fps))
+                return;
+
+            TouchShape3DParameters();
+            ForceTimelineRefresh();
+        }
+
+        private void ForceTimelineRefresh()
+        {
+            if (timeline == null)
+                return;
+
+            int currentFrame = timeline.CurrentFrame;
+            int alternateFrame = currentFrame < timeline.Length - 1
+                ? currentFrame + 1
+                : (currentFrame > 0 ? currentFrame - 1 : 0);
+
+            if (alternateFrame == currentFrame)
+            {
+                UpdatePreviewTarget();
+                return;
+            }
+
+            timeline.CurrentFrame = alternateFrame;
+            timeline.CurrentFrame = currentFrame;
+        }
+
+        private void TouchShape3DParameters()
+        {
+            if (timeline?.Items == null)
+                return;
+
+            foreach (var item in timeline.Items.OfType<ShapeItem>())
+            {
+                if (item.ShapeParameter is ICameraSync param)
+                {
+                    param.TouchCameraSync();
+                }
+            }
         }
 
         public void SetTimelineToolInfo(TimelineToolInfo info)
         {
-            if (timeline != null)
-                timeline.PropertyChanged -= OnTimelinePropertyChanged;
+            timeline?.PropertyChanged -= OnTimelinePropertyChanged;
 
             toolInfo = info;
             timeline = info.Timeline;
-            
+
             if (timeline != null)
             {
                 UpdateTimelineSourceDescription();
                 
-                // 現在のタイムラインに対応する Scene を取得
                 if (info.Scenes != null)
                 {
                     scene = info.Scenes.AllScenes.FirstOrDefault(s => s.Timeline == timeline);
                 }
-            }
-            
-            if (timeline != null)
-            {
                 timeline.PropertyChanged += OnTimelinePropertyChanged;
                 UpdatePreviewTarget();
             }
@@ -148,7 +150,6 @@ namespace YMM43D.Preview.ViewModels
             var items = timeline.Items;
             if (items == null) return;
 
-            // リフレクションを排除したため、毎フレーム実行しても十分に高速です
             var activeVideoItems = items
                                    .Where(item => item != null && frame >= item.Frame && frame < (item.Frame + item.Length))
                                    .OfType<IVideoItem>()
@@ -163,7 +164,6 @@ namespace YMM43D.Preview.ViewModels
                 }
             }
 
-            // プロバイダーの一覧に変更があった場合のみ ObservableCollection を更新
             var newProviderList = currentProviders.Select(x => x.Provider).ToList();
             if (!newProviderList.SequenceEqual(lastProviders))
             {
@@ -176,7 +176,8 @@ namespace YMM43D.Preview.ViewModels
             }
         }
 
-        private static readonly StandardVideoItemProvider defaultProvider = new();
+        private readonly StandardVideoItemProvider defaultProvider = new();
+        private bool isDisposed;
 
         private static I3DProvider? GetProviderFromShapeParameter(IVideoItem item)
         {
@@ -213,13 +214,26 @@ namespace YMM43D.Preview.ViewModels
             }
 
             if (results.Count > 1)
-                results = results.Distinct().ToList();
+                results = [.. results.Distinct()];
 
             // 5. 何も見つからなかった場合は、通常の VideoItem として表示するためのデフォルトプロバイダーを返す
             if (results.Count == 0)
                 results.Add(defaultProvider);
 
             return results;
+        }
+
+        public void Dispose()
+        {
+            if (isDisposed)
+                return;
+
+            isDisposed = true;
+            timeline?.PropertyChanged -= OnTimelinePropertyChanged;
+            timeline = null;
+            toolInfo = null;
+            defaultProvider.Dispose();
+            lastProviders.Clear();
         }
     }
 }

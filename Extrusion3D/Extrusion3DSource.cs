@@ -10,10 +10,11 @@ using YMM43D.Rendering;
 using YMM43D.Rendering.Geometries;
 using YMM43D.Rendering.Materials;
 using YMM43D.Rendering.States;
+using YMM43D.Commons;
 
 namespace Extrusion3D
 {
-    internal class Extrusion3DSource : I3DProvider, IDisposable
+    internal class Extrusion3DSource : IDisposable
     {
         private readonly Extrusion3DEffect effect;
         internal readonly Extrusion3DProcessor processor;
@@ -24,16 +25,14 @@ namespace Extrusion3D
             this.effect = effect;
             this.processor = processor;
             this.resourceCache = new DeviceResourceCache<ExtrusionResources>(device => new ExtrusionResources(device));
-            
-            SharedGraphics.RegisterForCleanup(this);
         }
 
-        public void Draw(ID3D11DeviceContext d3dDc, Matrix4x4 view, Matrix4x4 projection, DrawContext3D drawContext)
+        public void Draw(ID3D11Device device, ID3D11DeviceContext d3dDc, Matrix4x4 view, Matrix4x4 projection, DrawContext3D drawContext)
         {
-            var texture = processor.GetTexture(d3dDc.Device);
+            var texture = processor.GetTexture(device);
             if (texture == null) return;
             
-            var res = resourceCache.Get(d3dDc.Device);
+            var res = resourceCache.Get(device);
             float thickness = (float)(effect.Thickness.GetValue(drawContext.Frame, drawContext.Length, drawContext.FPS) / 100.0);
             if (thickness <= 0) return;
 
@@ -72,11 +71,11 @@ namespace Extrusion3D
             };
             d3dDc.UpdateSubresource(in data, res.ConstantBuffer);
 
-            var depthStates = res.DepthStencilStates.Get(d3dDc.Device);
+            var depthStates = res.DepthStencilStates.Get(device);
             d3dDc.OMSetDepthStencilState(drawContext.IsAlwaysOnTop ? depthStates.NoDepth : depthStates.Default);
-            var blendStates = res.BlendStates.Get(d3dDc.Device);
+            var blendStates = res.BlendStates.Get(device);
             d3dDc.OMSetBlendState(blendStates.Normal);
-            var rasterStates = res.RasterizerStates.Get(d3dDc.Device);
+            var rasterStates = res.RasterizerStates.Get(device);
 
             d3dDc.VSSetShader(res.Material.VertexShader);
             d3dDc.PSSetShader(res.Material.PixelShader);

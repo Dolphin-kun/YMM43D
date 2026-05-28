@@ -6,15 +6,21 @@ using YMM43D.Rendering;
 using YMM43D.Rendering.Geometries;
 using YMM43D.Rendering.Materials;
 using YMM43D.Rendering.States;
+using YukkuriMovieMaker.Commons;
+using YMM43D.Commons;
 
 namespace YMM43D.Preview
 {
-    public class StandardVideoItemProvider : I3DProvider
+    public class StandardVideoItemProvider : I3DProvider, IDisposable
     {
         public bool RequiresMappedTexture => true;
 
+        private bool isDisposed;
+
         private class Resources : System.IDisposable
         {
+            private readonly DisposeCollector disposer = new();
+
             public PlaneGeometry Geometry { get; }
             public TextureMaterial Material { get; }
             public ID3D11InputLayout InputLayout { get; }
@@ -28,17 +34,25 @@ namespace YMM43D.Preview
             public Resources(ID3D11Device device)
             {
                 Geometry = new PlaneGeometry(device);
+                disposer.Collect(Geometry);
                 Material = new TextureMaterial(device);
+                disposer.Collect(Material);
                 InputLayout = device.CreateInputLayout(Geometry.InputElements, Material.VertexShaderBytecode);
+                disposer.Collect(InputLayout);
                 ConstantBuffer = D3D11Helper.CreateConstantBuffer<TextureMaterial.TransformBuffer>(device);
+                disposer.Collect(ConstantBuffer);
                 BlendStates = new BlendStates(device);
+                disposer.Collect(BlendStates);
                 DepthStencilStates = new DepthStencilStates(device);
+                disposer.Collect(DepthStencilStates);
                 SamplerStates = new SamplerStates(device);
+                disposer.Collect(SamplerStates);
                 RasterizerStates = new RasterizerStates(device);
+                disposer.Collect(RasterizerStates);
                 WhiteTexture = CreateWhiteTexture(device);
             }
 
-            private unsafe static ID3D11ShaderResourceView CreateWhiteTexture(ID3D11Device device)
+            private unsafe ID3D11ShaderResourceView CreateWhiteTexture(ID3D11Device device)
             {
                 var desc = new Texture2DDescription
                 {
@@ -54,28 +68,23 @@ namespace YMM43D.Preview
 
                 uint white = 0xFFFFFFFF;
                 var texture = device.CreateTexture2D(desc, [new SubresourceData((nint)(&white), 4)]);
-                return device.CreateShaderResourceView(texture);
+                disposer.Collect(texture);
+                var srv = device.CreateShaderResourceView(texture);
+                disposer.Collect(srv);
+                return srv;
             }
 
             public void Dispose()
             {
-                Geometry.Dispose();
-                Material.Dispose();
-                InputLayout.Dispose();
-                ConstantBuffer.Dispose();
-                BlendStates.Dispose();
-                DepthStencilStates.Dispose();
-                SamplerStates.Dispose();
-                RasterizerStates.Dispose();
-                WhiteTexture.Dispose();
+                disposer.Dispose();
             }
         }
 
         private readonly DeviceResourceCache<Resources> resourceCache = new(device => new Resources(device));
 
-        public void Draw(ID3D11DeviceContext context, Matrix4x4 view, Matrix4x4 projection, DrawContext3D drawContext)
+        public void Draw(ID3D11Device device, ID3D11DeviceContext context, Matrix4x4 view, Matrix4x4 projection, DrawContext3D drawContext)
         {
-            var res = resourceCache.Get(context.Device);
+            var res = resourceCache.Get(device);
 
             var wvp = drawContext.World * view * projection;
             var data = new TextureMaterial.TransformBuffer
@@ -115,6 +124,16 @@ namespace YMM43D.Preview
             context.RSSetState(null);
             context.OMSetBlendState(null);
             context.OMSetDepthStencilState(null);
+        }
+
+        public void Dispose()
+        {
+            if (isDisposed)
+                return;
+
+            isDisposed = true;
+            resourceCache.Dispose();
+            GC.SuppressFinalize(this);
         }
     }
 }

@@ -1,14 +1,10 @@
-using System;
+using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using Vortice.Direct3D;
 using Vortice.Direct3D11;
-using Vortice.Mathematics;
 using YMM43D.Rendering;
-using YMM43D.Rendering.Geometries;
-using YMM43D.Rendering.Materials;
-using YMM43D.Rendering.States;
 using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Controls;
 using YukkuriMovieMaker.Exo;
@@ -16,18 +12,23 @@ using YukkuriMovieMaker.Player.Video;
 using YukkuriMovieMaker.Plugin.Shape;
 using YukkuriMovieMaker.Project;
 using YmmBlend = YukkuriMovieMaker.Project.Blend;
+using YMM43D.Commons;
 
-namespace YMM43D.Plugins.Shape3D
+namespace Shape3D
 {
     /// <summary>
     /// Shape3DParameter 自体に I3DProvider を実装させることで、
     /// YMM4 のメインレンダラーが実行される前でも 3D プレビューにアイテムが表示されるようにする。
     /// </summary>
-    internal class Shape3DParameter : ShapeParameterBase, I3DProvider
+    internal class Shape3DParameter : ShapeParameterBase, I3DProvider, ICameraSync
     {
         [Display(GroupName = "", Name = "サイズ")]
         [AnimationSlider("F1", "px", 0, 500)]
         public Animation Size { get; } = new Animation(100, 0, 100000);
+
+        [Browsable(false)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public Animation CameraSync { get; } = new Animation(0, -1000000, 1000000);
 
         [Display(GroupName = "", Name = "投影方法")]
         [EnumComboBox]
@@ -48,11 +49,10 @@ namespace YMM43D.Plugins.Shape3D
 
         // リソースキャッシュは Shape3DParameter が I3DProvider として描画する際に使用
         private readonly DeviceResourceCache<CubeResources> resourceCache = new(device => new CubeResources(device));
+        private int cameraSyncVersion;
 
         public Shape3DParameter(SharedDataStore? sharedData) : base(sharedData)
         {
-            // このコンストラクタが呼ばれた時点で自分自身を登録する。
-            // これにより YMM4 のメインレンダラーが動作する前でも 3D プレビューに表示可能になる。
             ProviderRegistry.Register(this, this);
         }
 
@@ -60,23 +60,30 @@ namespace YMM43D.Plugins.Shape3D
         {
         }
 
+        public void TouchCameraSync()
+        {
+            cameraSyncVersion = (cameraSyncVersion + 1) % 1000000;
+            CameraSync.CopyFrom(new Animation(cameraSyncVersion, -1000000, 1000000));
+        }
+
         // --- I3DProvider 実装 ---
 
-        public void Draw(ID3D11DeviceContext context, Matrix4x4 view, Matrix4x4 projection, DrawContext3D drawContext)
+        public void Draw(ID3D11Device device, ID3D11DeviceContext context, Matrix4x4 view, Matrix4x4 projection, DrawContext3D drawContext)
         {
-            var res = resourceCache.Get(context.Device);
+            var res = resourceCache.Get(device);
 
-            var rx = (float)(RX.GetValue(drawContext.Frame, drawContext.Length, drawContext.FPS) * Math.PI / 180.0);
-            var ry = (float)(RY.GetValue(drawContext.Frame, drawContext.Length, drawContext.FPS) * Math.PI / 180.0);
-            var rz = (float)(RZ.GetValue(drawContext.Frame, drawContext.Length, drawContext.FPS) * Math.PI / 180.0);
-            var localRotation = Matrix4x4.CreateRotationX(rx) * Matrix4x4.CreateRotationY(ry) * Matrix4x4.CreateRotationZ(rz);
+            var localRotation = YMM43D.Commons.Math.CreateObjectRotation(
+                (float)RX.GetValue(drawContext.Frame, drawContext.Length, drawContext.FPS),
+                (float)RY.GetValue(drawContext.Frame, drawContext.Length, drawContext.FPS),
+                (float)RZ.GetValue(drawContext.Frame, drawContext.Length, drawContext.FPS)
+            );
 
             var finalWorld = localRotation * drawContext.World;
-            DrawCube(context, finalWorld * view, projection, drawContext.Opacity, drawContext.Blend,
+            DrawCube(device, context, finalWorld * view, projection, drawContext.Opacity, drawContext.Blend,
                      drawContext.IsInverted, drawContext.IsAlwaysOnTop, drawContext.IsZOrderEnabled, res);
         }
 
-        private static void DrawCube(ID3D11DeviceContext d3dDc, Matrix4x4 viewWorld, Matrix4x4 proj, float opacity,
+        private static void DrawCube(ID3D11Device device, ID3D11DeviceContext d3dDc, Matrix4x4 viewWorld, Matrix4x4 proj, float opacity,
             YmmBlend blend, bool inverted, bool alwaysOnTop, bool zOrder, CubeResources res)
         {
             var wvpMatrix = viewWorld * proj;
@@ -87,10 +94,10 @@ namespace YMM43D.Plugins.Shape3D
             };
             d3dDc.UpdateSubresource(in data, res.ConstantBuffer);
 
-            var depthStates = res.DepthStencilStates.Get(d3dDc.Device);
+            var depthStates = res.DepthStencilStates.Get(device);
             d3dDc.OMSetDepthStencilState(alwaysOnTop ? depthStates.NoDepth : depthStates.Default);
 
-            var blendStates = res.BlendStates.Get(d3dDc.Device);
+            var blendStates = res.BlendStates.Get(device);
             d3dDc.OMSetBlendState(blend switch
             {
                 YmmBlend.Add => blendStates.Add,
@@ -109,7 +116,7 @@ namespace YMM43D.Plugins.Shape3D
             d3dDc.VSSetConstantBuffer(0, res.ConstantBuffer);
             d3dDc.PSSetConstantBuffer(0, res.ConstantBuffer);
 
-            var rasterStates = res.RasterizerStates.Get(d3dDc.Device);
+            var rasterStates = res.RasterizerStates.Get(device);
             d3dDc.RSSetState(rasterStates.CullFront);
             d3dDc.DrawIndexed(res.Geometry.IndexCount, 0, 0);
             d3dDc.RSSetState(rasterStates.CullBack);
@@ -130,13 +137,12 @@ namespace YMM43D.Plugins.Shape3D
 
         public override IShapeSource CreateShapeSource(IGraphicsDevicesAndContext devices)
         {
-            // Shape3DSource を作り直す際、自分自身の登録も更新する
             ProviderRegistry.Register(this, this);
             SharedGraphics.Devices = devices;
             return new Shape3DSource(devices, this);
         }
 
-        protected override IEnumerable<IAnimatable> GetAnimatables() => [Size, RX, RY, RZ];
+        protected override IEnumerable<IAnimatable> GetAnimatables() => [Size, RX, RY, RZ, CameraSync];
 
         protected override void LoadSharedData(SharedDataStore store)
         {

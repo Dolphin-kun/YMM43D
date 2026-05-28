@@ -1,10 +1,13 @@
 using System;
 using Vortice.Direct3D11;
+using YukkuriMovieMaker.Commons;
 
 namespace YMM43D.Rendering.States
 {
     public class RasterizerStates : IDisposable
     {
+        private readonly DisposeCollector disposer = new();
+
         /// <summary>カリングなし（両面描画）</summary>
         public ID3D11RasterizerState CullNone { get; }
         
@@ -26,20 +29,20 @@ namespace YMM43D.Rendering.States
                 CullMode = CullMode.None
             };
             CullNone = device.CreateRasterizerState(desc);
+            disposer.Collect(CullNone);
 
             desc.CullMode = CullMode.Back;
             CullBack = device.CreateRasterizerState(desc);
+            disposer.Collect(CullBack);
 
             desc.CullMode = CullMode.Front;
             CullFront = device.CreateRasterizerState(desc);
+            disposer.Collect(CullFront);
         }
 
         public void Dispose()
         {
-            CullFront.Dispose();
-            CullBack.Dispose();
-            CullNone.Dispose();
-
+            disposer.Dispose();
             GC.SuppressFinalize(this);
         }
     }

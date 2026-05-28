@@ -1,10 +1,14 @@
+using System;
 using Vortice.D3DCompiler;
 using Vortice.Direct3D11;
+using YukkuriMovieMaker.Commons;
 
 namespace YMM43D.Rendering.Materials
 {
     public class TextureMaterial : I3DMaterial
     {
+        private readonly DisposeCollector disposer = new();
+
         public ID3D11VertexShader VertexShader { get; }
         public ID3D11PixelShader PixelShader { get; }
         public byte[] VertexShaderBytecode { get; }
@@ -46,21 +50,19 @@ namespace YMM43D.Rendering.Materials
                 }
             ";
 
-            var vsBlob = Compiler.Compile(shaderSource, "VSMain", "TextureShader", "vs_5_0");
-            var psBlob = Compiler.Compile(shaderSource, "PSMain", "TextureShader", "ps_5_0");
+            using var vsBlob = Compiler.Compile(shaderSource, "VSMain", "TextureShader", "vs_5_0");
+            using var psBlob = Compiler.Compile(shaderSource, "PSMain", "TextureShader", "ps_5_0");
 
             VertexShader = device.CreateVertexShader(vsBlob);
+            disposer.Collect(VertexShader);
             PixelShader = device.CreatePixelShader(psBlob);
+            disposer.Collect(PixelShader);
             VertexShaderBytecode = vsBlob.AsBytes();
-
-            vsBlob.Dispose();
-            psBlob.Dispose();
         }
 
         public void Dispose()
         {
-            VertexShader?.Dispose();
-            PixelShader?.Dispose();
+            disposer.Dispose();
         }
     }
 }

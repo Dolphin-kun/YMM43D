@@ -5,6 +5,8 @@ using Vortice.Direct3D11;
 using YMM43D.Rendering;
 using YukkuriMovieMaker.Player.Video;
 using YukkuriMovieMaker.Project.Items;
+using YMM43D.Commons;
+using Math = System.Math;
 
 namespace YMM43D.Preview
 {
@@ -93,10 +95,10 @@ namespace YMM43D.Preview
                 ID2D1Image? image = null;
 
                 // 2. ISource としての処理
-                if (source is YukkuriMovieMaker.Player.Video.ISource s)
+                if (source is ISource s)
                 {
                     s.Update(new TimelineItemSourceDescription(timelineSourceDescription, frame, length, item.Layer));
-                    
+
                     if (s.Outputs != null)
                     {
                         foreach (var output in s.Outputs)
@@ -113,7 +115,7 @@ namespace YMM43D.Preview
                 // 3. IDrawable としての処理 (フォールバック)
                 if (image == null)
                 {
-                    if (source is YukkuriMovieMaker.Player.Video.IDrawable drawable)
+                    if (source is IDrawable drawable)
                     {
                         image = drawable.Output;
                     }

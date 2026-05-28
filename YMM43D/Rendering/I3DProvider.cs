@@ -7,6 +7,6 @@ namespace YMM43D.Rendering
     {
         bool RequiresMappedTexture => false;
 
-        void Draw(ID3D11DeviceContext context, Matrix4x4 view, Matrix4x4 projection, DrawContext3D drawContext);
+        void Draw(ID3D11Device device, ID3D11DeviceContext context, Matrix4x4 view, Matrix4x4 projection, DrawContext3D drawContext);
     }
 }

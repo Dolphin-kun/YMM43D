@@ -5,6 +5,7 @@ using YMM43D.Rendering;
 using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Player.Video;
 using YukkuriMovieMaker.Project.Effects;
+using YMM43D.Commons;
 
 namespace Extrusion3D
 {
@@ -15,6 +16,8 @@ namespace Extrusion3D
         private ID2D1Image? input;
         private ID3D11ShaderResourceView? srv;
         private D3D11RenderSurface? rasterizerSurface;
+        private ID3D11Device? independentDevice;
+        private bool hasIndependentDevice;
 
         public ID2D1Image Output => input ?? throw new NullReferenceException(nameof(input) + " is null");
         public System.Numerics.Vector2 TextureSize { get; private set; }
@@ -47,7 +50,8 @@ namespace Extrusion3D
 
             TextureSize = new System.Numerics.Vector2(imageWidth, imageHeight);
 
-            srv = D3D11Helper.CreateSrvFromD2DImage(SharedGraphics.IndependentDevice, input);
+            EnsureIndependentDevice();
+            srv = D3D11Helper.CreateSrvFromD2DImage(independentDevice!, input);
             if (srv != null) return;
 
             rasterizerSurface ??= new D3D11RenderSurface();
@@ -61,7 +65,7 @@ namespace Extrusion3D
             d2dDc.EndDraw();
             d2dDc.Target = oldTarget;
 
-            srv = SharedGraphics.IndependentDevice.CreateShaderResourceView(rasterizerSurface.RenderTarget!);
+            srv = independentDevice!.CreateShaderResourceView(rasterizerSurface.RenderTarget!);
         }
 
         public void ClearInput()
@@ -78,6 +82,26 @@ namespace Extrusion3D
         {
             srv?.Dispose();
             rasterizerSurface?.Dispose();
+            ReleaseIndependentDeviceIfHeld();
+        }
+
+        private void EnsureIndependentDevice()
+        {
+            if (hasIndependentDevice)
+                return;
+
+            SharedGraphics.AcquireIndependentDevice(out independentDevice!, out _);
+            hasIndependentDevice = true;
+        }
+
+        private void ReleaseIndependentDeviceIfHeld()
+        {
+            if (!hasIndependentDevice)
+                return;
+
+            hasIndependentDevice = false;
+            independentDevice = null;
+            SharedGraphics.ReleaseIndependentDevice();
         }
     }
 }

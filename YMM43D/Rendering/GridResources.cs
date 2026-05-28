@@ -4,11 +4,15 @@ using System.Runtime.InteropServices;
 using Vortice.Direct3D11;
 using YMM43D.Rendering.Geometries;
 using YMM43D.Rendering.Materials;
+using YukkuriMovieMaker.Commons;
+using YMM43D.Commons;
 
 namespace YMM43D.Rendering
 {
     public class GridResources : IDisposable
     {
+        private readonly DisposeCollector disposer = new();
+
         [StructLayout(LayoutKind.Sequential)]
         public struct ConstantData
         {
@@ -21,12 +25,14 @@ namespace YMM43D.Rendering
         public ID3D11InputLayout InputLayout { get; }
         public ID3D11Buffer ConstantBuffer { get; }
         public ID3D11BlendState BlendState { get; }
-        public ID3D11RasterizerState RasterizerState { get; } // 追加
+        public ID3D11RasterizerState RasterizerState { get; }
 
         public GridResources(ID3D11Device device)
         {
             Geometry = new GridGeometry(device);
+            disposer.Collect(Geometry);
             Material = new GridMaterial(device);
+            disposer.Collect(Material);
 
             InputLayout = device.CreateInputLayout(
                 [
@@ -35,8 +41,10 @@ namespace YMM43D.Rendering
                     new("TEXCOORD", 0, Vortice.DXGI.Format.R32G32_Float, 28, 0)
                 ], 
                 Material.VertexShaderBytecode);
+            disposer.Collect(InputLayout);
 
             ConstantBuffer = D3D11Helper.CreateConstantBuffer<ConstantData>(device);
+            disposer.Collect(ConstantBuffer);
 
             var blendDesc = new BlendDescription();
             blendDesc.RenderTarget[0] = new RenderTargetBlendDescription
@@ -51,8 +59,8 @@ namespace YMM43D.Rendering
                 RenderTargetWriteMask = ColorWriteEnable.All
             };
             BlendState = device.CreateBlendState(blendDesc);
+            disposer.Collect(BlendState);
 
-            // カリングを無効にする設定 (両面描画用)
             var rasterDesc = new RasterizerDescription
             {
                 CullMode = CullMode.None,
@@ -60,18 +68,14 @@ namespace YMM43D.Rendering
                 DepthClipEnable = true
             };
             RasterizerState = device.CreateRasterizerState(rasterDesc);
+            disposer.Collect(RasterizerState);
             
             SharedGraphics.RegisterForCleanup(this);
         }
 
         public void Dispose()
         {
-            RasterizerState.Dispose();
-            BlendState.Dispose();
-            ConstantBuffer.Dispose();
-            InputLayout.Dispose();
-            Material.Dispose();
-            Geometry.Dispose();
+            disposer.Dispose();
         }
     }
 }

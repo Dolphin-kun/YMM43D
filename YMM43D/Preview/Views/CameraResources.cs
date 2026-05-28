@@ -6,11 +6,15 @@ using Vortice.Direct3D11;
 using Vortice.DXGI;
 using Vortice.Mathematics;
 using YMM43D.Rendering;
+using YukkuriMovieMaker.Commons;
+using YMM43D.Commons;
 
 namespace YMM43D.Preview.Views
 {
     internal class CameraResources : IDisposable
     {
+        private readonly DisposeCollector disposer = new();
+
         public ID3D11Buffer VertexBuffer { get; }
         public int VertexCount { get; }
         public ID3D11VertexShader VertexShader { get; }
@@ -70,6 +74,7 @@ namespace YMM43D.Preview.Views
 
             VertexCount = finalVertices.Length;
             VertexBuffer = D3D11Helper.CreateBuffer(device, finalVertices, BindFlags.VertexBuffer);
+            disposer.Collect(VertexBuffer);
 
             var vsCode = @"
                 cbuffer cb : register(b0) { float4x4 wvp; };
@@ -87,23 +92,23 @@ namespace YMM43D.Preview.Views
 
             var vsByteCode = D3D11Helper.CompileShader(vsCode, "main", "vs_5_0");
             VertexShader = device.CreateVertexShader(vsByteCode);
+            disposer.Collect(VertexShader);
             var psByteCode = D3D11Helper.CompileShader(psCode, "main", "ps_5_0");
             PixelShader = device.CreatePixelShader(psByteCode);
+            disposer.Collect(PixelShader);
 
             InputLayout = device.CreateInputLayout(new[] {
                 new InputElementDescription("POSITION", 0, Format.R32G32B32_Float, 0, 0)
             }, vsByteCode);
+            disposer.Collect(InputLayout);
 
             ConstantBuffer = D3D11Helper.CreateConstantBuffer<Matrix4x4>(device);
+            disposer.Collect(ConstantBuffer);
         }
 
         public void Dispose()
         {
-            VertexBuffer.Dispose();
-            VertexShader.Dispose();
-            PixelShader.Dispose();
-            InputLayout.Dispose();
-            ConstantBuffer.Dispose();
+            disposer.Dispose();
         }
     }
 }

@@ -2,26 +2,25 @@ using System;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
-using Vortice.Direct3D;
 using Vortice.Direct3D11;
 using Vortice.DXGI;
 using YMM43D.Rendering;
+using YukkuriMovieMaker.Commons;
 
 namespace YMM43D.Preview.Views
 {
-    public partial class D3D11Host : HwndHost, IDisposable
+    public partial class D3D11Host : HwndHost
     {
+        private DisposeCollector? swapChainDisposer;
         private ID3D11Device? device;
         private ID3D11DeviceContext? deviceContext;
         private IDXGISwapChain? swapChain;
-        private ID3D11RenderTargetView? renderTargetView;
-        private ID3D11Texture2D? depthBuffer;
-        private ID3D11DepthStencilView? depthStencilView;
+        private bool hasIndependentDevice;
 
-        public ID3D11RenderTargetView? RenderTargetView => renderTargetView;
-        public ID3D11DepthStencilView? DepthStencilView => depthStencilView;
+        public ID3D11RenderTargetView? RenderTargetView { get; private set; }
+        public ID3D11DepthStencilView? DepthStencilView { get; private set; }
 
-        public event Action<ID3D11DeviceContext, int, int>? Render;
+        public event Action<ID3D11Device, ID3D11DeviceContext, int, int>? Render;
         public event Action<Point, MouseEventKind, int>? MouseAction;
         public enum MouseEventKind { Down, Move, Up, Wheel, RightDown, RightUp }
 
@@ -31,13 +30,18 @@ namespace YMM43D.Preview.Views
 
         public D3D11Host()
         {
-            SharedGraphics.RegisterForCleanup(this);
+            Loaded += (s, e) => InitializeIndependent();
+            Unloaded += (s, e) => DisposeAll();
+            Application.Current?.Dispatcher.ShutdownStarted += (s, e) => DisposeAll();
         }
 
         public void InitializeIndependent()
         {
-            device = SharedGraphics.IndependentDevice;
-            deviceContext = SharedGraphics.IndependentContext;
+            if (hasIndependentDevice)
+                return;
+
+            SharedGraphics.AcquireIndependentDevice(out device!, out deviceContext!);
+            hasIndependentDevice = true;
 
             CreateSwapChain();
         }
@@ -47,7 +51,7 @@ namespace YMM43D.Preview.Views
             if (device == null || deviceContext == null || swapChain == null) return;
             lock (device)
             {
-                Render?.Invoke(deviceContext, (int)ActualWidth, (int)ActualHeight);
+                Render?.Invoke(device, deviceContext, (int)ActualWidth, (int)ActualHeight);
                 swapChain.Present(1, PresentFlags.None);
             }
         }
@@ -99,69 +103,48 @@ namespace YMM43D.Preview.Views
         protected override void DestroyWindowCore(HandleRef hwnd)
         {
             DestroyWindow(hwnd.Handle);
-            CleanupSwapChain();
-            
+            DisposeAll();
             deviceContext = null;
             device = null;
         }
 
-        public new void Dispose()
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                DisposeAll();
+            }
+
+            base.Dispose(disposing);
+        }
+
+        private void DisposeAll()
         {
             CleanupSwapChain();
-            base.Dispose();
+            ReleaseIndependentDeviceIfHeld();
         }
 
-        protected override nint WndProc(nint hwnd, int msg, nint wParam, nint lParam, ref bool handled)
+        private void ReleaseIndependentDeviceIfHeld()
         {
-            switch (msg)
-            {
-                case 0x0201: // LBUTTONDOWN
-                    SetCapture(hwnd);
-                    MouseAction?.Invoke(GetPoint(lParam), MouseEventKind.Down, 0); 
-                    handled = true; 
-                    break;
-                case 0x0202: // LBUTTONUP
-                    ReleaseCapture();
-                    MouseAction?.Invoke(GetPoint(lParam), MouseEventKind.Up, 0); 
-                    handled = true; 
-                    break;
-                case 0x0204: // RBUTTONDOWN
-                    SetCapture(hwnd);
-                    MouseAction?.Invoke(GetPoint(lParam), MouseEventKind.RightDown, 0); 
-                    handled = true; 
-                    break;
-                case 0x0205: // RBUTTONUP
-                    ReleaseCapture();
-                    MouseAction?.Invoke(GetPoint(lParam), MouseEventKind.RightUp, 0); 
-                    handled = true; 
-                    break;
-                case 0x0200: // MOUSEMOVE
-                    MouseAction?.Invoke(GetPoint(lParam), MouseEventKind.Move, 0); 
-                    handled = true; 
-                    break;
-                case 0x020A: // MOUSEWHEEL
-                    short delta = (short)((long)wParam >> 16);
-                    MouseAction?.Invoke(new Point(0, 0), MouseEventKind.Wheel, delta); 
-                    handled = true;
-                    break;
-            }
-            return base.WndProc(hwnd, msg, wParam, lParam, ref handled);
+            if (!hasIndependentDevice)
+                return;
+
+            hasIndependentDevice = false;
+            SharedGraphics.ReleaseIndependentDevice();
         }
 
-        private static Point GetPoint(nint lParam)
-        {
-            int x = (short)((int)lParam & 0xFFFF);
-            int y = (short)((int)lParam >> 16);
-            return new Point(x, y);
-        }
+        
 
         private void CreateSwapChain()
         {
             if (device == null || Handle == nint.Zero) return;
             if (ActualWidth <= 0 || ActualHeight <= 0) return;
+
             CleanupSwapChain();
+
             try
             {
+                swapChainDisposer = new DisposeCollector();
                 using var factory = DXGI.CreateDXGIFactory1<IDXGIFactory1>();
                 var desc = new SwapChainDescription
                 {
@@ -174,8 +157,12 @@ namespace YMM43D.Preview.Views
                     SwapEffect = SwapEffect.Discard
                 };
                 swapChain = factory.CreateSwapChain(device, desc);
+                swapChainDisposer.Collect(swapChain);
+
                 using var backBuffer = swapChain.GetBuffer<ID3D11Texture2D>(0);
-                renderTargetView = device.CreateRenderTargetView(backBuffer);
+                RenderTargetView = device.CreateRenderTargetView(backBuffer);
+                swapChainDisposer.Collect(RenderTargetView);
+
                 var dsDesc = new Texture2DDescription
                 {
                     Width = (int)ActualWidth,
@@ -187,8 +174,10 @@ namespace YMM43D.Preview.Views
                     Usage = ResourceUsage.Default,
                     BindFlags = BindFlags.DepthStencil
                 };
-                depthBuffer = device.CreateTexture2D(dsDesc);
-                depthStencilView = device.CreateDepthStencilView(depthBuffer);
+                var depthBuffer = device.CreateTexture2D(dsDesc);
+                swapChainDisposer.Collect(depthBuffer);
+                DepthStencilView = device.CreateDepthStencilView(depthBuffer);
+                swapChainDisposer.Collect(DepthStencilView);
             }
             catch
             {
@@ -198,11 +187,59 @@ namespace YMM43D.Preview.Views
 
         private void CleanupSwapChain()
         {
-            depthStencilView?.Dispose(); depthBuffer?.Dispose(); renderTargetView?.Dispose(); swapChain?.Dispose();
-            depthStencilView = null; depthBuffer = null; renderTargetView = null; swapChain = null;
+            swapChainDisposer?.Dispose();
+            swapChainDisposer = null;
+
+            swapChain = null;
+            RenderTargetView = null;
+            DepthStencilView = null;
+        }
+
+        private static Point GetPoint(nint lParam)
+        {
+            int x = (short)((int)lParam & 0xFFFF);
+            int y = (short)((int)lParam >> 16);
+            return new Point(x, y);
         }
 
         protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo) { base.OnRenderSizeChanged(sizeInfo); CreateSwapChain(); }
+
+        protected override nint WndProc(nint hwnd, int msg, nint wParam, nint lParam, ref bool handled)
+        {
+            switch (msg)
+            {
+                case 0x0201: // LBUTTONDOWN
+                    SetCapture(hwnd);
+                    MouseAction?.Invoke(GetPoint(lParam), MouseEventKind.Down, 0);
+                    handled = true;
+                    break;
+                case 0x0202: // LBUTTONUP
+                    ReleaseCapture();
+                    MouseAction?.Invoke(GetPoint(lParam), MouseEventKind.Up, 0);
+                    handled = true;
+                    break;
+                case 0x0204: // RBUTTONDOWN
+                    SetCapture(hwnd);
+                    MouseAction?.Invoke(GetPoint(lParam), MouseEventKind.RightDown, 0);
+                    handled = true;
+                    break;
+                case 0x0205: // RBUTTONUP
+                    ReleaseCapture();
+                    MouseAction?.Invoke(GetPoint(lParam), MouseEventKind.RightUp, 0);
+                    handled = true;
+                    break;
+                case 0x0200: // MOUSEMOVE
+                    MouseAction?.Invoke(GetPoint(lParam), MouseEventKind.Move, 0);
+                    handled = true;
+                    break;
+                case 0x020A: // MOUSEWHEEL
+                    short delta = (short)((long)wParam >> 16);
+                    MouseAction?.Invoke(new Point(0, 0), MouseEventKind.Wheel, delta);
+                    handled = true;
+                    break;
+            }
+            return base.WndProc(hwnd, msg, wParam, lParam, ref handled);
+        }
 
         #region Win32 API
         private delegate nint WndProcDelegate(nint hWnd, int msg, nint wParam, nint lParam);

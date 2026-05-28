@@ -9,18 +9,6 @@
              d:DesignHeight="450" d:DesignWidth="600"
              Background="Black">
     <Grid x:Name="RootGrid">
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="*"/>
-            <ColumnDefinition Width="Auto"/>
-        </Grid.ColumnDefinitions>
-
         <!-- 3D表示 -->
-        <local:D3D11Host Grid.Column="0" x:Name="D3DHost" />
-
-        <!-- 
-            サイドバー（重ね合わせではなく、右側に配置） 
-            これならAirspace問題が起きず、安定して表示・操作が可能です。
-        -->
-        <local:Preview3DSidebar Grid.Column="1" VerticalAlignment="Stretch" />
     </Grid>
 </UserControl>

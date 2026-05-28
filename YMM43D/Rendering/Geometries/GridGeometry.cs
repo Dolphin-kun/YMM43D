@@ -1,17 +1,21 @@
+using System;
 using System.Numerics;
 using Vortice.Direct3D11;
 using Vortice.Mathematics;
+using YukkuriMovieMaker.Commons;
+using YMM43D.Commons;
 
 namespace YMM43D.Rendering.Geometries
 {
     public class GridGeometry : IDisposable
     {
+        private readonly DisposeCollector disposer = new();
+
         public ID3D11Buffer VertexBuffer { get; }
         public int VertexCount { get; }
 
         public GridGeometry(ID3D11Device device)
         {
-            // プロシージャルシェーダーで描画するため、色は白(1,1,1,1)を基本とする
             var white = new Color4(1.0f, 1.0f, 1.0f, 1.0f);
             float size = 1000f; 
             var vertices = new[]
@@ -24,11 +28,12 @@ namespace YMM43D.Rendering.Geometries
 
             VertexCount = 4;
             VertexBuffer = D3D11Helper.CreateBuffer(device, vertices, BindFlags.VertexBuffer);
+            disposer.Collect(VertexBuffer);
         }
 
         public void Dispose()
         {
-            VertexBuffer.Dispose();
+            disposer.Dispose();
         }
     }
 }
