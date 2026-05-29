@@ -16,17 +16,7 @@ namespace YMM43D.Rendering
         private static readonly Lock syncLock = new();
         private static DisposeCollector? disposer;
 
-        static SharedGraphics()
-        {
-            if (System.Windows.Application.Current != null)
-            {
-                System.Windows.Application.Current.Exit += (s, e) => Dispose();
-            }
-            else
-            {
-                AppDomain.CurrentDomain.ProcessExit += (s, e) => Dispose();
-            }
-        }
+
 
         public static void RegisterForCleanup(IDisposable resource)
         {

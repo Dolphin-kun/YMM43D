@@ -32,7 +32,6 @@ namespace YMM43D.Preview.Views
         {
             Loaded += (s, e) => InitializeIndependent();
             Unloaded += (s, e) => DisposeAll();
-            Application.Current?.Dispatcher.ShutdownStarted += (s, e) => DisposeAll();
         }
 
         public void InitializeIndependent()

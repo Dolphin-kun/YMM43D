@@ -10,5 +10,6 @@
              Background="Black">
     <Grid x:Name="RootGrid">
         <!-- 3D表示 -->
+        <ContentControl Content="{Binding D3DHost}" />
     </Grid>
 </UserControl>

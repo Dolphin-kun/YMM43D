@@ -69,8 +69,6 @@ namespace YMM43D.Rendering
             };
             RasterizerState = device.CreateRasterizerState(rasterDesc);
             disposer.Collect(RasterizerState);
-            
-            SharedGraphics.RegisterForCleanup(this);
         }
 
         public void Dispose()
