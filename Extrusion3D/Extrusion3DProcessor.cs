@@ -1,107 +1,169 @@
 using System;
+using System.Numerics;
+using Vortice;
+using Vortice.DCommon;
 using Vortice.Direct2D1;
 using Vortice.Direct3D11;
+using Vortice.Mathematics;
 using YMM43D.Rendering;
 using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Player.Video;
 using YukkuriMovieMaker.Project.Effects;
 using YMM43D.Commons;
+using Math = System.Math;
 
 namespace Extrusion3D
 {
-    public class Extrusion3DProcessor(Extrusion3DEffect effect, IGraphicsDevicesAndContext devices) : IVideoEffectProcessor, I3DTextureProvider
+    public class Extrusion3DProcessor : IVideoEffectProcessor, I3DTextureProvider, IDisposable
     {
-        private readonly Extrusion3DEffect effect = effect;
-        private readonly IGraphicsDevicesAndContext devices = devices;
+        private readonly Extrusion3DEffect effect;
+        private readonly IGraphicsDevicesAndContext devices;
         private ID2D1Image? input;
-        private ID3D11ShaderResourceView? srv;
-        private D3D11RenderSurface? rasterizerSurface;
-        private ID3D11Device? independentDevice;
-        private bool hasIndependentDevice;
+        private readonly Extrusion3DSource source;
+
+        // メインデバイス上の退避用テクスチャ
+        private ID3D11Texture2D? mainTexture;
+
+        // プレビューデバイス用のキャッシュリソース
+        private ID3D11Texture2D? previewTexture;
+        private ID3D11ShaderResourceView? previewSrv;
+        private IntPtr previewDevicePointer;
+
+        public Extrusion3DProcessor(Extrusion3DEffect effect, IGraphicsDevicesAndContext devices)
+        {
+            this.effect = effect;
+            this.devices = devices;
+            this.source = new Extrusion3DSource(effect, this);
+            effect.LastProcessor = this;
+        }
 
         public ID2D1Image Output => input ?? throw new NullReferenceException(nameof(input) + " is null");
-        public System.Numerics.Vector2 TextureSize { get; private set; }
 
         public DrawDescription Update(EffectDescription effectDescription)
         {
             return effectDescription.DrawDescription;
         }
 
-        /// <summary>
-        /// 2Dエンジンのスレッドから呼ばれる。D2D の描画はここで完結させる。
-        /// </summary>
+        public void Draw(ID3D11Device device, ID3D11DeviceContext d3dDc, Matrix4x4 view, Matrix4x4 projection, DrawContext3D drawContext)
+        {
+            source.Draw(device, d3dDc, view, projection, drawContext);
+        }
+
         public void SetInput(ID2D1Image? input)
         {
             this.input = input;
+            
+            mainTexture?.Dispose();
+            mainTexture = null;
+            ClearPreviewResources();
 
             if (input == null) return;
 
-            // 前回の SRV を破棄し新しいものを生成する
-            srv?.Dispose();
-            srv = null;
-            TextureSize = default;
+            var d2dContext = devices.DeviceContext;
+            RawRectF bounds = D3D11Helper.GetImageBounds(d2dContext, input, out _, out _);
+            int width = (int)Math.Max(1, Math.Ceiling(bounds.Right - bounds.Left));
+            int height = (int)Math.Max(1, Math.Ceiling(bounds.Bottom - bounds.Top));
 
-            // --- ここは2Dスレッド上なので DeviceContext を安全に使用できる ---
-            var d2dDc = devices.DeviceContext;
-            var bounds = d2dDc.GetImageLocalBounds(input);
-            float imageWidth = bounds.Right - bounds.Left;
-            float imageHeight = bounds.Bottom - bounds.Top;
-            if (imageWidth <= 0 || imageHeight <= 0) return;
+            int texWidth = width;
+            int texHeight = height;
 
-            TextureSize = new System.Numerics.Vector2(imageWidth, imageHeight);
+            var desc = new Texture2DDescription
+            {
+                Width = texWidth,
+                Height = texHeight,
+                MipLevels = 1,
+                ArraySize = 1,
+                Format = Vortice.DXGI.Format.B8G8R8A8_UNorm,
+                SampleDescription = new Vortice.DXGI.SampleDescription(1, 0),
+                Usage = ResourceUsage.Default,
+                BindFlags = BindFlags.RenderTarget | BindFlags.ShaderResource,
+                MiscFlags = ResourceOptionFlags.None
+            };
 
-            EnsureIndependentDevice();
-            srv = D3D11Helper.CreateSrvFromD2DImage(independentDevice!, input);
-            if (srv != null) return;
+            // メインデバイス上に退避用テクスチャを作成
+            mainTexture = devices.D3D.Device.CreateTexture2D(desc);
 
-            rasterizerSurface ??= new D3D11RenderSurface();
-            rasterizerSurface.Recreate(devices, (int)imageWidth, (int)imageHeight);
+            // デフォルトのDPI設定(96DPI)で targetBitmap を生成します。
+            // これにより、d2dContext.Target 切り替え時にD2DがDPI整合を自動で行って描き込みます。
+            using var surface = mainTexture.QueryInterface<Vortice.DXGI.IDXGISurface>();
+            using var targetBitmap = d2dContext.CreateBitmapFromDxgiSurface(surface);
 
-            var oldTarget = d2dDc.Target;
-            d2dDc.Target = rasterizerSurface.Bitmap;
-            d2dDc.BeginDraw();
-            d2dDc.Clear(new Vortice.Mathematics.Color4(0, 0, 0, 0));
-            d2dDc.DrawImage(input, new System.Numerics.Vector2(-bounds.Left, -bounds.Top), null, InterpolationMode.Linear, CompositeMode.SourceOver);
-            d2dDc.EndDraw();
-            d2dDc.Target = oldTarget;
-
-            srv = independentDevice!.CreateShaderResourceView(rasterizerSurface.RenderTarget!);
+            // D3D11Helper.UpdateSharedTexture を用いて、同期的かつ安全に画像データを等倍（1:1）で描き写す
+            D3D11Helper.UpdateSharedTexture(d2dContext, input, targetBitmap, bounds, devices.D3D.Device);
         }
 
         public void ClearInput()
         {
             input = null;
+            mainTexture?.Dispose();
+            mainTexture = null;
+            ClearPreviewResources();
         }
 
         public ID3D11ShaderResourceView? GetTexture(ID3D11Device device)
         {
-            return srv;
+            if (mainTexture == null) return null;
+
+            // キャッシュされているプレビューデバイスが一致する場合は使い回す
+            if (previewSrv != null && previewDevicePointer == device.NativePointer)
+            {
+                return previewSrv;
+            }
+
+            ClearPreviewResources();
+            previewDevicePointer = device.NativePointer;
+
+            // プレビューで渡されたデバイスがメインデバイスと同一の場合は、退避テクスチャから直接 SRV を作成
+            if (device.NativePointer == devices.D3D.Device.NativePointer)
+            {
+                previewSrv = device.CreateShaderResourceView(mainTexture);
+                return previewSrv;
+            }
+
+            // デバイスが異なる場合は、共有テクスチャを利用してデータをプレビューデバイスへ GPU コピーする
+            var desc = mainTexture.Description;
+            desc.MiscFlags = ResourceOptionFlags.Shared;
+
+            // A. プレビュー用デバイスに共有テクスチャを作成
+            previewTexture = device.CreateTexture2D(desc);
+            previewSrv = device.CreateShaderResourceView(previewTexture);
+
+            // B. プレビューデバイス of 共有ハンドルを取得
+            using var dxgiResource = previewTexture.QueryInterface<Vortice.DXGI.IDXGIResource>();
+            nint sharedHandle = dxgiResource.SharedHandle;
+
+            // C. メインデバイス側で、その共有ハンドルを開く
+            using var sharedTextureOnMain = devices.D3D.Device.OpenSharedResource<ID3D11Texture2D>(sharedHandle);
+
+            // D. メインデバイス上で退避テクスチャから共有テクスチャへ高速コピーする
+            lock (devices.D3D.Device)
+            {
+                devices.D3D.Device.ImmediateContext.CopyResource(sharedTextureOnMain, mainTexture);
+                devices.D3D.Device.ImmediateContext.Flush();
+            }
+
+            return previewSrv;
+        }
+
+        private void ClearPreviewResources()
+        {
+            previewSrv?.Dispose();
+            previewSrv = null;
+            previewTexture?.Dispose();
+            previewTexture = null;
+            previewDevicePointer = IntPtr.Zero;
         }
 
         public void Dispose()
         {
-            srv?.Dispose();
-            rasterizerSurface?.Dispose();
-            ReleaseIndependentDeviceIfHeld();
-        }
-
-        private void EnsureIndependentDevice()
-        {
-            if (hasIndependentDevice)
-                return;
-
-            SharedGraphics.AcquireIndependentDevice(out independentDevice!, out _);
-            hasIndependentDevice = true;
-        }
-
-        private void ReleaseIndependentDeviceIfHeld()
-        {
-            if (!hasIndependentDevice)
-                return;
-
-            hasIndependentDevice = false;
-            independentDevice = null;
-            SharedGraphics.ReleaseIndependentDevice();
+            if (effect.LastProcessor == this)
+            {
+                effect.LastProcessor = null;
+            }
+            ClearPreviewResources();
+            mainTexture?.Dispose();
+            mainTexture = null;
+            source.Dispose();
         }
     }
 }

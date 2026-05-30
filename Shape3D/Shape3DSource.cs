@@ -64,9 +64,8 @@ namespace Shape3D
                     
                     var sceneCamera = YMM43D.Preview.SceneCamera.Instance;
                     Matrix4x4 view = sceneCamera.GetViewMatrix(timelineItemSourceDescription);
-                    Matrix4x4 proj = sceneCamera.GetProjectionMatrix(1.0f); // メインプレビュー用アスペクト比
+                    Matrix4x4 proj = YMM43D.Preview.SceneCamera.GetProjectionMatrix(1.0f);
 
-                    // 現在のレンダーターゲットを保存
                     var oldRTVs = new ID3D11RenderTargetView[1];
                     d3dDc.OMGetRenderTargets(1, oldRTVs, out ID3D11DepthStencilView? oldDSV);
                     ID3D11RenderTargetView? oldRTV = oldRTVs[0];
@@ -79,7 +78,7 @@ namespace Shape3D
                         
                         d3dDc.RSSetViewport(new Viewport(0, 0, renderSize, renderSize));
                         
-                        DrawInternal(d3d3D, d3dDc, rotation * view, proj, 1.0f, YukkuriMovieMaker.Project.Blend.Normal, false, false, true, res);
+                        DrawInternal(d3d3D, d3dDc, Matrix4x4.CreateScale(2.0f) * rotation * view, proj, 1.0f, YukkuriMovieMaker.Project.Blend.Normal, false, false, true, res);
                     }
                     finally
                     {
@@ -124,7 +123,7 @@ namespace Shape3D
                 (float)parameter.RZ.GetValue(drawContext.Frame, drawContext.Length, drawContext.FPS)
             );
             
-            var finalWorld = localRotation * drawContext.World;
+            var finalWorld = Matrix4x4.CreateScale(2.0f) * localRotation * drawContext.World;
             
             DrawInternal(device, d3dDc, finalWorld * view, projection, drawContext.Opacity, drawContext.Blend, drawContext.IsInverted, drawContext.IsAlwaysOnTop, drawContext.IsZOrderEnabled, res);
         }

@@ -7,7 +7,9 @@
              xmlns:icons="clr-namespace:YukkuriMovieMaker.Resources.Icons;assembly=YukkuriMovieMaker.Plugin"
              mc:Ignorable="d" 
              d:DesignHeight="450" d:DesignWidth="600"
-             Background="Black">
+             Background="Black"
+             Focusable="True"
+             PreviewKeyDown="UserControl_PreviewKeyDown">
     <Grid x:Name="RootGrid">
         <!-- 3D表示 -->
         <ContentControl Content="{Binding D3DHost}" />

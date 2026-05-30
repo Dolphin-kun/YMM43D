@@ -1,7 +1,4 @@
-using System;
-using System.Collections.Generic;
 using System.Numerics;
-using Vortice.Direct3D;
 using Vortice.Direct3D11;
 using Vortice.DXGI;
 using Vortice.Mathematics;
@@ -97,9 +94,9 @@ namespace YMM43D.Preview.Views
             PixelShader = device.CreatePixelShader(psByteCode);
             disposer.Collect(PixelShader);
 
-            InputLayout = device.CreateInputLayout(new[] {
+            InputLayout = device.CreateInputLayout([
                 new InputElementDescription("POSITION", 0, Format.R32G32B32_Float, 0, 0)
-            }, vsByteCode);
+            ], vsByteCode);
             disposer.Collect(InputLayout);
 
             ConstantBuffer = D3D11Helper.CreateConstantBuffer<Matrix4x4>(device);

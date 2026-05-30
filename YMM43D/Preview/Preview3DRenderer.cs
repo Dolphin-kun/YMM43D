@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Windows;
@@ -9,7 +7,6 @@ using Vortice.Mathematics;
 using YMM43D.Commons;
 using YMM43D.Preview.Views;
 using YMM43D.Rendering;
-using YMM43D.Rendering.Geometries;
 using YukkuriMovieMaker.Commons;
 using Math = System.Math;
 
@@ -59,7 +56,7 @@ namespace YMM43D.Preview
             var cameraPos = freeTarget - lookDir * freeDistance;
 
             var view = Matrix4x4.CreateLookAt(cameraPos, freeTarget, Vector3.Transform(Vector3.UnitY, rotation));
-            var proj = vm.FreeCamera.GetProjectionMatrix((float)width / height);
+            var proj = SceneCamera.GetProjectionMatrix((float)width / height);
 
             DrawGrid(context, device, view, proj, cameraPos);
             DrawCamera(context, device, view, proj, vm.SceneCamera, frame, length, fps);
@@ -210,10 +207,19 @@ namespace YMM43D.Preview
             camera.CameraTarget = freeTarget;
         }
 
+        public void ResetFreeCameraState()
+        {
+            hasFreeCameraState = false;
+        }
+
         public void Dispose()
         {
             gridCache.Dispose();
             cameraCache.Dispose();
+            D3D11Helper.ClearCache();
+            PropertyMapper.ClearCache();
+
+            GC.SuppressFinalize(this);
         }
     }
 }

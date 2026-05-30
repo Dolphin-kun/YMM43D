@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Windows.Media;
 using Vortice.Direct3D11;
@@ -15,6 +14,11 @@ namespace Extrusion3D
     [VideoEffect("立体化3D", ["3D"], [])]
     public class Extrusion3DEffect : VideoEffectBase, I3DProvider, I3DTextureProvider
     {
+        public Extrusion3DEffect()
+        {
+            sharedSource = new Extrusion3DSource(this, null);
+        }
+
         public override string Label => "立体化3D";
 
         [Display(GroupName = "立体化3D", Name = "厚み", Description = "3D立体化の厚みを設定します")]
@@ -37,8 +41,10 @@ namespace Extrusion3D
         public Color SideColor { get => sideColor; set => Set(ref sideColor, value); }
         private Color sideColor = Colors.White;
 
-        public Extrusion3DProcessor? LastProcessor { get; private set; }
+        public Extrusion3DProcessor? LastProcessor { get; internal set; }
         private Extrusion3DSource? sharedSource;
+
+        public bool RequiresMappedTexture => true;
 
         public override IEnumerable<string> CreateExoVideoFilters(int keyFrameIndex, ExoOutputDescription exoOutputDescription)
         {
@@ -47,25 +53,20 @@ namespace Extrusion3D
 
         public override IVideoEffectProcessor CreateVideoEffect(IGraphicsDevicesAndContext devices)
         {
-            LastProcessor = new Extrusion3DProcessor(this, devices);
-            if (sharedSource == null || sharedSource.processor != LastProcessor)
-            {
-                sharedSource = new Extrusion3DSource(this, LastProcessor);
-            }
-            return LastProcessor;
+            return new Extrusion3DProcessor(this, devices);
         }
 
-        protected override IEnumerable<IAnimatable> GetAnimatables() => [ Thickness, Attenuation ];
+        protected override IEnumerable<IAnimatable> GetAnimatables() => [Thickness, Attenuation];
 
-        public void Draw(ID3D11Device device,ID3D11DeviceContext d3dDc, System.Numerics.Matrix4x4 view, System.Numerics.Matrix4x4 projection, DrawContext3D drawContext)
+        public void Draw(ID3D11Device device, ID3D11DeviceContext d3dDc, System.Numerics.Matrix4x4 view, System.Numerics.Matrix4x4 projection, DrawContext3D drawContext)
         {
             sharedSource?.Draw(device, d3dDc, view, projection, drawContext);
         }
 
-        // I3DTextureProvider: PropertyMapper が item.VideoEffects から呼ぶ
         public ID3D11ShaderResourceView? GetTexture(ID3D11Device device)
         {
             return LastProcessor?.GetTexture(device);
         }
+
     }
 }

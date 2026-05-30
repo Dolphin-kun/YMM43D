@@ -1,4 +1,3 @@
-using System;
 using YMM43D.Preview.ViewModels;
 using YMM43D.Preview.Views;
 using YukkuriMovieMaker.Plugin;

@@ -19,14 +19,8 @@ namespace YMM43D.Rendering
         public int Length { get; set; }
         public int FPS { get; set; }
 
-        /// <summary>
-        /// 描画に使用するテクスチャ（元の2D画像）。エフェクト等で使用します。
-        /// </summary>
         public ID3D11ShaderResourceView? Texture { get; set; }
 
-        /// <summary>
-        /// Texture をこの DrawContext3D 側で破棄してよい場合は true。
-        /// </summary>
         public bool OwnsTexture { get; set; }
     }
 }

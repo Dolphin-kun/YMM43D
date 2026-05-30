@@ -73,8 +73,10 @@ PS_OUTPUT main(PS_INPUT input) {
     float3 rd = normalize(input.LocalPos - CameraLocalPos);
 
     float3 invDir = 1.0 / rd;
-    float3 t0 = (-1.0 - ro) * invDir;
-    float3 t1 = (1.0 - ro) * invDir;
+    float3 boxMin = float3(-0.5, -0.5, 0.0);
+    float3 boxMax = float3(0.5, 0.5, 1.0);
+    float3 t0 = (boxMin - ro) * invDir;
+    float3 t1 = (boxMax - ro) * invDir;
     
     float3 tmin = min(t0, t1);
     float3 tmax = max(t0, t1);
@@ -94,7 +96,7 @@ PS_OUTPUT main(PS_INPUT input) {
     
     for (int i = 0; i < numSteps; i++) {
         float3 pos = ro + rd * t;
-        float2 uv = float2(pos.x * 0.5 + 0.5, -pos.y * 0.5 + 0.5);
+        float2 uv = float2(pos.x + 0.5, -pos.y + 0.5);
         
         float a = txDiffuse.SampleLevel(samLinear, uv, 0).a;
         if (a > 0.5) {
@@ -103,14 +105,14 @@ PS_OUTPUT main(PS_INPUT input) {
             for(int j=0; j<10; j++) {
                 float tMid = (tLow + tHigh) * 0.5;
                 float3 mPos = ro + rd * tMid;
-                float2 mUV = float2(mPos.x * 0.5 + 0.5, -mPos.y * 0.5 + 0.5);
+                float2 mUV = float2(mPos.x + 0.5, -mPos.y + 0.5);
                 float mA = txDiffuse.SampleLevel(samLinear, mUV, 0).a;
                 if(mA > 0.5) tHigh = tMid;
                 else tLow = tMid;
             }
             hitT = tHigh;
             hitPos = ro + rd * hitT;
-            hitUV = float2(hitPos.x * 0.5 + 0.5, -hitPos.y * 0.5 + 0.5);
+            hitUV = float2(hitPos.x + 0.5, -hitPos.y + 0.5);
             break;
         }
         t += stepSize;
@@ -121,10 +123,10 @@ PS_OUTPUT main(PS_INPUT input) {
     float4 clipPos = mul(float4(hitPos, 1.0), WorldViewProjection);
     output.Depth = clipPos.z / clipPos.w;
 
-    bool isFace = (abs(hitPos.z) > 0.999);
+    bool isFace = (abs(hitPos.z - 0.0) < 0.005 || abs(hitPos.z - 1.0) < 0.005);
 
     float3 normal = float3(0,0,0);
-    if (abs(hitPos.z - (-1.0)) < 0.005) {
+    if (abs(hitPos.z - 0.0) < 0.005) {
         normal = float3(0, 0, -1);
     } else if (abs(hitPos.z - 1.0) < 0.005) {
         normal = float3(0, 0, 1);

@@ -1,26 +1,22 @@
-using System;
-using System.Collections.Generic;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using Vortice.Direct3D;
 using Vortice.Direct3D11;
 using Vortice.DXGI;
-using Vortice.Mathematics;
 using YMM43D.Rendering;
-using YMM43D.Rendering.Geometries;
-using YMM43D.Rendering.Materials;
 using YMM43D.Rendering.States;
 using YMM43D.Commons;
+using YukkuriMovieMaker.Commons;
 
 namespace Extrusion3D
 {
     internal class Extrusion3DSource : IDisposable
     {
         private readonly Extrusion3DEffect effect;
-        internal readonly Extrusion3DProcessor processor;
+        internal readonly Extrusion3DProcessor? processor;
         private readonly DeviceResourceCache<ExtrusionResources> resourceCache;
 
-        public Extrusion3DSource(Extrusion3DEffect effect, Extrusion3DProcessor processor)
+        public Extrusion3DSource(Extrusion3DEffect effect, Extrusion3DProcessor? processor)
         {
             this.effect = effect;
             this.processor = processor;
@@ -29,30 +25,20 @@ namespace Extrusion3D
 
         public void Draw(ID3D11Device device, ID3D11DeviceContext d3dDc, Matrix4x4 view, Matrix4x4 projection, DrawContext3D drawContext)
         {
-            var texture = processor.GetTexture(device);
+            var texture = processor?.GetTexture(device) ?? effect.GetTexture(device);
             if (texture == null) return;
             
             var res = resourceCache.Get(device);
             float thickness = (float)(effect.Thickness.GetValue(drawContext.Frame, drawContext.Length, drawContext.FPS) / 100.0);
             if (thickness <= 0) return;
 
-            var textureSize = processor.TextureSize;
-            if (textureSize.X <= 0 || textureSize.Y <= 0) return;
-
-            // PropertyMapper はピクセル座標を /100 してワールド単位に変換するため、
-            // CubeGeometry は ±1 の範囲 (= 2単位幅) なので割るのは 200
-            var widthScale  = textureSize.X / 200.0f;
-            var heightScale = textureSize.Y / 200.0f;
-
-            var baseScale = Matrix4x4.CreateScale(widthScale, heightScale, 1.0f);
             var extrusionMatrix = Matrix4x4.CreateScale(1.0f, 1.0f, thickness);
-            var finalWorld = baseScale * extrusionMatrix * drawContext.World;
+            var finalWorld = extrusionMatrix * drawContext.World;
             var wvpMatrix = finalWorld * view * projection;
 
             var sideColor = effect.SideColor;
             var sideColorVec = new Vector4(sideColor.R / 255f, sideColor.G / 255f, sideColor.B / 255f, sideColor.A / 255f);
 
-            // カメラのワールド座標を計算し、それをローカル空間（箱の中）に変換する
             Matrix4x4.Invert(view, out var invView);
             var cameraWorldPos = invView.Translation;
             Matrix4x4.Invert(finalWorld, out var invWorld);
@@ -125,7 +111,7 @@ namespace Extrusion3D
 
             public ExtrusionResources(ID3D11Device device)
             {
-                Geometry = new CubeGeometry(device);
+                Geometry = new ExtrusionGeometry(device);
                 Material = new ExtrusionMaterial(device);
                 InputLayout = device.CreateInputLayout(Geometry.InputElements, Material.VertexShaderBytecode);
                 ConstantBuffer = D3D11Helper.CreateConstantBuffer<ConstantData>(device);
@@ -152,6 +138,62 @@ namespace Extrusion3D
                 DepthStencilStates.Dispose();
                 RasterizerStates.Dispose();
             }
+        }
+    }
+
+    internal class ExtrusionGeometry : I3DGeometry
+    {
+        private readonly DisposeCollector disposer = new();
+
+        public ID3D11Buffer VertexBuffer { get; }
+        public ID3D11Buffer IndexBuffer { get; }
+        public int IndexCount => 36;
+        public InputElementDescription[] InputElements { get; }
+
+        public ExtrusionGeometry(ID3D11Device device)
+        {
+            InputElements = [
+                new InputElementDescription("POSITION", 0, Vortice.DXGI.Format.R32G32B32_Float, 0, 0),
+                new InputElementDescription("COLOR", 0, Vortice.DXGI.Format.R32G32B32A32_Float, 12, 0),
+                new InputElementDescription("TEXCOORD", 0, Vortice.DXGI.Format.R32G32_Float, 28, 0)
+            ];
+
+            // 前面を Z = 0.0f（元の2D平面の位置）、背面を Z = 1.0f（奥方向）に配置
+            var vertices = new[] {
+                new Vertex(new(-0.5f,  0.5f, 0.0f), new(1f, 1f, 1f, 1f), new(0f, 0f)), // 0: TL-Near
+                new Vertex(new( 0.5f,  0.5f, 0.0f), new(1f, 1f, 1f, 1f), new(1f, 0f)), // 1: TR-Near
+                new Vertex(new(-0.5f, -0.5f, 0.0f), new(1f, 1f, 1f, 1f), new(0f, 1f)), // 2: BL-Near
+                new Vertex(new( 0.5f, -0.5f, 0.0f), new(1f, 1f, 1f, 1f), new(1f, 1f)), // 3: BR-Near
+                new Vertex(new(-0.5f,  0.5f, 1.0f), new(1f, 1f, 1f, 1f), new(0f, 0f)), // 4: TL-Far
+                new Vertex(new( 0.5f,  0.5f, 1.0f), new(1f, 1f, 1f, 1f), new(1f, 0f)), // 5: TR-Far
+                new Vertex(new(-0.5f, -0.5f, 1.0f), new(1f, 1f, 1f, 1f), new(0f, 1f)), // 6: BL-Far
+                new Vertex(new( 0.5f, -0.5f, 1.0f), new(1f, 1f, 1f, 1f), new(1f, 1f)), // 7: BR-Far
+            };
+
+            ushort[] indices = [
+                // 前面 (z=0.0)
+                0, 1, 2,  1, 3, 2,
+                // 背面 (z=1.0)
+                5, 4, 7,  4, 6, 7,
+                // 左面 (x=-0.5)
+                4, 0, 6,  0, 2, 6,
+                // 右面 (x=0.5)
+                1, 5, 3,  5, 7, 3,
+                // 上面 (y=0.5)
+                4, 5, 0,  5, 1, 0,
+                // 下面 (y=-0.5)
+                2, 3, 6,  3, 7, 6
+            ];
+
+            VertexBuffer = D3D11Helper.CreateBuffer(device, vertices, BindFlags.VertexBuffer);
+            disposer.Collect(VertexBuffer);
+            IndexBuffer = D3D11Helper.CreateBuffer(device, indices, BindFlags.IndexBuffer);
+            disposer.Collect(IndexBuffer);
+        }
+
+        public void Dispose()
+        {
+            disposer.Dispose();
         }
     }
 }

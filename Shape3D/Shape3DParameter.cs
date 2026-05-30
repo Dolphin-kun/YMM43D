@@ -78,7 +78,7 @@ namespace Shape3D
                 (float)RZ.GetValue(drawContext.Frame, drawContext.Length, drawContext.FPS)
             );
 
-            var finalWorld = localRotation * drawContext.World;
+            var finalWorld = Matrix4x4.CreateScale(2.0f) * localRotation * drawContext.World;
             DrawCube(device, context, finalWorld * view, projection, drawContext.Opacity, drawContext.Blend,
                      drawContext.IsInverted, drawContext.IsAlwaysOnTop, drawContext.IsZOrderEnabled, res);
         }

@@ -1,28 +1,14 @@
-using System;
-using YMM43D.Preview;
-
 namespace YMM43D.Preview.ViewModels
 {
-    internal readonly struct CameraSnapshot
+    internal readonly struct CameraSnapshot(float yaw, float pitch, float roll, float distance, float targetX, float targetY, float targetZ)
     {
-        public CameraSnapshot(float yaw, float pitch, float roll, float distance, float targetX, float targetY, float targetZ)
-        {
-            Yaw = yaw;
-            Pitch = pitch;
-            Roll = roll;
-            Distance = distance;
-            TargetX = targetX;
-            TargetY = targetY;
-            TargetZ = targetZ;
-        }
-
-        public float Yaw { get; }
-        public float Pitch { get; }
-        public float Roll { get; }
-        public float Distance { get; }
-        public float TargetX { get; }
-        public float TargetY { get; }
-        public float TargetZ { get; }
+        public float Yaw { get; } = yaw;
+        public float Pitch { get; } = pitch;
+        public float Roll { get; } = roll;
+        public float Distance { get; } = distance;
+        public float TargetX { get; } = targetX;
+        public float TargetY { get; } = targetY;
+        public float TargetZ { get; } = targetZ;
 
         public static CameraSnapshot FromCamera(SceneCamera camera, int frame, int length, int fps)
         {

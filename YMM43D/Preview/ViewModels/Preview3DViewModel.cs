@@ -1,3 +1,4 @@
+using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Windows;
@@ -6,10 +7,12 @@ using Vortice.Direct3D11;
 using YMM43D.Preview.Views;
 using YMM43D.Rendering;
 using YukkuriMovieMaker.Commons;
+using YukkuriMovieMaker.ItemEditor;
 using YukkuriMovieMaker.Player.Video;
 using YukkuriMovieMaker.Plugin;
 using YukkuriMovieMaker.Project;
 using YukkuriMovieMaker.Project.Items;
+using System.Windows.Input;
 
 namespace YMM43D.Preview.ViewModels
 {
@@ -17,7 +20,7 @@ namespace YMM43D.Preview.ViewModels
     {
         private readonly DisposeCollector disposer = new();
         private readonly CameraChangeTracker sceneCameraTracker = new();
-        private readonly StandardVideoItemProvider defaultProvider = new();
+        private readonly DefaultItemProvider defaultProvider = new();
         private readonly Preview3DRenderer renderer = new();
 
         private Timeline? timeline;
@@ -28,6 +31,7 @@ namespace YMM43D.Preview.ViewModels
         private D3D11Host? d3dHost;
         private object? scene;
         private TimelineSourceDescription? timelineSourceDescription;
+        private TimelineSourceAndDevices? timelineSourceAndDevices;
         private bool isDisposed;
 
         public int CurrentFrame => timeline?.CurrentFrame ?? 0;
@@ -37,6 +41,7 @@ namespace YMM43D.Preview.ViewModels
         public TimelineSourceDescription? TimelineSourceDescription => timelineSourceDescription;
         public SceneCamera SceneCamera => sceneCamera;
         public SceneCamera FreeCamera => freeCamera;
+        public ICommand ResetToSceneCameraCommand { get; }
 
         public D3D11Host? D3DHost
         {
@@ -48,6 +53,29 @@ namespace YMM43D.Preview.ViewModels
         {
             disposer.Collect(defaultProvider);
             disposer.Collect(renderer);
+
+            ResetToSceneCameraCommand = new ActionCommand(
+                _ => true,
+                _ => ResetToSceneCamera()
+            );
+        }
+
+        public void ResetToSceneCamera()
+        {
+            if (timeline == null) return;
+
+            // FreeCamera の値を SceneCamera の現在状態の値で上書きする
+            freeCamera.CameraYaw.CopyFrom(sceneCamera.CameraYaw);
+            freeCamera.CameraPitch.CopyFrom(sceneCamera.CameraPitch);
+            freeCamera.CameraRoll.CopyFrom(sceneCamera.CameraRoll);
+            freeCamera.CameraDistance.CopyFrom(sceneCamera.CameraDistance);
+            freeCamera.CameraTarget = sceneCamera.CameraTarget;
+
+            // レンダラー側の自由カメラの内部状態フラグをリセットさせる
+            renderer.ResetFreeCameraState();
+
+            // プレビューの再描画を促す
+            ForceTimelineRefresh();
         }
 
         public void RefreshOutputPreviewIfCameraChanged()
@@ -74,6 +102,7 @@ namespace YMM43D.Preview.ViewModels
             disposer.RemoveAndDisposeAction(timeline);
             disposer.RemoveAndDisposeAction(d3dHost);
             disposer.RemoveAndDispose(ref d3dHost);
+            disposer.RemoveAndDispose(ref timelineSourceAndDevices);
             D3DHost = null;
 
             toolInfo = info;
@@ -86,6 +115,20 @@ namespace YMM43D.Preview.ViewModels
                 if (info.Scenes != null)
                 {
                     scene = info.Scenes.AllScenes.FirstOrDefault(s => s.Timeline == timeline);
+                }
+
+                if (scene is Scene defaultScene)
+                {
+                    try
+                    {
+                        var sourceAndDevices = new TimelineSourceAndDevices(defaultScene);
+                        timelineSourceAndDevices = sourceAndDevices;
+                        disposer.Collect(sourceAndDevices);
+                        SharedGraphics.Devices = sourceAndDevices.Devices;
+                    }
+                    catch (Exception)
+                    {
+                    }
                 }
                 
                 timeline.PropertyChanged += OnTimelinePropertyChanged;
@@ -226,7 +269,7 @@ namespace YMM43D.Preview.ViewModels
             return null;
         }
 
-        private IEnumerable<I3DProvider> GetProvidersFromVideoItem(IVideoItem item)
+        private List<I3DProvider> GetProvidersFromVideoItem(IVideoItem item)
         {
             var results = new List<I3DProvider>();
             if (item == null) return results;
@@ -242,6 +285,7 @@ namespace YMM43D.Preview.ViewModels
             {
                 foreach (var effect in item.VideoEffects)
                 {
+                    if (!effect.IsEnabled) continue;
                     if (effect is I3DProvider effectProvider)
                         results.Add(effectProvider);
                 }
@@ -286,7 +330,11 @@ namespace YMM43D.Preview.ViewModels
             disposer.Dispose();
             timeline = null;
             toolInfo = null;
+            timelineSourceAndDevices = null;
             lastProviders.Clear();
+            SharedGraphics.Devices = null;
+
+            GC.SuppressFinalize(this);
         }
     }
 }

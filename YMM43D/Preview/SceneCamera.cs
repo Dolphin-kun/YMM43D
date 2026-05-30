@@ -1,4 +1,3 @@
-using System;
 using System.Numerics;
 using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Player.Video;
@@ -118,7 +117,7 @@ namespace YMM43D.Preview
             return CameraTarget - lookDir * dist;
         }
 
-        public Matrix4x4 GetProjectionMatrix(float aspectRatio)
+        public static Matrix4x4 GetProjectionMatrix(float aspectRatio)
         {
             return Matrix4x4.CreatePerspectiveFieldOfView((float)Math.PI / 4, aspectRatio, 0.1f, 1000f);
         }

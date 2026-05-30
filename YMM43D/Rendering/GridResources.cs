@@ -74,6 +74,8 @@ namespace YMM43D.Rendering
         public void Dispose()
         {
             disposer.Dispose();
+
+            GC.SuppressFinalize(this);
         }
     }
 }

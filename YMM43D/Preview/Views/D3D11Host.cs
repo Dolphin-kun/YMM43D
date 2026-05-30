@@ -1,4 +1,3 @@
-using System;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
@@ -208,6 +207,8 @@ namespace YMM43D.Preview.Views
             switch (msg)
             {
                 case 0x0201: // LBUTTONDOWN
+                    SetFocus(hwnd);
+                    this.Focus();
                     SetCapture(hwnd);
                     MouseAction?.Invoke(GetPoint(lParam), MouseEventKind.Down, 0);
                     handled = true;
@@ -218,6 +219,8 @@ namespace YMM43D.Preview.Views
                     handled = true;
                     break;
                 case 0x0204: // RBUTTONDOWN
+                    SetFocus(hwnd);
+                    this.Focus();
                     SetCapture(hwnd);
                     MouseAction?.Invoke(GetPoint(lParam), MouseEventKind.RightDown, 0);
                     handled = true;
@@ -276,6 +279,9 @@ namespace YMM43D.Preview.Views
         [LibraryImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
         private static partial bool ReleaseCapture();
+
+        [LibraryImport("user32.dll", SetLastError = true)]
+        private static partial nint SetFocus(nint hWnd);
         #endregion
     }
 }
