@@ -110,8 +110,10 @@ namespace YMM43D.Graphics
         {
             // テクスチャを SRV に束ねたままにすると、同じテクスチャを次に
             // レンダーターゲットとして使うときに D3D11 が警告を出して結合を解除する。
+            // D3D11 はスロットを空にする意味で null を受け付けるが、
+            // Vortice の引数は null 非許容として宣言されている。
             if (settings.Texture is not null)
-                context.PSSetShaderResource(0, null);
+                context.PSSetShaderResource(0, null!);
 
             context.OMSetBlendState(null);
             context.OMSetDepthStencilState(null);

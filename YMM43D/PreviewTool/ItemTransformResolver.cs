@@ -117,7 +117,12 @@ namespace YMM43D.PreviewTool
                 var draw = CreateInitialDrawDescription();
 
                 foreach (var processor in processors)
-                    draw = processor.Update(new EffectDescription(description, draw));
+                {
+                    // 入力は1つ、グループ分けもしない単純な構成として評価する。
+                    // 求めたいのは変換行列だけなので、これで足りる。
+                    draw = processor.Update(new EffectDescription(
+                        description, draw, inputIndex: 0, inputCount: 1, groupIndex: 0, groupCount: 1));
+                }
 
                 return draw.Camera;
             }
