@@ -22,7 +22,6 @@ namespace YMM43D.Integration
     /// </remarks>
     public sealed class PrivateD2DContext : IDisposable
     {
-        private readonly Lock gate = new();
         private nint deviceKey;
         private ID2D1DeviceContext6? context;
 
@@ -31,13 +30,13 @@ namespace YMM43D.Integration
         /// </summary>
         /// <remarks>
         /// 返されるコンテキストはこのオブジェクトが所有します。使う側は破棄せず、
-        /// 描画状態を触る間は返された参照そのものをロックしてください。
+        /// 触る間は <see cref="D2DGate.Sync"/> を保持してください。
         /// </remarks>
         public ID2D1DeviceContext6 For(IGraphicsDevicesAndContext ymmDevices)
         {
             var device = ymmDevices.D2D.Device;
 
-            lock (gate)
+            lock (D2DGate.Sync)
             {
                 // デバイスが作り直された場合は、古いコンテキストは使えない。
                 if (context is not null && deviceKey == device.NativePointer)
@@ -52,7 +51,7 @@ namespace YMM43D.Integration
 
         public void Dispose()
         {
-            lock (gate)
+            lock (D2DGate.Sync)
             {
                 context?.Dispose();
                 context = null;

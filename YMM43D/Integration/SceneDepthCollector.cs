@@ -87,29 +87,66 @@ namespace YMM43D.Integration
             if (owner.Item is null)
                 return SceneView.None;
 
+            // 自分の配置に拡大率は入れない。YMM4 が出来上がった画像に掛けるため。
+            var ownerPlacement = ItemPlacement.GetWorldMatrix(
+                owner.Item, owner.Time, Matrix4x4.Identity, includeZoom: false);
+
+            var unzoom = GetZoomCancel(owner.Item, owner.Time, ownerPlacement.Translation);
+
             var occluders = new List<Occluder>();
 
             foreach (var (item, itemTime) in alive)
             {
+                // 遮蔽物は他アイテムの見た目そのものなので、拡大率も含める。含めないと、
+                // 縮小したアイテムが等倍のままの大きさで手前をくり抜いてしまう。
+                //
                 // 他のアイテムに掛かっているカメラ系エフェクトまでは追わない。
                 // その値はエフェクトを実行して初めて決まるため、ここでは分からない。
                 // 取り込み済みの分は I3DLocalTransform で本人から受け取る。
-                var placement = ItemPlacement.GetWorldMatrix(item, itemTime, Matrix4x4.Identity, includeZoom: false);
+                var placement = ItemPlacement.GetWorldMatrix(item, itemTime, Matrix4x4.Identity);
 
                 foreach (var provider in FindProviders(item))
                 {
                     if (ReferenceEquals(provider, self))
                         continue;
 
-                    occluders.Add(new Occluder(provider, GetLocalMatrix(provider) * placement, itemTime));
+                    occluders.Add(new Occluder(provider, GetLocalMatrix(provider) * placement * unzoom, itemTime));
                 }
             }
 
-            return new SceneView(
-                owner.Item,
-                owner.Time,
-                ItemPlacement.GetWorldMatrix(owner.Item, owner.Time, Matrix4x4.Identity, includeZoom: false),
-                occluders);
+            return new SceneView(owner.Item, owner.Time, ownerPlacement, occluders);
+        }
+
+        /// <summary>
+        /// 自分に掛かる拡大率を、遮蔽物の側で先に打ち消す変換を作ります。
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// YMM4 は出来上がった画像全体に拡大率を掛けます。その画像には深度用に埋めた
+        /// 他アイテムの形も含まれるので、何もしないと遮蔽物まで自分の拡大率で
+        /// 拡大・縮小されてしまいます。そこで自分の原点を中心にあらかじめ
+        /// 1/拡大率 倍しておき、後から掛かる拡大と相殺させます。
+        /// </para>
+        /// <para>
+        /// 打ち消しを画像の引き伸ばしで行うと、縮小するほど中間画像が巨大になって
+        /// 破綻します。深度に埋める形の側を動かす分には、画像の大きさは変わりません。
+        /// </para>
+        /// <para>
+        /// ただし相殺できるのは大きさだけです。YMM4 の拡大は平らな画像に対する操作
+        /// なので、遠近の効き方までは一致しません。拡大率が極端な場合や、遮蔽物が
+        /// 自分から大きく離れている場合はわずかにずれます。
+        /// </para>
+        /// </remarks>
+        private static Matrix4x4 GetZoomCancel(IVideoItem owner, in FrameContext time, Vector3 origin)
+        {
+            var zoom = owner.Zoom.GetFloat(time) / 100f;
+
+            if (!float.IsFinite(zoom) || zoom <= 0f || zoom == 1f)
+                return Matrix4x4.Identity;
+
+            return Matrix4x4.CreateTranslation(-origin)
+                 * Matrix4x4.CreateScale(1f / zoom)
+                 * Matrix4x4.CreateTranslation(origin);
         }
 
         /// <summary>

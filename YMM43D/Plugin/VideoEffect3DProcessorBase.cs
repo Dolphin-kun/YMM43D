@@ -148,10 +148,23 @@ namespace YMM43D.Plugin
         }
 
         /// <inheritdoc/>
-        public void SetInput(ID2D1Image? input) => Input = input;
+        /// <remarks>
+        /// 入力の差し替えは本体の描画スレッドから、参照は 3Dプレビューのスレッドからも
+        /// 起きます。差し替えの途中に破棄済みの画像を掴まないよう、Direct2D の操作と
+        /// 同じ鍵で守ります。
+        /// </remarks>
+        public void SetInput(ID2D1Image? input)
+        {
+            lock (D2DGate.Sync)
+                Input = input;
+        }
 
         /// <inheritdoc/>
-        public void ClearInput() => Input = null;
+        public void ClearInput()
+        {
+            lock (D2DGate.Sync)
+                Input = null;
+        }
 
         /// <summary>
         /// 入力画像を 3D 描画用デバイスのテクスチャとして取得します。
@@ -162,17 +175,21 @@ namespace YMM43D.Plugin
         /// </remarks>
         public ID3D11ShaderResourceView? GetTexture(ID3D11Device device)
         {
-            if (Input is null)
-                return null;
-
-            var texture = textureBridge.GetTexture(device, Devices, Input, this, out var bounds);
-            if (texture is not null)
+            // 入力の参照を掴んでから使い終えるまでの間に差し替えられないようにする。
+            lock (D2DGate.Sync)
             {
-                inputSize = new Vector2(bounds.Right - bounds.Left, bounds.Bottom - bounds.Top);
-                inputOffset = new Vector2(bounds.Left, bounds.Top);
-            }
+                if (Input is not { } input)
+                    return null;
 
-            return texture;
+                var texture = textureBridge.GetTexture(device, Devices, input, this, out var bounds);
+                if (texture is not null)
+                {
+                    inputSize = new Vector2(bounds.Right - bounds.Left, bounds.Bottom - bounds.Top);
+                    inputOffset = new Vector2(bounds.Left, bounds.Top);
+                }
+
+                return texture;
+            }
         }
 
         /// <inheritdoc/>

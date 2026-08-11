@@ -47,14 +47,33 @@ namespace YMM43D.Integration
         {
             bounds = new RawRectF(0, 0, 1, 1);
 
-            // 描画先を差し替えるので、本体のコンテキストは使えない。
-            var deviceContext = privateContext.For(ymmDevices);
-            if (deviceContext.NativePointer == nint.Zero)
-                return null;
+            // 範囲の問い合わせから焼き込みまでを一続きにする。途中で他のスレッドが
+            // 同じコンテキストを使うと、調べた範囲と焼いた内容が食い違うだけでなく、
+            // コンテキストの内部状態そのものが壊れる。
+            lock (D2DGate.Sync)
+            {
+                // 描画先を差し替えるので、本体のコンテキストは使えない。
+                var deviceContext = privateContext.For(ymmDevices);
+                if (deviceContext.NativePointer == nint.Zero)
+                    return null;
 
-            bounds = D2DImageBounds.Get(deviceContext, image);
-            var (width, height) = D2DImageBounds.ToPixelSize(bounds);
+                bounds = D2DImageBounds.Get(deviceContext, image);
+                var (width, height) = D2DImageBounds.ToPixelSize(bounds);
 
+                return GetTextureCore(targetDevice, ymmDevices, deviceContext, image, key, bounds, width, height);
+            }
+        }
+
+        private ID3D11ShaderResourceView? GetTextureCore(
+            ID3D11Device targetDevice,
+            IGraphicsDevicesAndContext ymmDevices,
+            ID2D1DeviceContext deviceContext,
+            ID2D1Image image,
+            object key,
+            in RawRectF bounds,
+            int width,
+            int height)
+        {
             lock (gate)
             {
                 if (cache.TryGetValue(key, out var texture) && !texture.Matches(width, height, ymmDevices.D3D.Device))
@@ -92,7 +111,10 @@ namespace YMM43D.Integration
         /// 実寸だけが必要で、まだ 3D 描画用のデバイスが決まっていない場面で使います。
         /// </remarks>
         public RawRectF GetBounds(IGraphicsDevicesAndContext ymmDevices, ID2D1Image image)
-            => D2DImageBounds.Get(privateContext.For(ymmDevices), image);
+        {
+            lock (D2DGate.Sync)
+                return D2DImageBounds.Get(privateContext.For(ymmDevices), image);
+        }
 
         /// <summary>キャッシュしているテクスチャをすべて破棄します。</summary>
         public void Clear()
@@ -220,7 +242,7 @@ namespace YMM43D.Integration
 
                 try
                 {
-                    lock (deviceContext)
+                    lock (D2DGate.Sync)
                     {
                         var previousTarget = deviceContext.Target;
                         var previousTransform = deviceContext.Transform;

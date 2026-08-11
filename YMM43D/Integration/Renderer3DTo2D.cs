@@ -70,9 +70,13 @@ namespace YMM43D.Integration
             var context = lease.Context;
             var d2dContext = privateContext.For(ymmDevices);
 
+            // 入れ子の順序は 3D デバイス → Direct2D の鍵で固定する。逆順に取る箇所を
+            // 作ると詰まるので、この鍵を持ったままデバイスをロックしないこと。
             lock (lease.Device)
             {
-                surface.Resize(ymmDevices, d2dContext, width, height);
+                lock (D2DGate.Sync)
+                    surface.Resize(ymmDevices, d2dContext, width, height);
+
                 if (surface.RenderTargetView is null)
                     return BuildCommandList(ymmDevices, null, offset, imageTransform);
 
@@ -128,12 +132,12 @@ namespace YMM43D.Integration
             Vector2 offset,
             Matrix3x2 imageTransform)
         {
-            // 本体のコンテキストではなく専用のものを使う。描画先や描画中状態を
-            // 書き換えるため、共用すると本体側の描画を壊してしまう。
-            var deviceContext = privateContext.For(ymmDevices);
-
-            lock (deviceContext)
+            lock (D2DGate.Sync)
             {
+                // 本体のコンテキストではなく専用のものを使う。描画先や描画中状態を
+                // 書き換えるため、共用すると本体側の描画を壊してしまう。
+                var deviceContext = privateContext.For(ymmDevices);
+
                 commandList?.Dispose();
                 commandList = deviceContext.CreateCommandList();
 

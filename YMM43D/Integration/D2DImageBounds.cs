@@ -29,7 +29,18 @@ namespace YMM43D.Integration
                 return new RawRectF(0, 0, size.Width, size.Height);
             }
 
-            if (deviceContext is not null)
+            // 破棄済みの参照を渡すと、vtable 経由の呼び出しがアクセス違反になる。
+            // これは catch できず、プロセスごと落ちる。
+            if (deviceContext is null
+                || deviceContext.NativePointer == nint.Zero
+                || image.NativePointer == nint.Zero)
+            {
+                return Unknown;
+            }
+
+            // コンテキストはスレッド安全ではない。範囲の問い合わせも内部状態を触るため、
+            // 他の Direct2D 操作と重ならないようにする。
+            lock (D2DGate.Sync)
             {
                 try
                 {
