@@ -14,11 +14,6 @@ namespace Shape3D
     internal sealed class Shape3DSource : Shape3DSourceBase
     {
         /// <summary>
-        /// ワールド空間の 1 単位に相当するピクセル数。他のアイテムと尺度を揃えます。
-        /// </summary>
-        private const float PixelsPerUnit = 100f;
-
-        /// <summary>
         /// 一辺 1 の立方体の外接球の直径。どの向きに回転しても収まる大きさです。
         /// </summary>
         private static readonly float DiagonalRatio = MathF.Sqrt(3f);
@@ -58,7 +53,7 @@ namespace Shape3D
         /// 立方体の一辺の長さ（ワールド単位）。
         /// </summary>
         private float GetEdgeLength(in FrameContext itemTime)
-            => parameter.Size.GetFloat(itemTime) / PixelsPerUnit;
+            => WorldScale.ToWorld(parameter.Size.GetFloat(itemTime));
 
         protected override float GetWorldExtent(in FrameContext itemTime)
             => GetEdgeLength(itemTime) * DiagonalRatio;

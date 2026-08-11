@@ -20,11 +20,6 @@ namespace YMM43D.PreviewTool
     /// </remarks>
     internal sealed class ItemDrawContextBuilder : IDisposable
     {
-        /// <summary>
-        /// YMM4 の座標がピクセル単位なのに対し、3D空間は 1 単位を 100px として扱う。
-        /// </summary>
-        private const float PixelsPerUnit = 100f;
-
         private readonly ItemRenderPipeline pipeline = new();
         private readonly D2DTextureBridge textureBridge = new();
 
@@ -108,9 +103,9 @@ namespace YMM43D.PreviewTool
 
             // YMM4 の Y 軸は下向き、3D空間は上向き。
             var translation = Matrix4x4.CreateTranslation(
-                item.X.GetFloat(time) / PixelsPerUnit,
-                -item.Y.GetFloat(time) / PixelsPerUnit,
-                item.Z.GetFloat(time) / PixelsPerUnit);
+                WorldScale.ToWorld(item.X.GetFloat(time)),
+                -WorldScale.ToWorld(item.Y.GetFloat(time)),
+                WorldScale.ToWorld(item.Z.GetFloat(time)));
 
             if (itemCamera == Matrix4x4.Identity)
                 return sizeScale * zoom * rotation * translation;
@@ -132,34 +127,17 @@ namespace YMM43D.PreviewTool
             if (provider is I3DSizeProvider sizeProvider
                 && sizeProvider.TryGetSize(out var size, out var offset))
             {
-                return BuildSizeMatrix(size, offset + size / 2f);
+                return WorldScale.CreateSizeMatrix(size, offset + size / 2f);
             }
 
             if (imageBounds is { } bounds)
             {
-                return BuildSizeMatrix(
+                return WorldScale.CreateSizeMatrix(
                     new Vector2(bounds.Right - bounds.Left, bounds.Bottom - bounds.Top),
                     new Vector2((bounds.Left + bounds.Right) / 2f, (bounds.Top + bounds.Bottom) / 2f));
             }
 
             return Matrix4x4.Identity;
-        }
-
-        /// <summary>
-        /// 実寸と中心位置から、単位板を実際の大きさ・位置に置く行列を作ります。
-        /// </summary>
-        /// <remarks>
-        /// 中心がアイテムの原点と一致するとは限りません。テキストの文字揃えや、
-        /// トリミングされた画像では、描画範囲が原点から偏ります。大きさだけを見て
-        /// 中心を無視すると、揃え方を変えても同じ場所に表示されてしまいます。
-        /// </remarks>
-        private static Matrix4x4 BuildSizeMatrix(Vector2 size, Vector2 center)
-        {
-            if (size.X <= 0 || size.Y <= 0)
-                return Matrix4x4.Identity;
-
-            return Matrix4x4.CreateScale(size.X / PixelsPerUnit, size.Y / PixelsPerUnit, 1f)
-                 * Matrix4x4.CreateTranslation(center.X / PixelsPerUnit, -center.Y / PixelsPerUnit, 0f);
         }
 
         /// <summary>
@@ -175,9 +153,9 @@ namespace YMM43D.PreviewTool
             matrix.M23 = -matrix.M23;
             matrix.M32 = -matrix.M32;
 
-            matrix.M41 /= PixelsPerUnit;
-            matrix.M42 /= -PixelsPerUnit;
-            matrix.M43 /= PixelsPerUnit;
+            matrix.M41 = WorldScale.ToWorld(matrix.M41);
+            matrix.M42 = -WorldScale.ToWorld(matrix.M42);
+            matrix.M43 = WorldScale.ToWorld(matrix.M43);
 
             return matrix;
         }

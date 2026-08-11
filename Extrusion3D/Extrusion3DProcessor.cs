@@ -1,13 +1,9 @@
 using System.Numerics;
-using Vortice.Direct2D1;
-using Vortice.Direct3D11;
 using YMM43D.Graphics;
 using YMM43D.Graphics.Meshes;
-using YMM43D.Integration;
 using YMM43D.Plugin;
 using YMM43D.Scene3D;
 using YukkuriMovieMaker.Commons;
-using YukkuriMovieMaker.Player.Video;
 
 namespace Extrusion3D
 {
@@ -15,24 +11,18 @@ namespace Extrusion3D
     /// 立体化エフェクトの描画処理。
     /// </summary>
     /// <remarks>
-    /// このエフェクトは 2D の出力を変えず（<see cref="Output"/> は入力をそのまま返す）、
-    /// 3D空間での描画だけを担当します。
+    /// 入力画像を箱の前後の面に貼り、その間をレイマーチングで埋めることで
+    /// 押し出されたように見せます。描画結果は 3Dプレビューと動画出力の両方に出ます。
     /// </remarks>
-    internal sealed class Extrusion3DProcessor : IVideoEffectProcessor, I3DVideoEffect, I3DSizeProvider
+    internal sealed class Extrusion3DProcessor : VideoEffect3DProcessorBase
     {
         private readonly Extrusion3DEffect effect;
-        private readonly IGraphicsDevicesAndContext devices;
-        private readonly D2DTextureBridge textureBridge = new();
         private readonly DeviceResourceCache<RenderPipeline<ExtrusionConstants>> pipelines;
 
-        private ID2D1Image? input;
-        private Vector2 inputSizeInDips;
-        private Vector2 inputOffset;
-
         public Extrusion3DProcessor(Extrusion3DEffect effect, IGraphicsDevicesAndContext devices)
+            : base(effect, devices)
         {
             this.effect = effect;
-            this.devices = devices;
 
             pipelines = new DeviceResourceCache<RenderPipeline<ExtrusionConstants>>(
                 device => new RenderPipeline<ExtrusionConstants>(
@@ -41,55 +31,7 @@ namespace Extrusion3D
                     new ExtrusionMaterial(device)));
         }
 
-        public ID2D1Image Output => input ?? throw new InvalidOperationException("入力画像が設定されていません。");
-
-        /// <summary>直近の <see cref="Update"/> で受け取った描画要求。</summary>
-        public EffectDescription? EffectDescription { get; private set; }
-
-        public bool RequiresMappedTexture => false;
-
-        public DrawDescription Update(EffectDescription effectDescription)
-        {
-            EffectDescription = effectDescription;
-            return effectDescription.DrawDescription;
-        }
-
-        public void SetInput(ID2D1Image? input) => this.input = input;
-
-        public void ClearInput() => input = null;
-
-        /// <summary>
-        /// 入力画像を 3D 描画用デバイスのテクスチャとして取得します。
-        /// </summary>
-        /// <remarks>
-        /// 呼ばれるたびに最新の入力内容を焼き直します。以前は入力が差し替わった
-        /// タイミングで本体デバイス上のテクスチャに退避し、さらにプレビュー用
-        /// デバイスへコピーする二段構えだったが、共有テクスチャに直接描き込めば
-        /// 一段で済むうえ、内容が古くなることもない。
-        /// </remarks>
-        public ID3D11ShaderResourceView? GetTexture(ID3D11Device device)
-        {
-            if (input is null)
-                return null;
-
-            var texture = textureBridge.GetTexture(device, devices, input, this, out var bounds);
-            if (texture is not null)
-            {
-                inputSizeInDips = new Vector2(bounds.Right - bounds.Left, bounds.Bottom - bounds.Top);
-                inputOffset = new Vector2(bounds.Left, bounds.Top);
-            }
-
-            return texture;
-        }
-
-        public bool TryGetSize(out Vector2 size, out Vector2 offset)
-        {
-            size = inputSizeInDips;
-            offset = inputOffset;
-            return size.X > 0 && size.Y > 0;
-        }
-
-        public void Draw(in Render3DContext render, DrawContext3D item)
+        public override void Draw(in Render3DContext render, DrawContext3D item)
         {
             var texture = item.Texture ?? GetTexture(render.Device);
             if (texture is null)
@@ -101,7 +43,7 @@ namespace Extrusion3D
                 ? FrameContext.FromItem(description)
                 : item.Time;
 
-            var thickness = effect.Thickness.GetFloat(time) / 100f;
+            var thickness = GetThickness(time);
             if (thickness <= 0)
                 return;
 
@@ -124,16 +66,31 @@ namespace Extrusion3D
             };
 
             // ボックスの内側からレイを飛ばすため、手前の面ではなく奥の面を描く。
-            var settings = item.ToDrawSettings(FaceCulling.Front, texture) with { Blend = YMM43D.Graphics.BlendMode.Normal };
+            var settings = item.ToDrawSettings(FaceCulling.Front, texture) with { Blend = BlendMode.Normal };
             pipelines.Get(render.Device).Draw(render.Context, constants, settings);
         }
 
-        public void Dispose()
+        /// <summary>厚み（ワールド単位）。</summary>
+        private float GetThickness(in FrameContext time) => effect.Thickness.GetFloat(time) / 100f;
+
+        protected override float GetWorldExtent(in FrameContext itemTime)
         {
-            effect.DetachProcessor(this);
+            if (!TryGetSize(out var size, out _))
+                return 0;
+
+            // 箱は幅×高さ×厚みの直方体。どの向きに回しても収まるよう対角線を返す。
+            var extent = new Vector3(
+                WorldScale.ToWorld(size.X),
+                WorldScale.ToWorld(size.Y),
+                GetThickness(itemTime));
+
+            return extent.Length();
+        }
+
+        public override void Dispose()
+        {
             pipelines.Dispose();
-            textureBridge.Dispose();
-            input = null;
+            base.Dispose();
         }
     }
 }

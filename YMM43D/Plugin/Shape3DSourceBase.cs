@@ -1,6 +1,5 @@
 using System.Numerics;
 using Vortice.Direct2D1;
-using YMM43D.Integration;
 using YMM43D.Scene3D;
 using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Player.Video;
@@ -24,10 +23,7 @@ namespace YMM43D.Plugin
     /// </remarks>
     public abstract class Shape3DSourceBase : IShapeSource2, I3DProvider
     {
-        /// <summary>描画先の一辺の上限（ピクセル）。</summary>
-        private const int MaxRenderSize = 4096;
-
-        private readonly Renderer3DTo2D renderer = new();
+        private readonly Output3DRenderer renderer = new();
         private ID2D1Image? output;
 
         /// <summary>YMM4 のグラフィックスデバイス。</summary>
@@ -66,64 +62,15 @@ namespace YMM43D.Plugin
         public void Update(TimelineItemSourceDescription description)
         {
             var itemTime = FrameContext.FromItem(description);
-            var timelineTime = FrameContext.FromTimeline(description);
-
-            // カメラはシーン全体に属するため、アイテム内ではなくタイムライン上の
-            // 位置で評価する。
-            var camera = SceneCameraRegistry.Get(description);
-            var view = camera.GetViewMatrix(timelineTime);
-
-            var renderSize = (int)GetRenderSize(camera, timelineTime, itemTime, description);
-            if (renderSize <= 0)
-            {
-                // 大きさが 0 のときは何も描かない。Output を未設定のままにすると
-                // YMM4 が結果を受け取る際に例外になるため、空の画像を返す。
-                output = renderer.RenderEmpty(Devices);
-                return;
-            }
-
-            // 描画先は画面全体より小さいので、そのぶん画角を狭めて縮尺を合わせる。
-            // こうしないと、描画先を大きくしただけで図形まで大きく見えてしまう。
-            var fieldOfView = SceneCamera.GetFieldOfViewFor(renderSize, description.ScreenSize.Height);
-            var projection = SceneCamera.GetProjectionMatrix(1f, fieldOfView);
-
-            // 出力画像はアイテムの中心を原点として扱われるため、左上へ半分ずらす。
-            var offset = new Vector2(-renderSize / 2f, -renderSize / 2f);
 
             // 出力経路ではアイテムの位置や回転は YMM4 が後から適用するので、
             // ワールド行列は単位行列でよい。
-            var item = new DrawContext3D
-            {
-                World = Matrix4x4.Identity,
-                Opacity = 1f,
-                Time = itemTime,
-            };
-
-            output = renderer.Render(Devices, renderSize, renderSize, view, projection, offset,
-                render => Draw(render, item));
-        }
-
-        /// <summary>
-        /// 図形が収まる描画先の一辺（ピクセル）を求めます。
-        /// </summary>
-        /// <remarks>
-        /// 図形のワールド空間での大きさを、カメラからの距離に応じて画面上の
-        /// ピクセル数に換算します。カメラを近づければ大きく、遠ざければ小さくなります。
-        /// </remarks>
-        private float GetRenderSize(
-            SceneCamera camera,
-            in FrameContext timelineTime,
-            in FrameContext itemTime,
-            TimelineItemSourceDescription description)
-        {
-            var extent = GetWorldExtent(itemTime);
-            if (extent <= 0)
-                return 0;
-
-            var distance = camera.Distance.GetFloat(timelineTime);
-            var pixelsPerUnit = SceneCamera.GetPixelsPerUnit(distance, description.ScreenSize.Height);
-
-            return Math.Clamp(MathF.Ceiling(extent * pixelsPerUnit), 0, MaxRenderSize);
+            output = renderer.Render(
+                Devices,
+                description,
+                GetWorldExtent(itemTime),
+                Matrix4x4.Identity,
+                Draw);
         }
 
         public virtual void Dispose()
