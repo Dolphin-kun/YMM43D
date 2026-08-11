@@ -1,5 +1,4 @@
 using System.Numerics;
-using Vortice.Direct2D1;
 using Vortice.Direct3D11;
 using YMM43D.Integration;
 using YMM43D.Plugin;
@@ -25,10 +24,8 @@ namespace YMM43D.PreviewTool
         /// </summary>
         private const float PixelsPerUnit = 100f;
 
-        private readonly Dictionary<IVideoItem, ISource> sources = [];
+        private readonly ItemRenderPipeline pipeline = new();
         private readonly D2DTextureBridge textureBridge = new();
-        private readonly ItemTransformResolver transformResolver = new();
-        private readonly Lock gate = new();
 
         public DrawContext3D Build(
             IVideoItem item,
@@ -36,13 +33,21 @@ namespace YMM43D.PreviewTool
             PreviewEnvironment environment,
             I3DProvider provider)
         {
-            var texture = provider.RequiresMappedTexture
-                ? GetTexture(item, itemTime, environment, provider)
+            // プロバイダーが自前のテクスチャを持つ場合、アイテムの画像は要らない。
+            var providerTexture = provider is I3DTextureProvider textureProvider
+                ? textureProvider.GetTexture(environment.Device)
                 : null;
+
+            var needsImage = provider.RequiresMappedTexture && providerTexture is null;
+            var rendered = pipeline.Render(item, itemTime, environment, needsImage);
+
+            var texture = providerTexture;
+            if (texture is null && needsImage && rendered.Image is { } image)
+                texture = textureBridge.GetTexture(environment.Device, environment.Devices, image, item, out _);
 
             return new DrawContext3D
             {
-                World = BuildWorldMatrix(item, itemTime, environment, provider),
+                World = BuildWorldMatrix(item, itemTime, provider, rendered.CameraMatrix),
                 Opacity = Math.Clamp(GetOpacity(item, itemTime), 0f, 1f),
                 Blend = ToBlendMode(item.Blend),
                 IsAlwaysOnTop = item.IsAlwaysOnTop,
@@ -54,37 +59,12 @@ namespace YMM43D.PreviewTool
         /// <summary>
         /// 表示対象でなくなったアイテムの資源を解放します。
         /// </summary>
-        public void RetainOnly(IReadOnlySet<IVideoItem> aliveItems)
-        {
-            lock (gate)
-            {
-                foreach (var item in sources.Keys.Where(k => !aliveItems.Contains(k)).ToArray())
-                {
-                    if (sources.Remove(item, out var source))
-                        source.Dispose();
-                }
-            }
-
-            transformResolver.RetainOnly(aliveItems);
-        }
-
-        public void Clear()
-        {
-            lock (gate)
-            {
-                foreach (var source in sources.Values)
-                    source.Dispose();
-                sources.Clear();
-            }
-
-            textureBridge.Clear();
-        }
+        public void RetainOnly(IReadOnlySet<IVideoItem> aliveItems) => pipeline.RetainOnly(aliveItems);
 
         public void Dispose()
         {
-            Clear();
+            pipeline.Dispose();
             textureBridge.Dispose();
-            transformResolver.Dispose();
         }
 
         /// <summary>
@@ -105,11 +85,11 @@ namespace YMM43D.PreviewTool
             return opacity;
         }
 
-        private Matrix4x4 BuildWorldMatrix(
+        private static Matrix4x4 BuildWorldMatrix(
             IVideoItem item,
             in FrameContext time,
-            PreviewEnvironment environment,
-            I3DProvider provider)
+            I3DProvider provider,
+            Matrix4x4 itemCamera)
         {
             var sizeScale = BuildSizeMatrix(provider);
             var zoom = Matrix4x4.CreateScale(item.Zoom.GetFloat(time) / 100f);
@@ -123,7 +103,6 @@ namespace YMM43D.PreviewTool
                 -item.Y.GetFloat(time) / PixelsPerUnit,
                 item.Z.GetFloat(time) / PixelsPerUnit);
 
-            var itemCamera = GetItemCameraMatrix(item, time, environment);
             if (itemCamera == Matrix4x4.Identity)
                 return sizeScale * zoom * rotation * translation;
 
@@ -166,77 +145,6 @@ namespace YMM43D.PreviewTool
             matrix.M43 /= PixelsPerUnit;
 
             return matrix;
-        }
-
-        private Matrix4x4 GetItemCameraMatrix(IVideoItem item, in FrameContext time, PreviewEnvironment environment)
-        {
-            if (environment.SourceDescription is not { } description)
-                return Matrix4x4.Identity;
-
-            var itemDescription = new TimelineItemSourceDescription(
-                description, time.Frame, time.Length, item.Layer);
-
-            return transformResolver.GetCameraMatrix(item, environment.Devices, itemDescription);
-        }
-
-        private ID3D11ShaderResourceView? GetTexture(
-            IVideoItem item,
-            in FrameContext time,
-            PreviewEnvironment environment,
-            I3DProvider provider)
-        {
-            // プロバイダーが自前のテクスチャを持っているならそちらを優先する。
-            if (provider is I3DTextureProvider textureProvider
-                && textureProvider.GetTexture(environment.Device) is { } ownTexture)
-            {
-                return ownTexture;
-            }
-
-            var image = GetItemImage(item, time, environment);
-            if (image is null)
-                return null;
-
-            return textureBridge.GetTexture(environment.Device, environment.Devices, image, item, out _);
-        }
-
-        /// <summary>
-        /// アイテムの 2D 描画結果を取得します。
-        /// </summary>
-        private ID2D1Image? GetItemImage(IVideoItem item, in FrameContext time, PreviewEnvironment environment)
-        {
-            if (environment.Scene is not { } scene || environment.SourceDescription is not { } description)
-                return null;
-
-            try
-            {
-                ISource? source;
-                lock (gate)
-                {
-                    if (!sources.TryGetValue(item, out source))
-                    {
-                        source = item.CreateVideoSource(environment.Devices, scene);
-                        if (source is null)
-                            return null;
-                        sources[item] = source;
-                    }
-                }
-
-                source.Update(new TimelineItemSourceDescription(
-                    description, time.Frame, time.Length, item.Layer));
-
-                foreach (var output in source.Outputs ?? [])
-                {
-                    if (output?.Output is { } image)
-                        return image;
-                }
-            }
-            catch
-            {
-                // アイテムによっては描画元を作れないことがある。その場合は
-                // テクスチャ無しで扱う。
-            }
-
-            return null;
         }
 
         private static Graphics.BlendMode ToBlendMode(YukkuriMovieMaker.Project.Blend blend) => blend switch
