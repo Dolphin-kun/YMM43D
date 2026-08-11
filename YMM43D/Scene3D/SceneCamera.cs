@@ -13,7 +13,9 @@ namespace YMM43D.Scene3D
     /// </remarks>
     public sealed class SceneCamera : Bindable
     {
-        private const float FieldOfView = MathF.PI / 4f;
+        /// <summary>既定の垂直画角（ラジアン）。</summary>
+        public const float DefaultFieldOfView = MathF.PI / 4f;
+
         private const float NearPlane = 0.1f;
         private const float FarPlane = 1000f;
 
@@ -96,7 +98,42 @@ namespace YMM43D.Scene3D
         /// 射影行列。画角・クリップ面はシーン全体で共通のため静的メソッドです。
         /// </summary>
         public static Matrix4x4 GetProjectionMatrix(float aspectRatio)
-            => Matrix4x4.CreatePerspectiveFieldOfView(FieldOfView, aspectRatio, NearPlane, FarPlane);
+            => GetProjectionMatrix(aspectRatio, DefaultFieldOfView);
+
+        /// <summary>
+        /// 画角を指定して射影行列を作ります。
+        /// </summary>
+        /// <remarks>
+        /// 画面全体より小さな描画先に、同じ縮尺で描きたい場合に使います。
+        /// 描画先が小さいぶん画角を狭めれば、1単位あたりのピクセル数を保てます。
+        /// </remarks>
+        public static Matrix4x4 GetProjectionMatrix(float aspectRatio, float verticalFieldOfView)
+            => Matrix4x4.CreatePerspectiveFieldOfView(verticalFieldOfView, aspectRatio, NearPlane, FarPlane);
+
+        /// <summary>
+        /// 画面全体に描いたときの、ワールド1単位あたりのピクセル数を求めます。
+        /// </summary>
+        /// <param name="distance">カメラから対象までの距離。</param>
+        /// <param name="screenHeight">画面の高さ（ピクセル）。</param>
+        public static float GetPixelsPerUnit(float distance, float screenHeight)
+        {
+            if (distance <= 0)
+                return 0;
+
+            return screenHeight / (2f * distance * MathF.Tan(DefaultFieldOfView / 2f));
+        }
+
+        /// <summary>
+        /// 画面全体より小さな描画先で、<see cref="GetPixelsPerUnit"/> と同じ縮尺を
+        /// 保つための画角を求めます。
+        /// </summary>
+        public static float GetFieldOfViewFor(float targetHeight, float screenHeight)
+        {
+            if (screenHeight <= 0)
+                return DefaultFieldOfView;
+
+            return 2f * MathF.Atan(MathF.Tan(DefaultFieldOfView / 2f) * targetHeight / screenHeight);
+        }
     }
 
     /// <summary>

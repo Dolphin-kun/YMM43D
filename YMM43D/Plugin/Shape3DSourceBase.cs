@@ -17,13 +17,16 @@ namespace YMM43D.Plugin
     /// 両方の経路を受け持ちます。
     /// </para>
     /// <para>
-    /// 派生クラスが実装するのは <see cref="Draw"/> と <see cref="GetRenderSize"/> の
-    /// 2つだけです。出力用のレンダーターゲット確保・カメラ行列の解決・
-    /// コマンドリストの生成は基底クラスが行います。
+    /// 派生クラスが実装するのは <see cref="Draw"/> と <see cref="GetWorldExtent"/> の
+    /// 2つだけです。描画先の大きさの決定・カメラ行列の解決・コマンドリストの生成は
+    /// 基底クラスが行います。
     /// </para>
     /// </remarks>
     public abstract class Shape3DSourceBase : IShapeSource2, I3DProvider
     {
+        /// <summary>描画先の一辺の上限（ピクセル）。</summary>
+        private const int MaxRenderSize = 4096;
+
         private readonly Renderer3DTo2D renderer = new();
         private ID2D1Image? output;
 
@@ -51,27 +54,34 @@ namespace YMM43D.Plugin
         public abstract void Draw(in Render3DContext render, DrawContext3D item);
 
         /// <summary>
-        /// 出力画像の一辺の長さ（ピクセル）を返します。0 以下を返すと何も描画しません。
+        /// この図形がワールド空間で占める差し渡しの大きさ（単位）を返します。
         /// </summary>
-        protected abstract int GetRenderSize(in FrameContext itemTime);
+        /// <remarks>
+        /// 出力画像の大きさを決めるのに使います。どの向きに回転しても収まるよう、
+        /// 外接球の直径にあたる値を返してください。0 以下を返すと何も描画しません。
+        /// </remarks>
+        protected abstract float GetWorldExtent(in FrameContext itemTime);
 
         /// <inheritdoc/>
         public void Update(TimelineItemSourceDescription description)
         {
             var itemTime = FrameContext.FromItem(description);
-
-            // サイズが 0 以下でも Render は空のコマンドリストを返す。ここで打ち切って
-            // Output を未設定のままにすると、YMM4 が結果を受け取る際に例外になる。
-            var size = GetRenderSize(itemTime);
+            var timelineTime = FrameContext.FromTimeline(description);
 
             // カメラはシーン全体に属するため、アイテム内ではなくタイムライン上の
             // 位置で評価する。
             var camera = SceneCameraRegistry.Get(description);
-            var view = camera.GetViewMatrix(FrameContext.FromTimeline(description));
-            var projection = SceneCamera.GetProjectionMatrix(1f);
+            var view = camera.GetViewMatrix(timelineTime);
+
+            var renderSize = (int)GetRenderSize(camera, timelineTime, itemTime, description);
+
+            // 描画先は画面全体より小さいので、そのぶん画角を狭めて縮尺を合わせる。
+            // こうしないと、描画先を大きくしただけで図形まで大きく見えてしまう。
+            var fieldOfView = SceneCamera.GetFieldOfViewFor(renderSize, description.ScreenSize.Height);
+            var projection = SceneCamera.GetProjectionMatrix(1f, fieldOfView);
 
             // 出力画像はアイテムの中心を原点として扱われるため、左上へ半分ずらす。
-            var offset = new Vector2(-size / 2f, -size / 2f);
+            var offset = new Vector2(-renderSize / 2f, -renderSize / 2f);
 
             // 出力経路ではアイテムの位置や回転は YMM4 が後から適用するので、
             // ワールド行列は単位行列でよい。
@@ -82,8 +92,31 @@ namespace YMM43D.Plugin
                 Time = itemTime,
             };
 
-            output = renderer.Render(Devices, size, size, view, projection, offset,
+            output = renderer.Render(Devices, renderSize, renderSize, view, projection, offset,
                 render => Draw(render, item));
+        }
+
+        /// <summary>
+        /// 図形が収まる描画先の一辺（ピクセル）を求めます。
+        /// </summary>
+        /// <remarks>
+        /// 図形のワールド空間での大きさを、カメラからの距離に応じて画面上の
+        /// ピクセル数に換算します。カメラを近づければ大きく、遠ざければ小さくなります。
+        /// </remarks>
+        private float GetRenderSize(
+            SceneCamera camera,
+            in FrameContext timelineTime,
+            in FrameContext itemTime,
+            TimelineItemSourceDescription description)
+        {
+            var extent = GetWorldExtent(itemTime);
+            if (extent <= 0)
+                return 0;
+
+            var distance = camera.Distance.GetFloat(timelineTime);
+            var pixelsPerUnit = SceneCamera.GetPixelsPerUnit(distance, description.ScreenSize.Height);
+
+            return Math.Clamp(MathF.Ceiling(extent * pixelsPerUnit), 0, MaxRenderSize);
         }
 
         public virtual void Dispose()

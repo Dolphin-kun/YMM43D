@@ -14,13 +14,14 @@ namespace Shape3D
     internal sealed class Shape3DSource : Shape3DSourceBase
     {
         /// <summary>
-        /// 立方体のワールド空間での一辺の長さ。
+        /// ワールド空間の 1 単位に相当するピクセル数。他のアイテムと尺度を揃えます。
         /// </summary>
-        /// <remarks>
-        /// <see cref="Shape3DParameter.Size"/> は出力画像の解像度を決めるだけで、
-        /// 3D空間での大きさには影響しません。
-        /// </remarks>
-        private const float CubeScale = 2f;
+        private const float PixelsPerUnit = 100f;
+
+        /// <summary>
+        /// 一辺 1 の立方体の外接球の直径。どの向きに回転しても収まる大きさです。
+        /// </summary>
+        private static readonly float DiagonalRatio = MathF.Sqrt(3f);
 
         private readonly Shape3DParameter parameter;
         private readonly DeviceResourceCache<RenderPipeline<TransformConstants>> pipelines;
@@ -42,7 +43,7 @@ namespace Shape3D
                 parameter.RotationY.GetFloat(item.Time),
                 parameter.RotationZ.GetFloat(item.Time));
 
-            var world = Matrix4x4.CreateScale(CubeScale) * rotation * item.World;
+            var world = Matrix4x4.CreateScale(GetEdgeLength(item.Time)) * rotation * item.World;
             var constants = TransformConstants.Create(render.GetWorldViewProjection(world), item.Opacity);
 
             var pipeline = pipelines.Get(render.Device);
@@ -53,8 +54,14 @@ namespace Shape3D
             pipeline.Draw(render.Context, constants, item.ToDrawSettings(FaceCulling.Back));
         }
 
-        protected override int GetRenderSize(in FrameContext itemTime)
-            => (int)(parameter.Size.GetValue(itemTime) * 2);
+        /// <summary>
+        /// 立方体の一辺の長さ（ワールド単位）。
+        /// </summary>
+        private float GetEdgeLength(in FrameContext itemTime)
+            => parameter.Size.GetFloat(itemTime) / PixelsPerUnit;
+
+        protected override float GetWorldExtent(in FrameContext itemTime)
+            => GetEdgeLength(itemTime) * DiagonalRatio;
 
         public override void Dispose()
         {
