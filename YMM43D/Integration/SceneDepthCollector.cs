@@ -28,9 +28,26 @@ namespace YMM43D.Integration
         /// 深度に埋める 3D 物体1つ分。
         /// </summary>
         /// <param name="Provider">描画を行うプロバイダー。</param>
-        /// <param name="World">自分を原点としたときの、この物体のワールド行列。</param>
+        /// <param name="World">この物体のワールド行列。</param>
         /// <param name="Time">この物体のアイテム内での時間位置。</param>
         public readonly record struct Occluder(I3DProvider Provider, Matrix4x4 World, FrameContext Time);
+
+        /// <summary>
+        /// シーンを見渡した結果。
+        /// </summary>
+        /// <param name="Owner">自分が属するアイテム。見つからなければ <c>null</c>。</param>
+        /// <param name="OwnerTime">そのアイテム内での時間位置。</param>
+        /// <param name="OwnerPlacement">そのアイテムの配置行列。</param>
+        /// <param name="Occluders">自分以外の 3D 物体。</param>
+        public readonly record struct SceneView(
+            IVideoItem? Owner,
+            FrameContext OwnerTime,
+            Matrix4x4 OwnerPlacement,
+            IReadOnlyList<Occluder> Occluders)
+        {
+            /// <summary>何も分からなかったことを表す値。</summary>
+            public static SceneView None => new(null, default, Matrix4x4.Identity, []);
+        }
 
         /// <summary>
         /// <paramref name="self"/> 以外の 3D 物体を集めます。
@@ -41,19 +58,19 @@ namespace YMM43D.Integration
         /// ものを渡してください（エフェクトの場合はプロセッサではなくエフェクト本体）。
         /// </param>
         /// <remarks>
-        /// 出力経路では、自分はアイテムの位置を打ち消した状態（原点）で描かれ、
-        /// 位置は YMM4 が後から画像に対して掛けます。そのため他の物体も、自分の
-        /// アイテム位置を打ち消した座標系に移して返します。
+        /// すべてワールド座標のまま返します。自分の位置は呼び出し側が
+        /// <see cref="SceneView.OwnerPlacement"/> から知り、YMM4 が後から画像に掛ける
+        /// 2D 配置を打ち消すのに使います。
         /// </remarks>
-        public static IReadOnlyList<Occluder> Collect(
+        public static SceneView Collect(
             TimelineItemSourceDescription description,
             I3DProvider? self)
         {
             if (self is null)
-                return [];
+                return SceneView.None;
 
             if (FindTimeline(description) is not { } timeline || timeline.Items is not { } items)
-                return [];
+                return SceneView.None;
 
             var frame = description.TimelinePosition.Frame;
             var fps = description.FPS;
@@ -64,15 +81,11 @@ namespace YMM43D.Integration
                 .Select(item => (Item: item, Time: new FrameContext(frame - item.Frame, item.Length, fps)))
                 .ToArray();
 
-            // 自分がどのアイテムに属しているかが分からないと、他の物体を自分から見た
-            // 位置に置けない。見つからない場合は、誤った隠れ方をするより何もしない。
+            // 自分がどのアイテムに属しているかが分からないと、自分をワールドの
+            // どこに置けばよいか決まらない。見つからない場合は何もしない。
             var owner = alive.FirstOrDefault(x => FindProviders(x.Item).Contains(self));
             if (owner.Item is null)
-                return [];
-
-            var selfPlacement = ItemPlacement.GetWorldMatrix(owner.Item, owner.Time, Matrix4x4.Identity);
-            if (!Matrix4x4.Invert(selfPlacement, out var toSelfSpace))
-                return [];
+                return SceneView.None;
 
             var occluders = new List<Occluder>();
 
@@ -80,6 +93,7 @@ namespace YMM43D.Integration
             {
                 // 他のアイテムに掛かっているカメラ系エフェクトまでは追わない。
                 // その値はエフェクトを実行して初めて決まるため、ここでは分からない。
+                // 取り込み済みの分は I3DLocalTransform で本人から受け取る。
                 var placement = ItemPlacement.GetWorldMatrix(item, itemTime, Matrix4x4.Identity);
 
                 foreach (var provider in FindProviders(item))
@@ -87,12 +101,15 @@ namespace YMM43D.Integration
                     if (ReferenceEquals(provider, self))
                         continue;
 
-                    var local = GetLocalMatrix(provider);
-                    occluders.Add(new Occluder(provider, local * placement * toSelfSpace, itemTime));
+                    occluders.Add(new Occluder(provider, GetLocalMatrix(provider) * placement, itemTime));
                 }
             }
 
-            return occluders;
+            return new SceneView(
+                owner.Item,
+                owner.Time,
+                ItemPlacement.GetWorldMatrix(owner.Item, owner.Time, Matrix4x4.Identity),
+                occluders);
         }
 
         /// <summary>

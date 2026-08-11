@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using Vortice.Direct2D1;
 using Vortice.Mathematics;
 using Vortice.Direct3D11;
@@ -30,7 +30,7 @@ namespace YMM43D.Integration
         /// YMM4 が結果を受け取る際に例外になります。
         /// </remarks>
         public ID2D1Image RenderEmpty(IGraphicsDevicesAndContext ymmDevices)
-            => BuildCommandList(ymmDevices, null, Vector2.Zero);
+            => BuildCommandList(ymmDevices, null, Vector2.Zero, Matrix3x2.Identity);
 
         /// <summary>
         /// 3Dシーンを描画し、その結果を含むコマンドリストを返します。
@@ -42,6 +42,10 @@ namespace YMM43D.Integration
         /// <param name="projection">射影行列。</param>
         /// <param name="offset">結果を配置する 2D 上のずれ。</param>
         /// <param name="draw">実際の 3D 描画を行うコールバック。</param>
+        /// <param name="imageTransform">
+        /// 結果に掛ける 2D 変換。YMM4 がこの画像に後から掛ける拡大・回転を
+        /// 打ち消すのに使います。
+        /// </param>
         /// <returns>
         /// 描画結果のコマンドリスト。次に <see cref="Render"/> を呼ぶか
         /// このオブジェクトを破棄するまで有効です。
@@ -53,10 +57,14 @@ namespace YMM43D.Integration
             Matrix4x4 view,
             Matrix4x4 projection,
             Vector2 offset,
-            Action<Render3DContext> draw)
+            Action<Render3DContext> draw,
+            Matrix3x2 imageTransform = default)
         {
+            if (imageTransform == default)
+                imageTransform = Matrix3x2.Identity;
+
             if (width <= 0 || height <= 0)
-                return BuildCommandList(ymmDevices, null, offset);
+                return BuildCommandList(ymmDevices, null, offset, imageTransform);
 
             using var lease = GraphicsDevicePool.Acquire();
             var context = lease.Context;
@@ -66,11 +74,11 @@ namespace YMM43D.Integration
             {
                 surface.Resize(ymmDevices, d2dContext, width, height);
                 if (surface.RenderTargetView is null)
-                    return BuildCommandList(ymmDevices, null, offset);
+                    return BuildCommandList(ymmDevices, null, offset, imageTransform);
 
                 // YMM4 側が前回の結果を読み終えるまで待ってから描き換える。
                 if (!surface.BeginWrite())
-                    return BuildCommandList(ymmDevices, null, offset);
+                    return BuildCommandList(ymmDevices, null, offset, imageTransform);
 
                 // このコンテキストは他の描画とも共有されるため、書き換える状態は
                 // すべて退避して必ず戻す。3Dプレビューは描画の途中でこのメソッドを
@@ -111,10 +119,14 @@ namespace YMM43D.Integration
                 }
             }
 
-            return BuildCommandList(ymmDevices, surface.Bitmap, offset);
+            return BuildCommandList(ymmDevices, surface.Bitmap, offset, imageTransform);
         }
 
-        private ID2D1Image BuildCommandList(IGraphicsDevicesAndContext ymmDevices, ID2D1Bitmap1? bitmap, Vector2 offset)
+        private ID2D1Image BuildCommandList(
+            IGraphicsDevicesAndContext ymmDevices,
+            ID2D1Bitmap1? bitmap,
+            Vector2 offset,
+            Matrix3x2 imageTransform)
         {
             // 本体のコンテキストではなく専用のものを使う。描画先や描画中状態を
             // 書き換えるため、共用すると本体側の描画を壊してしまう。
@@ -128,8 +140,15 @@ namespace YMM43D.Integration
                 deviceContext.Target = commandList;
                 deviceContext.BeginDraw();
                 deviceContext.Clear(null);
+
+                // 拡大や回転を打ち消す変換。位置のずれは DrawImage 側で与えるので、
+                // ここでは掛からないように変換を設定してから描く順序にしている。
+                deviceContext.Transform = imageTransform;
+
                 if (bitmap is not null)
                     deviceContext.DrawImage(bitmap, offset, null, InterpolationMode.Linear, CompositeMode.SourceOver);
+
+                deviceContext.Transform = Matrix3x2.Identity;
                 deviceContext.EndDraw();
                 deviceContext.Target = null;
 

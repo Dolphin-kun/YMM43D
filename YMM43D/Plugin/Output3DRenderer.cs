@@ -70,7 +70,15 @@ namespace YMM43D.Plugin
             var camera = SceneCameraRegistry.Get(description);
             var view = camera.GetViewMatrix(timelineTime);
 
-            var area = GetRenderArea(bounds.Transform(world), view, description.ScreenSize.Height);
+            // シーン内での自分の居場所と、他の 3D 物体を調べる。
+            var scene = SceneDepthCollector.Collect(description, self);
+
+            // アイテムの位置・拡大率・回転をワールド行列に取り込む。取り込んだぶんは
+            // YMM4 が画像に掛ける 2D 配置を打ち消して相殺する。こうしないと、
+            // 3D 空間での位置と画面上の位置が食い違う。
+            var placedWorld = world * scene.OwnerPlacement;
+
+            var area = GetRenderArea(bounds.Transform(placedWorld), view, description.ScreenSize.Height);
             if (area is not { } target)
             {
                 // 描くものが無いときに Output を未設定のままにすると、YMM4 が結果を
@@ -80,22 +88,59 @@ namespace YMM43D.Plugin
 
             var item = new DrawContext3D
             {
-                World = world,
+                World = placedWorld,
                 Opacity = 1f,
                 Time = itemTime,
             };
 
-            // 同じシーンにある他の 3D 物体。自分より手前にあるものに隠されるよう、
-            // 先に深度だけ埋めておく。
-            var occluders = SceneDepthCollector.Collect(description, self);
+            var placement = GetPlacementCancel(scene, target.Offset);
 
             return renderer.Render(
-                devices, target.Width, target.Height, view, target.Projection, target.Offset,
+                devices, target.Width, target.Height, view, target.Projection, placement.Offset,
                 render =>
                 {
-                    DrawOccluders(render, occluders);
+                    // 自分より手前にあるものに隠されるよう、先に深度だけ埋めておく。
+                    DrawOccluders(render, scene.Occluders);
                     draw(render, item);
-                });
+                },
+                placement.Transform);
+        }
+
+        /// <summary>
+        /// YMM4 がこの画像に後から掛ける 2D 配置を打ち消す、ずれと変換を求めます。
+        /// </summary>
+        /// <remarks>
+        /// アイテムの位置・拡大率・回転は既に 3D のワールド行列に取り込んであります。
+        /// YMM4 はそれと同じものを画像に対しても掛けるため、そのままだと二重になります。
+        /// 逆変換を先に掛けておくことで打ち消します。
+        /// <para>
+        /// 自分がどのアイテムに属するか分からなかった場合は、取り込みも行っていないので
+        /// 何も打ち消しません。
+        /// </para>
+        /// </remarks>
+        private static (Vector2 Offset, Matrix3x2 Transform) GetPlacementCancel(
+            SceneDepthCollector.SceneView scene,
+            Vector2 offset)
+        {
+            if (scene.Owner is not { } owner)
+                return (offset, Matrix3x2.Identity);
+
+            var time = scene.OwnerTime;
+
+            // 位置は描画先のずれで打ち消す。YMM4 の Y は下向きで、ずれも下向き。
+            var moved = offset - new Vector2(owner.X.GetFloat(time), owner.Y.GetFloat(time));
+
+            var zoom = owner.Zoom.GetFloat(time) / 100f;
+            var rotation = owner.Rotation.GetFloat(time);
+
+            if (zoom is <= 0 or 1f && rotation == 0f)
+                return (moved, Matrix3x2.Identity);
+
+            var scale = zoom > 0 ? 1f / zoom : 1f;
+
+            return (moved,
+                Matrix3x2.CreateRotation(-Rotation3D.ToRadians(rotation))
+                * Matrix3x2.CreateScale(scale));
         }
 
         /// <summary>
