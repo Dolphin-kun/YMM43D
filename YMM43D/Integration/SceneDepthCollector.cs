@@ -54,8 +54,9 @@ namespace YMM43D.Integration
         /// </summary>
         /// <param name="description">YMM4 から渡された描画要求。</param>
         /// <param name="self">
-        /// いま描こうとしているプロバイダー。3Dプレビューがアイテムから辿るのと同じ
-        /// ものを渡してください（エフェクトの場合はプロセッサではなくエフェクト本体）。
+        /// いま描こうとしているプロバイダー。<c>null</c> を渡すと何も集めません。
+        /// どのアイテムに属するかは <see cref="TimelineItemSourceDescription.Layer"/> で
+        /// 判定するため、この値の同一性には頼っていません。
         /// </param>
         /// <remarks>
         /// すべてワールド座標のまま返します。自分の位置は呼び出し側が
@@ -81,9 +82,14 @@ namespace YMM43D.Integration
                 .Select(item => (Item: item, Time: new FrameContext(frame - item.Frame, item.Length, fps)))
                 .ToArray();
 
-            // 自分がどのアイテムに属しているかが分からないと、自分をワールドの
-            // どこに置けばよいか決まらない。見つからない場合は何もしない。
-            var owner = alive.FirstOrDefault(x => FindProviders(x.Item).Contains(self));
+            // 自分がどのアイテムに属しているかは、描画要求のレイヤー番号で分かる。
+            // 同じレイヤーに同じ時刻の複数アイテムは置けないので、これで一意に決まる。
+            //
+            // プロバイダーの参照一致で探してはいけない。YMM4 は同じアイテムに対して
+            // 描画元を複数作ることがあり（プレビュー用と出力用など）、レジストリに
+            // 残るのは最後に作られた1つだけになる。描画している当人と登録されている
+            // ものが食い違うと自分を見失い、位置を単位行列のまま原点に置いてしまう。
+            var owner = alive.FirstOrDefault(x => x.Item.Layer == description.Layer);
             if (owner.Item is null)
                 return SceneView.None;
 
@@ -97,6 +103,10 @@ namespace YMM43D.Integration
 
             foreach (var (item, itemTime) in alive)
             {
+                // 自分自身は遮蔽物にしない。ここもプロバイダーではなくアイテムで見る。
+                if (ReferenceEquals(item, owner.Item))
+                    continue;
+
                 // 遮蔽物は他アイテムの見た目そのものなので、拡大率も含める。含めないと、
                 // 縮小したアイテムが等倍のままの大きさで手前をくり抜いてしまう。
                 //
@@ -106,12 +116,7 @@ namespace YMM43D.Integration
                 var placement = ItemPlacement.GetWorldMatrix(item, itemTime, Matrix4x4.Identity);
 
                 foreach (var provider in FindProviders(item))
-                {
-                    if (ReferenceEquals(provider, self))
-                        continue;
-
                     occluders.Add(new Occluder(provider, GetLocalMatrix(provider) * placement * unzoom, itemTime));
-                }
             }
 
             return new SceneView(owner.Item, owner.Time, ownerPlacement, occluders);
