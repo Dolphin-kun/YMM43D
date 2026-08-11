@@ -21,11 +21,25 @@ namespace YMM43D.Scene3D
             Math.Max(1, description.ItemDuration.Frame),
             Math.Max(1, description.FPS));
 
-        /// <summary>タイムライン全体での位置を表す <see cref="FrameContext"/> を作ります。</summary>
-        public static FrameContext FromTimeline(TimelineItemSourceDescription description) => new(
-            description.TimelinePosition.Frame,
-            Math.Max(1, description.TimelineDuration.Frame),
-            Math.Max(1, description.FPS));
+        /// <summary>
+        /// タイムライン全体での位置を表す <see cref="FrameContext"/> を作ります。
+        /// カメラのように、アイテムではなくシーン全体に属するアニメーションの評価に使います。
+        /// </summary>
+        /// <remarks>
+        /// 呼び出し経路によってはタイムラインの長さが得られないことがあります。
+        /// その場合はアイテム内の位置で代用します。長さを 1 として扱ってしまうと
+        /// アニメーション全体が 1 フレームに圧縮されて見えるためです。
+        /// </remarks>
+        public static FrameContext FromTimeline(TimelineItemSourceDescription description)
+        {
+            if (description.TimelineDuration.Frame <= 0 || description.FPS <= 0)
+                return FromItem(description);
+
+            return new FrameContext(
+                description.TimelinePosition.Frame,
+                description.TimelineDuration.Frame,
+                description.FPS);
+        }
     }
 
     /// <summary>
