@@ -254,6 +254,11 @@ namespace YMM43D.PreviewTool.ViewModels
         /// アイテムを 3D 描画できるプロバイダーを集めます。
         /// 1つも見つからなければ、板にテクスチャを貼る既定の方法を使います。
         /// </summary>
+        /// <remarks>
+        /// アイテム自身が 3D 描画を持つ場合は、それだけを使います。エフェクト側の
+        /// 3D 描画は、アイテムを平面化した絵をもとに立体を組み立てるものなので、
+        /// 既に立体であるアイテムに重ねると、本体と平たい写しの二重表示になります。
+        /// </remarks>
         private IEnumerable<I3DProvider> FindProviders(IVideoItem item)
         {
             var providers = new List<I3DProvider>();
@@ -263,6 +268,9 @@ namespace YMM43D.PreviewTool.ViewModels
 
             if (item is ShapeItem shape && Provider3DRegistry.Find(shape.ShapeParameter) is { } shapeProvider)
                 providers.Add(shapeProvider);
+
+            if (providers.Count > 0)
+                return providers.Distinct();
 
             foreach (var effect in item.VideoEffects ?? [])
             {

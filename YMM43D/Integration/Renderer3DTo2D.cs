@@ -68,6 +68,10 @@ namespace YMM43D.Integration
                 if (surface.RenderTargetView is null)
                     return BuildCommandList(ymmDevices, null, offset);
 
+                // YMM4 側が前回の結果を読み終えるまで待ってから描き換える。
+                if (!surface.BeginWrite())
+                    return BuildCommandList(ymmDevices, null, offset);
+
                 // このコンテキストは他の描画とも共有されるため、書き換える状態は
                 // すべて退避して必ず戻す。3Dプレビューは描画の途中でこのメソッドを
                 // 呼ぶことがあり、戻し漏れがあるとプレビュー側の描画が崩れる。
@@ -90,6 +94,9 @@ namespace YMM43D.Integration
                     context.RSSetViewport(new Viewport(0, 0, width, height));
 
                     draw(new Render3DContext(lease.Device, context, view, projection));
+
+                    // 鍵を手放す前に、溜まっている描画命令を GPU に送り出す。
+                    context.Flush();
                 }
                 finally
                 {
@@ -99,10 +106,9 @@ namespace YMM43D.Integration
 
                     if (previousViewports is not null)
                         context.RSSetViewports(previousViewports);
-                }
 
-                // 本体デバイスが共有テクスチャを読む前に、書き込みを完了させる。
-                context.Flush();
+                    surface.EndWrite();
+                }
             }
 
             return BuildCommandList(ymmDevices, surface.Bitmap, offset);
