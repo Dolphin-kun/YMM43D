@@ -59,6 +59,21 @@ namespace YMM43D.PreviewTool
         private readonly HashSet<IVideoItem> effectsUnsupported = [];
 
         /// <summary>
+        /// 描画元の更新に失敗したアイテムと、次に試してよい時刻。
+        /// </summary>
+        private readonly Dictionary<IVideoItem, long> sourceRetryAt = [];
+
+        /// <summary>
+        /// 描画元の更新に失敗してから、次に試すまでの待ち時間（ミリ秒）。
+        /// </summary>
+        /// <remarks>
+        /// 図形のサイズを 0 にするなど、アイテムが一時的に描画できない状態になることがある。
+        /// 設定を戻せば復帰してほしいので恒久的にあきらめるわけにはいかないが、
+        /// 毎フレーム試すと例外が出続けるため間隔を空ける。
+        /// </remarks>
+        private const long SourceRetryDelayMs = 500;
+
+        /// <summary>
         /// アイテムを描画し、画像と変換行列を返します。
         /// </summary>
         /// <param name="needsImage">
@@ -102,6 +117,9 @@ namespace YMM43D.PreviewTool
             PreviewEnvironment environment,
             TimelineItemSourceDescription description)
         {
+            if (sourceRetryAt.TryGetValue(item, out var retryAt) && System.Environment.TickCount64 < retryAt)
+                return null;
+
             try
             {
                 ISource? source;
@@ -121,12 +139,17 @@ namespace YMM43D.PreviewTool
                 foreach (var output in source.Outputs ?? [])
                 {
                     if (output?.Output is { } image)
+                    {
+                        sourceRetryAt.Remove(item);
                         return image;
+                    }
                 }
             }
             catch
             {
-                // アイテムによっては描画元を作れないことがある。
+                // 図形のサイズが 0 のときなど、アイテムが一時的に描画できない状態に
+                // なることがある。しばらく間を空けてから試し直す。
+                sourceRetryAt[item] = System.Environment.TickCount64 + SourceRetryDelayMs;
             }
 
             return null;
@@ -198,6 +221,9 @@ namespace YMM43D.PreviewTool
                 ReleaseChain(item);
 
             effectsUnsupported.RemoveWhere(item => !aliveItems.Contains(item));
+
+            foreach (var item in sourceRetryAt.Keys.Where(k => !aliveItems.Contains(k)).ToArray())
+                sourceRetryAt.Remove(item);
         }
 
         private void ReleaseChain(IVideoItem item)
@@ -219,6 +245,7 @@ namespace YMM43D.PreviewTool
                 chain.Dispose();
             chains.Clear();
             effectsUnsupported.Clear();
+            sourceRetryAt.Clear();
         }
 
         /// <summary>

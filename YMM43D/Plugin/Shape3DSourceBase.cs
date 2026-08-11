@@ -59,13 +59,10 @@ namespace YMM43D.Plugin
         public void Update(TimelineItemSourceDescription description)
         {
             var itemTime = FrameContext.FromItem(description);
-            var size = GetRenderSize(itemTime);
 
-            if (size <= 0)
-            {
-                output = null;
-                return;
-            }
+            // サイズが 0 以下でも Render は空のコマンドリストを返す。ここで打ち切って
+            // Output を未設定のままにすると、YMM4 が結果を受け取る際に例外になる。
+            var size = GetRenderSize(itemTime);
 
             // カメラはシーン全体に属するため、アイテム内ではなくタイムライン上の
             // 位置で評価する。

@@ -42,12 +42,19 @@ namespace YMM43D.PreviewTool
             var rendered = pipeline.Render(item, itemTime, environment, needsImage);
 
             var texture = providerTexture;
+            Vector2? imageSize = null;
             if (texture is null && needsImage && rendered.Image is { } image)
-                texture = textureBridge.GetTexture(environment.Device, environment.Devices, image, item, out _);
+            {
+                texture = textureBridge.GetTexture(
+                    environment.Device, environment.Devices, image, item, out var sizeInDips);
+
+                if (texture is not null)
+                    imageSize = sizeInDips;
+            }
 
             return new DrawContext3D
             {
-                World = BuildWorldMatrix(item, itemTime, provider, rendered.CameraMatrix),
+                World = BuildWorldMatrix(item, itemTime, provider, rendered.CameraMatrix, imageSize),
                 Opacity = Math.Clamp(GetOpacity(item, itemTime), 0f, 1f),
                 Blend = ToBlendMode(item.Blend),
                 IsAlwaysOnTop = item.IsAlwaysOnTop,
@@ -89,9 +96,10 @@ namespace YMM43D.PreviewTool
             IVideoItem item,
             in FrameContext time,
             I3DProvider provider,
-            Matrix4x4 itemCamera)
+            Matrix4x4 itemCamera,
+            Vector2? imageSize)
         {
-            var sizeScale = BuildSizeMatrix(provider);
+            var sizeScale = BuildSizeMatrix(provider, imageSize);
             var zoom = Matrix4x4.CreateScale(item.Zoom.GetFloat(time) / 100f);
 
             // YMM4 の回転は時計回り、3D空間は反時計回りなので符号を反転する。
@@ -112,19 +120,28 @@ namespace YMM43D.PreviewTool
         /// <summary>
         /// 描画対象の実寸を、3D空間での大きさと中心のずれに変換します。
         /// </summary>
-        private static Matrix4x4 BuildSizeMatrix(I3DProvider provider)
+        /// <param name="imageSize">
+        /// テクスチャ化したアイテム画像の論理サイズ。プロバイダーが実寸を答えられない
+        /// 場合に、板をこの大きさに合わせます。これが無いとすべてのアイテムが
+        /// 1単位（100px）四方で描かれてしまいます。
+        /// </param>
+        private static Matrix4x4 BuildSizeMatrix(I3DProvider provider, Vector2? imageSize)
         {
-            if (provider is not I3DSizeProvider sizeProvider
-                || !sizeProvider.TryGetSize(out var size, out var offset))
+            // プロバイダーが実寸を知っている場合はそちらを優先する。
+            if (provider is I3DSizeProvider sizeProvider
+                && sizeProvider.TryGetSize(out var size, out var offset))
             {
-                return Matrix4x4.Identity;
+                // トリミングされている場合、画像の中心はアイテムの原点からずれる。
+                var center = offset + size / 2f;
+
+                return Matrix4x4.CreateScale(size.X / PixelsPerUnit, size.Y / PixelsPerUnit, 1f)
+                     * Matrix4x4.CreateTranslation(center.X / PixelsPerUnit, -center.Y / PixelsPerUnit, 0f);
             }
 
-            // トリミングされている場合、画像の中心はアイテムの原点からずれる。
-            var center = offset + size / 2f;
+            if (imageSize is { } dips && dips.X > 0 && dips.Y > 0)
+                return Matrix4x4.CreateScale(dips.X / PixelsPerUnit, dips.Y / PixelsPerUnit, 1f);
 
-            return Matrix4x4.CreateScale(size.X / PixelsPerUnit, size.Y / PixelsPerUnit, 1f)
-                 * Matrix4x4.CreateTranslation(center.X / PixelsPerUnit, -center.Y / PixelsPerUnit, 0f);
+            return Matrix4x4.Identity;
         }
 
         /// <summary>
