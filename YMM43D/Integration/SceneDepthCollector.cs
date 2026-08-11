@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using YMM43D.Plugin;
 using YMM43D.Scene3D;
 using YukkuriMovieMaker.Player.Video;
@@ -94,7 +94,7 @@ namespace YMM43D.Integration
                 // 他のアイテムに掛かっているカメラ系エフェクトまでは追わない。
                 // その値はエフェクトを実行して初めて決まるため、ここでは分からない。
                 // 取り込み済みの分は I3DLocalTransform で本人から受け取る。
-                var placement = ItemPlacement.GetWorldMatrix(item, itemTime, Matrix4x4.Identity);
+                var placement = ItemPlacement.GetWorldMatrix(item, itemTime, Matrix4x4.Identity, includeZoom: false);
 
                 foreach (var provider in FindProviders(item))
                 {
@@ -108,7 +108,7 @@ namespace YMM43D.Integration
             return new SceneView(
                 owner.Item,
                 owner.Time,
-                ItemPlacement.GetWorldMatrix(owner.Item, owner.Time, Matrix4x4.Identity),
+                ItemPlacement.GetWorldMatrix(owner.Item, owner.Time, Matrix4x4.Identity, includeZoom: false),
                 occluders);
         }
 

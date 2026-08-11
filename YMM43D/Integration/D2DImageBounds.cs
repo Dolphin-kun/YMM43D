@@ -16,6 +16,11 @@ namespace YMM43D.Integration
         /// デバイスコンテキストに問い合わせないと範囲が分かりません。
         /// どちらでも失敗した場合は 1×1 を返します。
         /// </remarks>
+        /// <summary>テクスチャの一辺の上限（ピクセル）。D3D11 の仕様上の最大値。</summary>
+        public const int MaxTextureSize = 16384;
+
+        private static readonly RawRectF Unknown = new(0, 0, 1, 1);
+
         public static RawRectF Get(ID2D1DeviceContext? deviceContext, ID2D1Image image)
         {
             if (image is ID2D1Bitmap bitmap)
@@ -28,7 +33,8 @@ namespace YMM43D.Integration
             {
                 try
                 {
-                    return deviceContext.GetImageLocalBounds(image);
+                    var bounds = deviceContext.GetImageLocalBounds(image);
+                    return IsUsable(bounds) ? bounds : Unknown;
                 }
                 catch
                 {
@@ -36,14 +42,38 @@ namespace YMM43D.Integration
                 }
             }
 
-            return new RawRectF(0, 0, 1, 1);
+            return Unknown;
         }
+
+        /// <summary>
+        /// 描画範囲として意味のある値かどうかを調べます。
+        /// </summary>
+        /// <remarks>
+        /// 範囲が確定できない画像に対しては、無限大や NaN が返ることがあります。
+        /// そのまま計算に使うと、テクスチャの大きさが負や桁外れの値になり、
+        /// 確保の時点で落ちます。
+        /// </remarks>
+        private static bool IsUsable(in RawRectF bounds)
+            => float.IsFinite(bounds.Left) && float.IsFinite(bounds.Top)
+            && float.IsFinite(bounds.Right) && float.IsFinite(bounds.Bottom)
+            && bounds.Right >= bounds.Left && bounds.Bottom >= bounds.Top;
 
         /// <summary>
         /// 描画範囲を、テクスチャに必要なピクセル数へ切り上げます。
         /// </summary>
+        /// <remarks>
+        /// 確保できない大きさを返さないよう、<see cref="MaxTextureSize"/> で頭打ちにします。
+        /// </remarks>
         public static (int Width, int Height) ToPixelSize(in RawRectF bounds) => (
-            (int)Math.Max(1, Math.Ceiling(bounds.Right - bounds.Left)),
-            (int)Math.Max(1, Math.Ceiling(bounds.Bottom - bounds.Top)));
+            ToPixels(bounds.Right - bounds.Left),
+            ToPixels(bounds.Bottom - bounds.Top));
+
+        private static int ToPixels(float length)
+        {
+            if (!float.IsFinite(length))
+                return 1;
+
+            return (int)Math.Clamp(Math.Ceiling(length), 1, MaxTextureSize);
+        }
     }
 }

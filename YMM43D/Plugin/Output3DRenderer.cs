@@ -110,9 +110,16 @@ namespace YMM43D.Plugin
         /// YMM4 がこの画像に後から掛ける 2D 配置を打ち消す、ずれと変換を求めます。
         /// </summary>
         /// <remarks>
-        /// アイテムの位置・拡大率・回転は既に 3D のワールド行列に取り込んであります。
-        /// YMM4 はそれと同じものを画像に対しても掛けるため、そのままだと二重になります。
+        /// <para>
+        /// アイテムの位置と回転は 3D のワールド行列に取り込んであります。YMM4 は
+        /// それと同じものを画像に対しても掛けるため、そのままだと二重になります。
         /// 逆変換を先に掛けておくことで打ち消します。
+        /// </para>
+        /// <para>
+        /// 拡大率だけは取り込みません。打ち消すには画像を 1/拡大率 倍に引き伸ばして
+        /// おく必要があり、縮小するほど中間画像が巨大になって破綻するためです。
+        /// 拡大は YMM4 が出来上がった画像に掛けます。
+        /// </para>
         /// <para>
         /// 自分がどのアイテムに属するか分からなかった場合は、取り込みも行っていないので
         /// 何も打ち消しません。
@@ -130,17 +137,11 @@ namespace YMM43D.Plugin
             // 位置は描画先のずれで打ち消す。YMM4 の Y は下向きで、ずれも下向き。
             var moved = offset - new Vector2(owner.X.GetFloat(time), owner.Y.GetFloat(time));
 
-            var zoom = owner.Zoom.GetFloat(time) / 100f;
             var rotation = owner.Rotation.GetFloat(time);
-
-            if (zoom is <= 0 or 1f && rotation == 0f)
+            if (rotation == 0f)
                 return (moved, Matrix3x2.Identity);
 
-            var scale = zoom > 0 ? 1f / zoom : 1f;
-
-            return (moved,
-                Matrix3x2.CreateRotation(-Rotation3D.ToRadians(rotation))
-                * Matrix3x2.CreateScale(scale));
+            return (moved, Matrix3x2.CreateRotation(-Rotation3D.ToRadians(rotation)));
         }
 
         /// <summary>

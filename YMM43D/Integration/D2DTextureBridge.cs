@@ -64,7 +64,22 @@ namespace YMM43D.Integration
                     texture = null;
                 }
 
-                texture ??= cache[key] = new SharedItemTexture(targetDevice, ymmDevices, deviceContext, width, height);
+                if (texture is null)
+                {
+                    try
+                    {
+                        texture = cache[key] = new SharedItemTexture(
+                            targetDevice, ymmDevices, deviceContext, width, height);
+                    }
+                    catch
+                    {
+                        // 極端に大きな画像などで確保に失敗することがある。
+                        // 落とさず、テクスチャ無しとして扱う。
+                        cache.Remove(key);
+                        return null;
+                    }
+                }
+
                 texture.Update(ymmDevices, deviceContext, image, bounds);
                 return texture.ShaderResourceView;
             }
