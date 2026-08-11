@@ -88,7 +88,15 @@ namespace YMM43D.Plugin
             // 3D 空間での位置と画面上の位置が食い違う。
             var placedWorld = world * scene.OwnerPlacement;
 
-            var area = GetRenderArea(bounds.Transform(placedWorld), view, distance);
+            // YMM4 が後から画像を拡大率で拡大するぶん、あらかじめ縮めた縮尺で描く。
+            // 拡大率はワールド行列に取り込んであるので、両者は打ち消し合う。
+            //
+            // 大きさで割るのではなく縮尺で割るのが要点で、描画先の画素数は拡大率に
+            // よらず一定に保たれる。画像を引き伸ばして打ち消す方法だと、縮小するほど
+            // 中間画像が巨大になって破綻する。
+            var pixelsPerTangent = SceneCamera.GetPixelsPerTangent(distance) / scene.OwnerZoom;
+
+            var area = GetRenderArea(bounds.Transform(placedWorld), view, pixelsPerTangent);
             if (area is not { } target)
             {
                 // 描くものが無いときに Output を未設定のままにすると、YMM4 が結果を
@@ -121,14 +129,13 @@ namespace YMM43D.Plugin
         /// </summary>
         /// <remarks>
         /// <para>
-        /// アイテムの位置と回転は 3D のワールド行列に取り込んであります。YMM4 は
+        /// アイテムの位置・拡大率・回転は 3D のワールド行列に取り込んであります。YMM4 は
         /// それと同じものを画像に対しても掛けるため、そのままだと二重になります。
         /// 逆変換を先に掛けておくことで打ち消します。
         /// </para>
         /// <para>
-        /// 拡大率だけは取り込みません。打ち消すには画像を 1/拡大率 倍に引き伸ばして
-        /// おく必要があり、縮小するほど中間画像が巨大になって破綻するためです。
-        /// 拡大は YMM4 が出来上がった画像に掛けます。
+        /// 拡大率は縮尺の側で相殺済みなので、ここでは扱いません。ただし YMM4 は
+        /// 位置のずれにも拡大率を掛けるため、打ち消す量も同じだけ縮めておきます。
         /// </para>
         /// <para>
         /// 自分がどのアイテムに属するか分からなかった場合は、取り込みも行っていないので
@@ -145,7 +152,9 @@ namespace YMM43D.Plugin
             var time = scene.OwnerTime;
 
             // 位置は描画先のずれで打ち消す。YMM4 の Y は下向きで、ずれも下向き。
-            var moved = offset - new Vector2(owner.X.GetFloat(time), owner.Y.GetFloat(time));
+            // 打ち消す量を拡大率で割るのは、YMM4 がこのずれごと拡大するため。
+            var moved = offset - new Vector2(
+                owner.X.GetFloat(time), owner.Y.GetFloat(time)) / scene.OwnerZoom;
 
             var rotation = owner.Rotation.GetFloat(time);
             if (rotation == 0f)
@@ -202,7 +211,7 @@ namespace YMM43D.Plugin
         /// なく、範囲そのものを描画先にします。射影行列も中心をずらしたものを使います。
         /// </para>
         /// </remarks>
-        private static RenderArea? GetRenderArea(in WorldBounds bounds, in Matrix4x4 view, float cameraDistance)
+        private static RenderArea? GetRenderArea(in WorldBounds bounds, in Matrix4x4 view, float pixelsPerTangent)
         {
             if (bounds.IsEmpty)
                 return null;
@@ -231,7 +240,9 @@ namespace YMM43D.Plugin
             minTan = Vector2.Clamp(minTan, new Vector2(-MaxTangent), new Vector2(MaxTangent));
             maxTan = Vector2.Clamp(maxTan, new Vector2(-MaxTangent), new Vector2(MaxTangent));
 
-            var pixelsPerTangent = SceneCamera.GetPixelsPerTangent(cameraDistance);
+            if (!float.IsFinite(pixelsPerTangent) || pixelsPerTangent <= 0)
+                return null;
+
             var width = (int)MathF.Ceiling((maxTan.X - minTan.X) * pixelsPerTangent);
             var height = (int)MathF.Ceiling((maxTan.Y - minTan.Y) * pixelsPerTangent);
 

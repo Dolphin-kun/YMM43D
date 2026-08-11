@@ -20,19 +20,17 @@ namespace YMM43D.Integration
         /// エフェクトが <c>DrawDescription.Camera</c> に書き込んだ変換。
         /// 無ければ単位行列を渡してください。
         /// </param>
-        /// <param name="includeZoom">
-        /// 拡大率を含めるかどうか。出力経路では YMM4 が出来上がった画像に対して
-        /// 拡大を掛けるため、二重に掛からないよう <c>false</c> を渡します。
-        /// </param>
+        /// <remarks>
+        /// 拡大率も含めます。出力経路では YMM4 が出来上がった画像にも拡大を掛けますが、
+        /// 二重にならないよう描画側が縮尺で相殺します。ここで外してしまうと、
+        /// 深度判定だけが拡大前の空間で行われ、アイテムをまたいだ前後関係が狂います。
+        /// </remarks>
         public static Matrix4x4 GetWorldMatrix(
             IVideoItem item,
             in FrameContext time,
-            Matrix4x4 cameraMatrix,
-            bool includeZoom = true)
+            Matrix4x4 cameraMatrix)
         {
-            var zoom = includeZoom
-                ? Matrix4x4.CreateScale(item.Zoom.GetFloat(time) / 100f)
-                : Matrix4x4.Identity;
+            var zoom = Matrix4x4.CreateScale(item.Zoom.GetFloat(time) / 100f);
 
             // YMM4 の回転は時計回り、3D空間は反時計回りなので符号を反転する。
             var rotation = Matrix4x4.CreateRotationZ(-Rotation3D.ToRadians(item.Rotation.GetFloat(time)));

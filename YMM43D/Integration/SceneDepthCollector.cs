@@ -37,16 +37,18 @@ namespace YMM43D.Integration
         /// </summary>
         /// <param name="Owner">自分が属するアイテム。見つからなければ <c>null</c>。</param>
         /// <param name="OwnerTime">そのアイテム内での時間位置。</param>
-        /// <param name="OwnerPlacement">そのアイテムの配置行列。</param>
+        /// <param name="OwnerPlacement">そのアイテムの配置行列。拡大率も含みます。</param>
+        /// <param name="OwnerZoom">そのアイテムの拡大率（1.0 で等倍）。</param>
         /// <param name="Occluders">自分以外の 3D 物体。</param>
         public readonly record struct SceneView(
             IVideoItem? Owner,
             FrameContext OwnerTime,
             Matrix4x4 OwnerPlacement,
+            float OwnerZoom,
             IReadOnlyList<Occluder> Occluders)
         {
             /// <summary>何も分からなかったことを表す値。</summary>
-            public static SceneView None => new(null, default, Matrix4x4.Identity, []);
+            public static SceneView None => new(null, default, Matrix4x4.Identity, 1f, []);
         }
 
         /// <summary>
@@ -93,11 +95,11 @@ namespace YMM43D.Integration
             if (owner.Item is null)
                 return SceneView.None;
 
-            // 自分の配置に拡大率は入れない。YMM4 が出来上がった画像に掛けるため。
-            var ownerPlacement = ItemPlacement.GetWorldMatrix(
-                owner.Item, owner.Time, Matrix4x4.Identity, includeZoom: false);
-
-            var unzoom = GetZoomCancel(owner.Item, owner.Time, ownerPlacement.Translation);
+            // 深度判定は YMM4 が画像を拡大する前に済んでしまうので、自分も他人も
+            // 同じワールド空間に置かないと前後関係が食い違う。拡大率はすべて
+            // ここで反映し、YMM4 が後から掛ける分は描画側で縮尺を調整して相殺する。
+            var ownerPlacement = ItemPlacement.GetWorldMatrix(owner.Item, owner.Time, Matrix4x4.Identity);
+            var ownerZoom = GetZoom(owner.Item, owner.Time);
 
             var occluders = new List<Occluder>();
 
@@ -107,51 +109,28 @@ namespace YMM43D.Integration
                 if (ReferenceEquals(item, owner.Item))
                     continue;
 
-                // 遮蔽物は他アイテムの見た目そのものなので、拡大率も含める。含めないと、
-                // 縮小したアイテムが等倍のままの大きさで手前をくり抜いてしまう。
-                //
                 // 他のアイテムに掛かっているカメラ系エフェクトまでは追わない。
                 // その値はエフェクトを実行して初めて決まるため、ここでは分からない。
                 // 取り込み済みの分は I3DLocalTransform で本人から受け取る。
                 var placement = ItemPlacement.GetWorldMatrix(item, itemTime, Matrix4x4.Identity);
 
                 foreach (var provider in FindProviders(item))
-                    occluders.Add(new Occluder(provider, GetLocalMatrix(provider) * placement * unzoom, itemTime));
+                    occluders.Add(new Occluder(provider, GetLocalMatrix(provider) * placement, itemTime));
             }
 
-            return new SceneView(owner.Item, owner.Time, ownerPlacement, occluders);
+            return new SceneView(owner.Item, owner.Time, ownerPlacement, ownerZoom, occluders);
         }
 
         /// <summary>
-        /// 自分に掛かる拡大率を、遮蔽物の側で先に打ち消す変換を作ります。
+        /// アイテムの拡大率を倍率（1.0 で等倍）として取り出します。
         /// </summary>
-        /// <remarks>
-        /// <para>
-        /// YMM4 は出来上がった画像全体に拡大率を掛けます。その画像には深度用に埋めた
-        /// 他アイテムの形も含まれるので、何もしないと遮蔽物まで自分の拡大率で
-        /// 拡大・縮小されてしまいます。そこで自分の原点を中心にあらかじめ
-        /// 1/拡大率 倍しておき、後から掛かる拡大と相殺させます。
-        /// </para>
-        /// <para>
-        /// 打ち消しを画像の引き伸ばしで行うと、縮小するほど中間画像が巨大になって
-        /// 破綻します。深度に埋める形の側を動かす分には、画像の大きさは変わりません。
-        /// </para>
-        /// <para>
-        /// ただし相殺できるのは大きさだけです。YMM4 の拡大は平らな画像に対する操作
-        /// なので、遠近の効き方までは一致しません。拡大率が極端な場合や、遮蔽物が
-        /// 自分から大きく離れている場合はわずかにずれます。
-        /// </para>
-        /// </remarks>
-        private static Matrix4x4 GetZoomCancel(IVideoItem owner, in FrameContext time, Vector3 origin)
+        private static float GetZoom(IVideoItem item, in FrameContext time)
         {
-            var zoom = owner.Zoom.GetFloat(time) / 100f;
+            var zoom = item.Zoom.GetFloat(time) / 100f;
 
-            if (!float.IsFinite(zoom) || zoom <= 0f || zoom == 1f)
-                return Matrix4x4.Identity;
-
-            return Matrix4x4.CreateTranslation(-origin)
-                 * Matrix4x4.CreateScale(1f / zoom)
-                 * Matrix4x4.CreateTranslation(origin);
+            // 0 や負の値、キーフレームの補間で崩れた値をそのまま縮尺に使うと
+            // 描画先の計算が破綻する。
+            return float.IsFinite(zoom) && zoom > 0f ? zoom : 1f;
         }
 
         /// <summary>
