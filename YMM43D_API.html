@@ -1,1431 +1,737 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>YMM43D Core API Documentation</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --bg-primary: #0b0f19;
-            --bg-secondary: #111827;
-            --bg-active: #1f2937;
-            --bg-card: #1f2937;
-            --text-primary: #f3f4f6;
-            --text-secondary: #9ca3af;
-            --text-muted: #6b7280;
-            --accent: #6366f1;
-            --accent-glow: rgba(99, 102, 241, 0.15);
-            --accent-hover: #818cf8;
-            --border: #374151;
-            --code-bg: #0f172a;
-            --sidebar-width: 340px;
-            --font-main: 'Outfit', sans-serif;
-            --font-mono: 'Fira Code', monospace;
-        }
-
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
-        body {
-            font-family: var(--font-main);
-            background-color: var(--bg-primary);
-            color: var(--text-primary);
-            display: flex;
-            flex-direction: row-reverse; /* 右側にサイドバー、左側にコンテンツ */
-            height: 100vh;
-            overflow: hidden;
-        }
-
-        /* 右側サイドバー (API一覧) */
-        aside {
-            width: var(--sidebar-width);
-            background-color: var(--bg-secondary);
-            border-left: 1px solid var(--border);
-            display: flex;
-            flex-direction: column;
-            height: 100%;
-            z-index: 10;
-            box-shadow: -4px 0 20px rgba(0, 0, 0, 0.3);
-        }
-
-        .sidebar-header {
-            padding: 24px;
-            border-bottom: 1px solid var(--border);
-            background: linear-gradient(135deg, #1e1b4b 0%, #111827 100%);
-        }
-
-        .sidebar-header h1 {
-            font-size: 1.25rem;
-            font-weight: 700;
-            color: #818cf8;
-            letter-spacing: 0.5px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .sidebar-header p {
-            font-size: 0.8rem;
-            color: var(--text-secondary);
-            margin-top: 6px;
-        }
-
-        .nav-list {
-            list-style: none;
-            overflow-y: auto;
-            flex: 1;
-            padding: 16px 0;
-        }
-
-        /* スクロールバーのスタイリッシュ化 */
-        ::-webkit-scrollbar {
-            width: 6px;
-            height: 6px;
-        }
-        ::-webkit-scrollbar-track {
-            background: var(--bg-primary);
-        }
-        ::-webkit-scrollbar-thumb {
-            background: var(--border);
-            border-radius: 3px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: var(--text-muted);
-        }
-
-        .nav-category {
-            font-size: 0.75rem;
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
-            color: #818cf8;
-            padding: 16px 24px 8px;
-            font-weight: 700;
-            opacity: 0.8;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
-            margin-bottom: 4px;
-        }
-
-        .nav-item {
-            padding: 10px 24px;
-            cursor: pointer;
-            font-size: 0.9rem;
-            color: var(--text-secondary);
-            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-            border-right: 3px solid transparent;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-
-        .nav-item:hover {
-            background-color: var(--bg-active);
-            color: var(--text-primary);
-            padding-right: 28px;
-        }
-
-        .nav-item.active {
-            background-color: rgba(99, 102, 241, 0.1);
-            color: #a5b4fc;
-            border-right: 3px solid var(--accent);
-            font-weight: 600;
-        }
-
-        /* 左側メインコンテンツ */
-        main {
-            flex: 1;
-            padding: 48px;
-            overflow-y: auto;
-            height: 100%;
-            background-color: var(--bg-primary);
-        }
-
-        .api-content {
-            display: none;
-            max-width: 960px;
-            margin: 0 auto;
-            animation: slideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-
-        .api-content.active {
-            display: block;
-        }
-
-        @keyframes slideIn {
-            from { opacity: 0; transform: translateX(-15px); }
-            to { opacity: 1; transform: translateX(0); }
-        }
-
-        .class-title {
-            font-size: 2.25rem;
-            font-weight: 700;
-            margin-bottom: 8px;
-            color: var(--text-primary);
-            letter-spacing: -0.5px;
-        }
-
-        .class-meta {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 24px;
-            font-size: 0.85rem;
-        }
-
-        .class-meta span {
-            background-color: var(--bg-secondary);
-            padding: 6px 12px;
-            border-radius: 6px;
-            border: 1px solid var(--border);
-            color: var(--text-secondary);
-            font-family: var(--font-mono);
-        }
-
-        .class-desc {
-            font-size: 1.05rem;
-            line-height: 1.7;
-            margin-bottom: 32px;
-            color: #d1d5db;
-        }
-
-        .section-title {
-            font-size: 1.35rem;
-            font-weight: 600;
-            margin: 36px 0 16px;
-            color: #818cf8;
-            border-left: 4px solid var(--accent);
-            padding-left: 12px;
-        }
-
-        /* アラートボックス */
-        .alert-box {
-            padding: 16px;
-            border-radius: 8px;
-            margin-bottom: 32px;
-            border-left: 4px solid;
-            line-height: 1.6;
-        }
-
-        .alert-danger {
-            background-color: rgba(239, 68, 68, 0.08);
-            border-left-color: #ef4444;
-            color: #fca5a5;
-            border-top: 1px solid rgba(239, 68, 68, 0.15);
-            border-right: 1px solid rgba(239, 68, 68, 0.15);
-            border-bottom: 1px solid rgba(239, 68, 68, 0.15);
-        }
-
-        .alert-danger strong {
-            color: #f87171;
-            font-size: 1rem;
-            display: block;
-            margin-bottom: 4px;
-        }
-
-        .alert-danger code {
-            background-color: rgba(0, 0, 0, 0.3);
-            padding: 2px 5px;
-            border-radius: 4px;
-            color: #f87171;
-            font-family: var(--font-mono);
-        }
-
-        /* テーブル */
-        table {
-            width: 100%;
-            border-collapse: separate;
-            border-spacing: 0;
-            margin-bottom: 32px;
-            background-color: var(--bg-secondary);
-            border-radius: 8px;
-            overflow: hidden;
-            border: 1px solid var(--border);
-        }
-
-        th, td {
-            padding: 14px 18px;
-            text-align: left;
-            border-bottom: 1px solid var(--border);
-        }
-
-        th {
-            background-color: #1f2937;
-            font-weight: 600;
-            font-size: 0.85rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: var(--text-secondary);
-        }
-
-        tr:last-child td {
-            border-bottom: none;
-        }
-
-        td {
-            font-size: 0.92rem;
-            vertical-align: top;
-            line-height: 1.6;
-        }
-
-        td.type-col {
-            font-family: var(--font-mono);
-            color: #f43f5e;
-            width: 25%;
-            font-weight: 500;
-        }
-
-        td.name-col {
-            font-family: var(--font-mono);
-            color: #10b981;
-            font-weight: 600;
-            width: 30%;
-        }
-
-        /* コードブロック */
-        pre {
-            background-color: var(--code-bg);
-            padding: 20px;
-            border-radius: 8px;
-            border: 1px solid var(--border);
-            overflow-x: auto;
-            margin-bottom: 32px;
-            position: relative;
-        }
-
-        code {
-            font-family: var(--font-mono);
-            font-size: 0.9rem;
-            color: #e2e8f0;
-            line-height: 1.5;
-        }
-
-        /* キーワードの疑似ハイライト */
-        .keyword { color: #f472b6; }
-        .type-name { color: #60a5fa; }
-        .method-name { color: #34d399; }
-        .comment { color: #6b7280; font-style: italic; }
-
-        .code-inline {
-            background-color: var(--code-bg);
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-family: var(--font-mono);
-            font-size: 0.85rem;
-            color: #f472b6;
-            border: 1px solid var(--border);
-        }
-
-        /* ウェルカム画面 (初期表示) */
-        .placeholder {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100%;
-            text-align: center;
-            max-width: 600px;
-            margin: 0 auto;
-        }
-
-        .placeholder h2 {
-            font-size: 2rem;
-            margin-bottom: 12px;
-            color: #818cf8;
-        }
-
-        .placeholder p {
-            color: var(--text-secondary);
-            line-height: 1.6;
-            margin-bottom: 24px;
-        }
-
-        .placeholder-icon {
-            font-size: 4rem;
-            margin-bottom: 20px;
-            animation: pulse 2s infinite;
-        }
-
-        @keyframes pulse {
-            0% { transform: scale(1); opacity: 0.8; }
-            50% { transform: scale(1.05); opacity: 1; }
-            100% { transform: scale(1); opacity: 0.8; }
-        }
-    </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>YMM43D API リファレンス</title>
+<style>
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    max-width: 46rem;
+    margin: 0 auto;
+    padding: 2rem 1.25rem 6rem;
+    font-family: "Meiryo", "Yu Gothic", sans-serif;
+    font-size: 15px;
+    line-height: 1.85;
+    color: #000;
+    background: #fff;
+  }
+  h1 { font-size: 1.6rem; margin: 0 0 .4rem; }
+  h2 {
+    font-size: 1.2rem;
+    margin: 3.5rem 0 1rem;
+    padding-bottom: .3rem;
+    border-bottom: 1px solid #000;
+  }
+  h3 { font-size: 1rem; margin: 2.2rem 0 .6rem; }
+  h4 { font-size: .95rem; margin: 1.6rem 0 .4rem; }
+  p, ul, ol { margin: .8rem 0; }
+  ul, ol { padding-left: 1.4rem; }
+  li { margin: .3rem 0; }
+  code, pre { font-family: "Consolas", "Courier New", monospace; }
+  code { font-size: .88em; }
+  p code, li code, td code { padding: 0 .15em; }
+  pre {
+    font-size: .82rem;
+    line-height: 1.65;
+    padding: .9rem 1rem;
+    margin: 1rem 0;
+    border: 1px solid #ccc;
+    background: #fafafa;
+    overflow-x: auto;
+    white-space: pre;
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 1rem 0;
+    font-size: .88rem;
+  }
+  th, td {
+    border: 1px solid #ccc;
+    padding: .4rem .6rem;
+    text-align: left;
+    vertical-align: top;
+  }
+  th { background: #f2f2f2; font-weight: bold; }
+  td code { white-space: nowrap; }
+  .note {
+    border-left: 3px solid #000;
+    padding: .2rem 0 .2rem 1rem;
+    margin: 1.2rem 0;
+  }
+  .lead { color: #333; }
+  hr { border: 0; border-top: 1px solid #ccc; margin: 3rem 0; }
+  a { color: #000; }
+  nav ol { margin: .4rem 0; }
+  nav ol ol { margin: .1rem 0; }
+  .meta { font-size: .85rem; color: #555; margin: 0 0 2rem; }
+  .wide { overflow-x: auto; }
+</style>
 </head>
 <body>
 
-    <!-- 右側サイドバー (APIナビゲーション一覧) -->
-    <aside>
-        <div class="sidebar-header">
-            <h1>YMM43D API</h1>
-            <p>Core Architecture Reference</p>
-        </div>
-        <ul class="nav-list">
-            <div class="nav-category">1. Rendering Core</div>
-            <li class="nav-item" onclick="showAPI('I3DProvider')">I3DProvider <span class="type-badge badge-interface">I</span></li>
-            <li class="nav-item" onclick="showAPI('I3DTextureProvider')">I3DTextureProvider <span class="type-badge badge-interface">I</span></li>
-            <li class="nav-item" onclick="showAPI('I3DVideoEffect')">I3DVideoEffect <span class="type-badge badge-interface">I</span></li>
-            <li class="nav-item" onclick="showAPI('VideoEffect3DBase')">VideoEffect3DBase <span class="type-badge badge-class">C</span></li>
-            <li class="nav-item" onclick="showAPI('I3DSizeProvider')">I3DSizeProvider <span class="type-badge badge-interface">I</span></li>
-            <li class="nav-item" onclick="showAPI('ICameraSync')">ICameraSync <span class="type-badge badge-interface">I</span></li>
-            <li class="nav-item" onclick="showAPI('I3DGeometry')">I3DGeometry <span class="type-badge badge-interface">I</span></li>
-            <li class="nav-item" onclick="showAPI('I3DMaterial')">I3DMaterial <span class="type-badge badge-interface">I</span></li>
-            <li class="nav-item" onclick="showAPI('DrawContext3D')">DrawContext3D <span class="type-badge badge-struct">S</span></li>
-            <li class="nav-item" onclick="showAPI('Vertex')">Vertex <span class="type-badge badge-struct">S</span></li>
-            <li class="nav-item" onclick="showAPI('ProjectionType')">ProjectionType <span class="type-badge badge-enum">E</span></li>
-            <li class="nav-item" onclick="showAPI('D3D11Renderer2D')">D3D11Renderer2D <span class="type-badge badge-class">C</span></li>
-            <li class="nav-item" onclick="showAPI('D3D11RenderSurface')">D3D11RenderSurface <span class="type-badge badge-class">C</span></li>
-            <li class="nav-item" onclick="showAPI('SharedGraphics')">SharedGraphics <span class="type-badge badge-class">C</span></li>
-            <li class="nav-item" onclick="showAPI('ProviderRegistry')">ProviderRegistry <span class="type-badge badge-class">C</span></li>
-            <li class="nav-item" onclick="showAPI('GridResources')">GridResources <span class="type-badge badge-class">C</span></li>
+<h1>YMM43D API リファレンス</h1>
+<p class="meta">ゆっくりMovieMaker4 に 3D 描画を追加するためのライブラリ</p>
 
-            <div class="nav-category">2. Preview Engine</div>
-            <li class="nav-item" onclick="showAPI('VideoItem3DMapper')">VideoItem3DMapper <span class="type-badge badge-class">C</span></li>
-            <li class="nav-item" onclick="showAPI('TimelineContext')">TimelineContext <span class="type-badge badge-class">C</span></li>
-            <li class="nav-item" onclick="showAPI('RenderEnvironmentContext')">RenderEnvironmentContext <span class="type-badge badge-class">C</span></li>
-            <li class="nav-item" onclick="showAPI('SceneCamera')">SceneCamera <span class="type-badge badge-class">C</span></li>
-            <li class="nav-item" onclick="showAPI('Preview3DRenderer')">Preview3DRenderer <span class="type-badge badge-class">C</span></li>
-            <li class="nav-item" onclick="showAPI('PreviewItem')">PreviewItem <span class="type-badge badge-class">C</span></li>
-            <li class="nav-item" onclick="showAPI('DefaultItemProvider')">DefaultItemProvider <span class="type-badge badge-class">C</span></li>
-            <li class="nav-item" onclick="showAPI('DefaultItemResources')">DefaultItemResources <span class="type-badge badge-class">C</span></li>
+<p class="lead">
+YMM43D.dll は、YMM4 のプラグインから 3D 描画を行うための土台です。図形アイテム・映像エフェクトのどちらからでも、
+Direct3D 11 で描いた結果を YMM4 の動画出力に流し込めます。あわせて、シーン全体を 3D で確認するためのプレビューツールを提供します。
+</p>
 
-            <div class="nav-category">3. Geometries & Materials</div>
-            <li class="nav-item" onclick="showAPI('PlaneGeometry')">PlaneGeometry <span class="type-badge badge-class">C</span></li>
-            <li class="nav-item" onclick="showAPI('CubeGeometry')">CubeGeometry <span class="type-badge badge-class">C</span></li>
-            <li class="nav-item" onclick="showAPI('GridGeometry')">GridGeometry <span class="type-badge badge-class">C</span></li>
-            <li class="nav-item" onclick="showAPI('DefaultMaterial')">DefaultMaterial <span class="type-badge badge-class">C</span></li>
-            <li class="nav-item" onclick="showAPI('TextureMaterial')">TextureMaterial <span class="type-badge badge-class">C</span></li>
-            <li class="nav-item" onclick="showAPI('GridMaterial')">GridMaterial <span class="type-badge badge-class">C</span></li>
+<p>
+外部ライブラリには依存しません。使用するのは YMM4 本体が同梱している Vortice（Direct3D11 / Direct2D1 / DXGI / D3DCompiler / Mathematics）と
+SharpGen.Runtime だけです。リフレクションも使用していません。
+</p>
 
-            <div class="nav-category">4. Commons & Caching</div>
-            <li class="nav-item" onclick="showAPI('D3D11Helper')">D3D11Helper <span class="type-badge badge-class">C</span></li>
-            <li class="nav-item" onclick="showAPI('DeviceResourceCache')">DeviceResourceCache <span class="type-badge badge-class">C</span></li>
-            <li class="nav-item" onclick="showAPI('CachedItemTexture')">CachedItemTexture <span class="type-badge badge-class">C</span></li>
-            <li class="nav-item" onclick="showAPI('Math3D')">Math3D <span class="type-badge badge-class">C</span></li>
-        </ul>
-    </aside>
+<nav>
+<h2>目次</h2>
+<ol>
+  <li><a href="#overview">全体像</a></li>
+  <li><a href="#setup">導入</a></li>
+  <li><a href="#coords">座標系と単位</a></li>
+  <li><a href="#shape">3D図形アイテムを作る</a></li>
+  <li><a href="#effect">3D映像エフェクトを作る</a></li>
+  <li><a href="#drawing">描画のしくみ</a></li>
+  <li><a href="#reference">型リファレンス</a></li>
+  <li><a href="#notes">実装上の注意</a></li>
+</ol>
+</nav>
 
-    <!-- 左側メインコンテンツ (API詳細画面) -->
-    <main id="main-content">
-        
-        <!-- ウェルカム画面 -->
-        <div id="placeholder" class="placeholder">
-            <div class="placeholder-icon">📦</div>
-            <h2>YMM43D Core API Reference</h2>
-            <p>
-                右側の一覧から、詳細を確認したいクラス、構造体、インターフェースをクリックしてください。<br>
-                各モジュールの目的、メンバリスト、シグネチャが詳細に表示されます。
-            </p>
-        </div>
+<h2 id="overview">1. 全体像</h2>
 
-        <!-- 1. RENDERING CORE -->
+<p>ライブラリは 5 つの名前空間に分かれています。依存は上から下への一方向で、逆流しません。</p>
 
-        <!-- I3DProvider -->
-        <div id="I3DProvider" class="api-content">
-            <div class="class-title">I3DProvider</div>
-            <div class="class-meta"><span>Interface</span><span>Namespace: YMM43D.Rendering</span></div>
-            <div class="class-desc">
-                3D空間へ描画可能な図形（Shape）やビデオエフェクト（Effect）に実装するコアとなる描画インターフェースです。
-            </div>
+<div class="wide">
+<pre>YMM43D.Graphics      D3D11 の薄い包み。YMM4 を知らない。
+      ↓
+YMM43D.Scene3D       カメラ・時間・描画コンテキストなど、3D シーンの語彙。
+      ↓
+YMM43D.Integration   YMM4 のデバイスや画像との橋渡し。
+      ↓
+YMM43D.Plugin        プラグイン作者が使う公開面。基底クラスとインターフェース。
+      ↓
+YMM43D.PreviewTool   3Dプレビューのツールウィンドウ。</pre>
+</div>
 
-            <div class="section-title">プロパティ</div>
-            <table>
-                <thead>
-                    <tr><th>Type</th><th>Name</th><th>Description</th></tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td class="type-col">bool</td>
-                        <td class="name-col">RequiresMappedTexture</td>
-                        <td>
-                            3D描画の際、元の2Dテクスチャ（画像の生データなど）を必要とする場合は <span class="code-inline">true</span> を返します。
-                            エフェクト等では通常 true、単純な3D形状モデル（テクスチャ不要なもの）では false を指定します。
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
+<p>プラグインを書くときに直接触れるのは、主に <code>YMM43D.Plugin</code> と <code>YMM43D.Scene3D</code>、
+そして描画部品の <code>YMM43D.Graphics</code> です。</p>
 
-            <div class="section-title">メソッド</div>
-            <table>
-                <thead>
-                    <tr><th>Return Type</th><th>Signature</th><th>Description</th></tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td class="type-col">void</td>
-                        <td class="name-col">Draw(ID3D11Device device, ID3D11DeviceContext context, Matrix4x4 view, Matrix4x4 projection, DrawContext3D drawContext)</td>
-                        <td>
-                            Direct3D11を用いた描画処理を実装します。ビュー行列、プロジェクション行列、描画付帯情報（ワールド行列等）が渡されます。
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
+<h3>2つの描画経路</h3>
 
-            <div class="section-title">ソースコード定義</div>
-            <pre><code><span class="keyword">public interface</span> <span class="type-name">I3DProvider</span>
+<p>ひとつ 3D 描画を書けば、次の 2 つの経路の両方で使われます。</p>
+
+<table>
+<tr><th>経路</th><th>呼ばれ方</th><th>結果</th></tr>
+<tr>
+  <td>動画出力</td>
+  <td><code>Shape3DSourceBase.Update()</code> が YMM4 から呼ばれる</td>
+  <td>3D の描画結果を 2D 画像に変換して <code>Output</code> に出す</td>
+</tr>
+<tr>
+  <td>3Dプレビュー</td>
+  <td><code>I3DProvider.Draw()</code> がプレビューから呼ばれる</td>
+  <td>プレビューのシーンに直接描かれる</td>
+</tr>
+</table>
+
+<p>
+どちらも同じ <code>Draw</code> を通ります。違いは <code>DrawContext3D.World</code> に何が入っているかだけです。
+出力経路では単位行列（位置や回転は YMM4 が後から適用する）、プレビュー経路ではアイテムの位置・拡大率・回転を反映した行列が渡されます。
+</p>
+
+<h3>プロバイダーの見つけ方</h3>
+
+<p>
+3Dプレビューはタイムライン上のアイテムしか辿れませんが、実際に描けるのはアイテムが生成したソースやプロセッサの側です。
+両者を <code>Provider3DRegistry</code> が結び付けます。基底クラスを使っていれば登録は自動で行われるため、
+通常このクラスを直接触る必要はありません。
+</p>
+
+<p>ひとつのアイテムに対して、プレビューは次の順に描画元を探します。</p>
+
+<ol>
+  <li>アイテム自身が <code>I3DProvider</code> を実装しているか</li>
+  <li>図形アイテムの場合、その <code>ShapeParameter</code> に対応するソースが登録されているか</li>
+  <li>いずれも無ければ、有効な映像エフェクトのうち <code>I3DProvider</code> を実装しているもの</li>
+  <li>それも無ければ、アイテムの 2D 描画結果を板に貼って表示する</li>
+</ol>
+
+<div class="note">
+<p>
+1 か 2 が見つかった場合、3 は使われません。エフェクト側の 3D 描画は、アイテムを平面化した絵をもとに
+立体を組み立てるものなので、既に立体であるアイテムに重ねると本体と平たい写しの二重表示になるためです。
+</p>
+</div>
+
+<h2 id="setup">2. 導入</h2>
+
+<p>プラグインのプロジェクトから YMM43D.dll を参照します。YMM4 本体の DLL 群と同じ場所に配置してください。</p>
+
+<div class="wide">
+<pre>&lt;ItemGroup&gt;
+  &lt;ProjectReference Include="..\YMM43D\YMM43D.csproj" /&gt;
+&lt;/ItemGroup&gt;</pre>
+</div>
+
+<p>ターゲットフレームワークは YMM4 本体に合わせます（<code>net10.0-windows</code>）。</p>
+
+<h2 id="coords">3. 座標系と単位</h2>
+
+<table>
+<tr><th>項目</th><th>YMM43D</th><th>YMM4</th></tr>
+<tr><td>Y 軸</td><td>上が正</td><td>下が正</td></tr>
+<tr><td>Z 軸</td><td>手前が正（右手系）</td><td>奥行きとして扱われる</td></tr>
+<tr><td>回転</td><td>反時計回り</td><td>時計回り</td></tr>
+<tr><td>長さ</td><td>ワールド単位</td><td>ピクセル</td></tr>
+</table>
+
+<p>
+ワールドの 1 単位は 100 ピクセルに相当します。アイテムの位置やサイズをワールド単位に直すときは 100 で割ってください。
+この換算は 3Dプレビューが行うため、プラグイン側で意識するのは自分の形状の大きさを決めるときだけです。
+</p>
+
+<p>
+カメラは注視点を中心とした軌道カメラで、既定の垂直画角は 45 度（<code>SceneCamera.DefaultFieldOfView</code>）です。
+角度と距離は <code>Animation</code> なのでキーフレームを打てます。
+</p>
+
+<h2 id="shape">4. 3D図形アイテムを作る</h2>
+
+<p>必要なクラスは 3 つです。</p>
+
+<table>
+<tr><th>クラス</th><th>継承元</th><th>役割</th></tr>
+<tr><td>プラグイン</td><td><code>IShapePlugin</code></td><td>YMM4 に図形の種類を登録する</td></tr>
+<tr><td>パラメータ</td><td><code>ShapeParameter3DBase</code></td><td>設定値の保持とエディタ表示</td></tr>
+<tr><td>ソース</td><td><code>Shape3DSourceBase</code></td><td>3D の描画</td></tr>
+</table>
+
+<h3>プラグイン</h3>
+
+<div class="wide">
+<pre>public class CubePlugin : IShapePlugin
 {
-    <span class="keyword">bool</span> <span class="method-name">RequiresMappedTexture</span> { <span class="keyword">get</span>; }
-    <span class="keyword">void</span> <span class="method-name">Draw</span>(<span class="type-name">ID3D11Device</span> device, <span class="type-name">ID3D11DeviceContext</span> context, <span class="type-name">Matrix4x4</span> view, <span class="type-name">Matrix4x4</span> projection, <span class="type-name">DrawContext3D</span> drawContext);
-}</code></pre>
-        </div>
+    public string Name =&gt; "立方体";
+    public bool IsExoShapeSupported =&gt; false;
+    public bool IsExoMaskSupported =&gt; false;
 
-        <!-- I3DTextureProvider -->
-        <div id="I3DTextureProvider" class="api-content">
-            <div class="class-title">I3DTextureProvider</div>
-            <div class="class-meta"><span>Interface</span><span>Namespace: YMM43D.Rendering</span></div>
-            <div class="class-desc">
-                後続の3D描画処理に向けて、自身がレンダリングまたは変形した3D用テクスチャ（ShaderResourceView）を供給するためのインターフェースです。
-            </div>
+    public IShapeParameter CreateShapeParameter(SharedDataStore? store)
+        =&gt; new CubeParameter(store);
+}</pre>
+</div>
 
-            <div class="section-title">メソッド</div>
-            <table>
-                <thead>
-                    <tr><th>Return Type</th><th>Signature</th><th>Description</th></tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td class="type-col">ID3D11ShaderResourceView?</td>
-                        <td class="name-col">GetTexture(ID3D11Device device)</td>
-                        <td>
-                            指定されたD3D11デバイス用のShaderResourceViewを返します。独自の描画バッファを持つエフェクト等で使用します。
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
+<h3>パラメータ</h3>
 
-            <div class="section-title">ソースコード定義</div>
-            <pre><code><span class="keyword">public interface</span> <span class="type-name">I3DTextureProvider</span>
+<p>
+<code>ShapeParameter3DBase</code> を継承し、<code>Create3DSource</code> を実装します。
+<code>CreateShapeSource</code> は基底クラスが実装済みで、生成したソースを自動的に登録します。
+</p>
+
+<p>
+<code>GetAnimatables()</code> の戻り値には <code>CameraSyncAnimation</code> を必ず含めてください。
+これはシーンカメラの変化を YMM4 に伝えるためのダミーで、含めないとカメラを動かしても標準プレビューが更新されません。
+</p>
+
+<div class="wide">
+<pre>internal sealed class CubeParameter : ShapeParameter3DBase
 {
-    <span class="type-name">ID3D11ShaderResourceView?</span> <span class="method-name">GetTexture</span>(<span class="type-name">ID3D11Device</span> device);
-}</code></pre>
-        </div>
+    [Display(GroupName = "", Name = "サイズ")]
+    [AnimationSlider("F1", "px", 0, 500)]
+    public Animation Size { get; } = new(100, 0, 100000);
 
-        <!-- I3DVideoEffect -->
-        <div id="I3DVideoEffect" class="api-content">
-            <div class="class-title">I3DVideoEffect</div>
-            <div class="class-meta"><span>Interface</span><span>Namespace: YMM43D.Rendering</span></div>
-            <div class="class-desc">
-                <span class="code-inline">I3DProvider</span> と <span class="code-inline">I3DTextureProvider</span> を統合した、3D対応のビデオエフェクトのためのマーカーかつ統合用のインターフェースです。
-            </div>
+    [Display(GroupName = "3D回転", Name = "X")]
+    [AnimationSlider("F1", "°", -360, 360)]
+    public Animation RotationX { get; } = new(0, -100000, 100000);
 
-            <div class="section-title">インターフェースの継承関係</div>
-            <pre><code><span class="keyword">public interface</span> <span class="type-name">I3DVideoEffect</span> : <span class="type-name">I3DProvider</span>, <span class="type-name">I3DTextureProvider</span>
+    public CubeParameter(SharedDataStore? store) : base(store) { }
+    public CubeParameter() : this(null) { }
+
+    protected override Shape3DSourceBase Create3DSource(IGraphicsDevicesAndContext devices)
+        =&gt; new CubeSource(devices, this);
+
+    protected override IEnumerable&lt;IAnimatable&gt; GetAnimatables()
+        =&gt; [Size, RotationX, CameraSyncAnimation];
+
+    // ExO 出力を行わない場合は空を返す
+    public override IEnumerable&lt;string&gt; CreateMaskExoFilter(
+        int keyFrameIndex, ExoOutputDescription desc, ShapeMaskExoOutputDescription maskDesc) =&gt; [];
+
+    public override IEnumerable&lt;string&gt; CreateShapeItemExoFilter(
+        int keyFrameIndex, ExoOutputDescription desc) =&gt; [];
+}</pre>
+</div>
+
+<h3>ソース</h3>
+
+<p>実装するのは 2 つのメソッドだけです。</p>
+
+<table>
+<tr><th>メンバー</th><th>説明</th></tr>
+<tr>
+  <td><code>Draw(in Render3DContext, DrawContext3D)</code></td>
+  <td>3D 空間に形状を描きます。プレビューと出力の両方から呼ばれます。</td>
+</tr>
+<tr>
+  <td><code>GetWorldExtent(in FrameContext)</code></td>
+  <td>
+    形状がワールド空間で占める差し渡しの大きさを返します。出力画像の大きさを決めるのに使います。
+    どの向きに回転しても収まるよう、外接球の直径にあたる値を返してください。0 以下を返すと何も描画しません。
+  </td>
+</tr>
+</table>
+
+<p>描画先の大きさの決定、カメラ行列の解決、コマンドリストの生成は基底クラスが行います。</p>
+
+<div class="wide">
+<pre>internal sealed class CubeSource : Shape3DSourceBase
 {
-}</code></pre>
-        </div>
+    private const float PixelsPerUnit = 100f;
 
-        <!-- VideoEffect3DBase -->
-        <div id="VideoEffect3DBase" class="api-content">
-            <div class="class-title">VideoEffect3DBase</div>
-            <div class="class-meta"><span>Abstract Class</span><span>Namespace: YMM43D.Rendering</span><span>Extends: VideoEffectBase</span></div>
-            <div class="class-desc">
-                3D対応のビデオエフェクトを実装するための、Core側の抽象共通基底クラスです。各エフェクトプラグインに共通するカメラ同期処理やプロバイダー中継処理などのボイラープレートをCore側で一括して肩代わりします。
-            </div>
+    // 一辺 1 の立方体の外接球の直径
+    private static readonly float DiagonalRatio = MathF.Sqrt(3f);
 
-            <div class="section-title">プロパティ</div>
-            <table>
-                <thead>
-                    <tr><th>Type</th><th>Name</th><th>Description</th></tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td class="type-col">Animation</td>
-                        <td class="name-col">CameraSync</td>
-                        <td>カメラの変更を検知して描画を更新するための非表示アニメーション変数。</td>
-                    </tr>
-                    <tr>
-                        <td class="type-col">I3DProvider?</td>
-                        <td class="name-col">LastProvider</td>
-                        <td>現在実行されている最新のプロバイダ（Processor）インスタンスへの参照。</td>
-                    </tr>
-                    <tr>
-                        <td class="type-col">bool</td>
-                        <td class="name-col">RequiresMappedTexture</td>
-                        <td>元のテクスチャをバインドする必要があるか。デフォルトは <span class="code-inline">false</span>。</td>
-                    </tr>
-                </tbody>
-            </table>
+    private readonly CubeParameter parameter;
+    private readonly DeviceResourceCache&lt;RenderPipeline&lt;TransformConstants&gt;&gt; pipelines;
 
-            <div class="section-title">メソッド</div>
-            <table>
-                <thead>
-                    <tr><th>Return Type</th><th>Signature</th><th>Description</th></tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td class="type-col">void</td>
-                        <td class="name-col">TouchCameraSync()</td>
-                        <td>カメラの変更があったことを通知し、YMM4側に再描画を要求します。</td>
-                    </tr>
-                    <tr>
-                        <td class="type-col">IEnumerable&lt;IAnimatable&gt;</td>
-                        <td class="name-col">GetBaseAnimatables()</td>
-                        <td>共通のアニメーション変数リスト（CameraSync）を取得します。派生クラスでオーバーライドして独自のアニメーション変数と結合します。</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
+    public CubeSource(IGraphicsDevicesAndContext devices, CubeParameter parameter) : base(devices)
+    {
+        this.parameter = parameter;
 
-        <!-- I3DSizeProvider -->
-        <div id="I3DSizeProvider" class="api-content">
-            <div class="class-title">I3DSizeProvider</div>
-            <div class="class-meta"><span>Interface</span><span>Namespace: YMM43D.Rendering</span></div>
-            <div class="class-desc">
-                エフェクト等で描画境界（Bounds）が変化する場合に、元の2Dソース画像の正確なトリミングサイズや配置オフセットを取得するためのインターフェースです。
-            </div>
+        // パイプラインはデバイスごとに作る。プレビューと出力でデバイスが異なるため。
+        pipelines = new DeviceResourceCache&lt;RenderPipeline&lt;TransformConstants&gt;&gt;(
+            device =&gt; new RenderPipeline&lt;TransformConstants&gt;(
+                device,
+                BoxMesh.CreateUnitCube(device),
+                new VertexColorMaterial(device)));
+    }
 
-            <div class="section-title">メソッド</div>
-            <table>
-                <thead>
-                    <tr><th>Return Type</th><th>Signature</th><th>Description</th></tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td class="type-col">bool</td>
-                        <td class="name-col">TryGetSize(out float width, out float height, out Vector2 offset)</td>
-                        <td>
-                            現在のエフェクトにおける描画サイズ（幅、高さ）と、中心点に対するピクセルオフセットを取得します。成功時は <span class="code-inline">true</span> を返します。
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
+    public override void Draw(in Render3DContext render, DrawContext3D item)
+    {
+        var rotation = Rotation3D.ForObject(
+            parameter.RotationX.GetFloat(item.Time), 0f, 0f);
 
-            <div class="section-title">ソースコード定義</div>
-            <pre><code><span class="keyword">public interface</span> <span class="type-name">I3DSizeProvider</span>
+        var world = Matrix4x4.CreateScale(GetEdgeLength(item.Time)) * rotation * item.World;
+        var constants = TransformConstants.Create(
+            render.GetWorldViewProjection(world), item.Opacity);
+
+        var pipeline = pipelines.Get(render.Device);
+
+        // 半透明でも面の前後関係が正しく見えるよう、内側の面を先に描いてから外側を重ねる
+        pipeline.Draw(render.Context, constants, item.ToDrawSettings(FaceCulling.Front));
+        pipeline.Draw(render.Context, constants, item.ToDrawSettings(FaceCulling.Back));
+    }
+
+    private float GetEdgeLength(in FrameContext itemTime)
+        =&gt; parameter.Size.GetFloat(itemTime) / PixelsPerUnit;
+
+    protected override float GetWorldExtent(in FrameContext itemTime)
+        =&gt; GetEdgeLength(itemTime) * DiagonalRatio;
+
+    public override void Dispose()
+    {
+        pipelines.Dispose();
+        base.Dispose();
+    }
+}</pre>
+</div>
+
+<div class="note">
+<p>
+<strong>ワールド行列の掛ける順序</strong>：自分の形状固有の変換（拡大・回転）を左に、
+<code>item.World</code> を右に置きます。<code>item.World</code> にはアイテムの位置や拡大率が入っているため、
+これを先に掛けると形状の回転までアイテムの位置に巻き込まれます。
+</p>
+</div>
+
+<h2 id="effect">5. 3D映像エフェクトを作る</h2>
+
+<p>
+エフェクトは <code>VideoEffect3DBase</code> を継承し、プロセッサ側に <code>I3DProvider</code> を実装します。
+生成したプロセッサは <code>AttachProcessor</code> に渡してください。3Dプレビューからの描画要求がそのプロセッサへ転送されます。
+</p>
+
+<div class="wide">
+<pre>[VideoEffect("立体化3D", ["3D"], [])]
+public class ExtrusionEffect : VideoEffect3DBase
 {
-    <span class="keyword">bool</span> <span class="method-name">TryGetSize</span>(<span class="keyword">out float</span> width, <span class="keyword">out float</span> height, <span class="keyword">out</span> <span class="type-name">Vector2</span> offset);
-}</code></pre>
-        </div>
+    public override string Label =&gt; "立体化3D";
 
-        <!-- ICameraSync -->
-        <div id="ICameraSync" class="api-content">
-            <div class="class-title">ICameraSync</div>
-            <div class="class-meta"><span>Interface</span><span>Namespace: YMM43D.Rendering</span></div>
-            <div class="class-desc">
-                3Dカメラの同期・タッチ（状態変更の通知）を行うためのシンプルなインターフェースです。
-            </div>
+    [Display(GroupName = "立体化3D", Name = "厚み")]
+    [AnimationSlider("F0", "", 0, 100)]
+    public Animation Thickness { get; } = new(10, 0, 1000);
 
-            <div class="section-title">メソッド</div>
-            <table>
-                <thead>
-                    <tr><th>Return Type</th><th>Signature</th><th>Description</th></tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td class="type-col">void</td>
-                        <td class="name-col">TouchCameraSync()</td>
-                        <td>カメラコントロールに変更があったことをシステムに通知します。</td>
-                    </tr>
-                </tbody>
-            </table>
+    public override IVideoEffectProcessor CreateVideoEffect(IGraphicsDevicesAndContext devices)
+        =&gt; AttachProcessor(new ExtrusionProcessor(this, devices));
 
-            <div class="section-title">ソースコード定義</div>
-            <pre><code><span class="keyword">public interface</span> <span class="type-name">ICameraSync</span>
+    protected override IEnumerable&lt;IAnimatable&gt; GetAnimatables()
+        =&gt; [Thickness, CameraSyncAnimation];
+
+    public override IEnumerable&lt;string&gt; CreateExoVideoFilters(
+        int keyFrameIndex, ExoOutputDescription desc) =&gt; [];
+}</pre>
+</div>
+
+<h3>入力画像をテクスチャとして使う</h3>
+
+<p>
+エフェクトの入力画像を 3D 描画に貼りたい場合は、プロセッサに <code>I3DTextureProvider</code> を実装し、
+<code>D2DTextureBridge</code> で変換します。3D 描画は YMM4 とは別のデバイスで行われるため、
+画像をそのままテクスチャとして使うことはできません。
+</p>
+
+<div class="wide">
+<pre>internal sealed class ExtrusionProcessor : IVideoEffectProcessor, I3DVideoEffect, I3DSizeProvider
 {
-    <span class="keyword">void</span> <span class="method-name">TouchCameraSync</span>();
-}</code></pre>
-        </div>
+    private readonly ExtrusionEffect effect;
+    private readonly IGraphicsDevicesAndContext devices;
+    private readonly D2DTextureBridge textureBridge = new();
+    private ID2D1Image? input;
+    private Vector2 inputSize;
+    private Vector2 inputOffset;
 
-        <!-- I3DGeometry -->
-        <div id="I3DGeometry" class="api-content">
-            <div class="class-title">I3DGeometry</div>
-            <div class="class-meta"><span>Interface</span><span>Namespace: YMM43D.Rendering</span><span>Extends: IDisposable</span></div>
-            <div class="class-desc">
-                D3D11での3D図形のポリゴンデータ（頂点バッファ・インデックスバッファなど）を表現するインターフェースです。
-            </div>
+    // 2D 出力は変えず、3D 描画だけを担当する
+    public ID2D1Image Output =&gt; input ?? throw new InvalidOperationException();
+    public bool RequiresMappedTexture =&gt; false;
 
-            <div class="section-title">プロパティ</div>
-            <table>
-                <thead>
-                    <tr><th>Type</th><th>Name</th><th>Description</th></tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td class="type-col">ID3D11Buffer</td>
-                        <td class="name-col">VertexBuffer</td>
-                        <td>D3D11の頂点データバッファ。</td>
-                    </tr>
-                    <tr>
-                        <td class="type-col">ID3D11Buffer</td>
-                        <td class="name-col">IndexBuffer</td>
-                        <td>D3D11のインデックス（ポリゴン接続順）データバッファ。</td>
-                    </tr>
-                    <tr>
-                        <td class="type-col">int</td>
-                        <td class="name-col">IndexCount</td>
-                        <td>描画するポリゴンのインデックス総数。</td>
-                    </tr>
-                    <tr>
-                        <td class="type-col">InputElementDescription[]</td>
-                        <td class="name-col">InputElements</td>
-                        <td>頂点レイアウト情報（セマンティクス、フォーマット等）の配列。</td>
-                    </tr>
-                </tbody>
-            </table>
+    public void SetInput(ID2D1Image? input) =&gt; this.input = input;
+    public void ClearInput() =&gt; input = null;
 
-            <div class="section-title">ソースコード定義</div>
-            <pre><code><span class="keyword">public interface</span> <span class="type-name">I3DGeometry</span> : <span class="type-name">IDisposable</span>
-{
-    <span class="type-name">ID3D11Buffer</span> <span class="method-name">VertexBuffer</span> { <span class="keyword">get</span>; }
-    <span class="type-name">ID3D11Buffer</span> <span class="method-name">IndexBuffer</span> { <span class="keyword">get</span>; }
-    <span class="keyword">int</span> <span class="method-name">IndexCount</span> { <span class="keyword">get</span>; }
-    <span class="type-name">InputElementDescription[]</span> <span class="method-name">InputElements</span> { <span class="keyword">get</span>; }
-}</code></pre>
-        </div>
+    public DrawDescription Update(EffectDescription description)
+        =&gt; description.DrawDescription;
 
-        <!-- I3DMaterial -->
-        <div id="I3DMaterial" class="api-content">
-            <div class="class-title">I3DMaterial</div>
-            <div class="class-meta"><span>Interface</span><span>Namespace: YMM43D.Rendering</span><span>Extends: IDisposable</span></div>
-            <div class="class-desc">
-                描画時の陰影処理やテクスチャの貼り付け方などを決定する頂点シェーダー・ピクセルシェーダーを管理するインターフェースです。
-            </div>
+    public ID3D11ShaderResourceView? GetTexture(ID3D11Device device)
+    {
+        if (input is null)
+            return null;
 
-            <div class="section-title">プロパティ</div>
-            <table>
-                <thead>
-                    <tr><th>Type</th><th>Name</th><th>Description</th></tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td class="type-col">ID3D11VertexShader</td>
-                        <td class="name-col">VertexShader</td>
-                        <td>D3D11の頂点シェーダーオブジェクト。</td>
-                    </tr>
-                    <tr>
-                        <td class="type-col">ID3D11PixelShader</td>
-                        <td class="name-col">PixelShader</td>
-                        <td>D3D11のピクセルシェーダーオブジェクト。</td>
-                    </tr>
-                    <tr>
-                        <td class="type-col">byte[]</td>
-                        <td class="name-col">VertexShaderBytecode</td>
-                        <td>インプットレイアウトを作成するために必要な頂点シェーダーのコンパイル済みバイナリ。</td>
-                    </tr>
-                </tbody>
-            </table>
-
-            <div class="section-title">ソースコード定義</div>
-            <pre><code><span class="keyword">public interface</span> <span class="type-name">I3DMaterial</span> : <span class="type-name">IDisposable</span>
-{
-    <span class="type-name">ID3D11VertexShader</span> <span class="method-name">VertexShader</span> { <span class="keyword">get</span>; }
-    <span class="type-name">ID3D11PixelShader</span> <span class="method-name">PixelShader</span> { <span class="keyword">get</span>; }
-    <span class="keyword">byte</span>[] <span class="method-name">VertexShaderBytecode</span> { <span class="keyword">get</span>; }
-}</code></pre>
-        </div>
-
-        <!-- DrawContext3D -->
-        <div id="DrawContext3D" class="api-content">
-            <div class="class-title">DrawContext3D</div>
-            <div class="class-meta"><span>Struct</span><span>Namespace: YMM43D.Rendering</span></div>
-            <div class="class-desc">
-                各オブジェクトを3D描画する際に、マッパーによって収集された座標情報や不透明度、適用テクスチャなどのパラメータを格納するデータ構造です（未使用パラメータが整理されました）。
-            </div>
-
-            <div class="section-title">プロパティ</div>
-            <table>
-                <thead>
-                    <tr><th>Type</th><th>Name</th><th>Description</th></tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td class="type-col">Matrix4x4</td>
-                        <td class="name-col">World</td>
-                        <td>合成済みの3Dオブジェクト用ワールド変換行列（位置・回転・スケール）。</td>
-                    </tr>
-                    <tr>
-                        <td class="type-col">float</td>
-                        <td class="name-col">Opacity</td>
-                        <td>0.0 (透明) ～ 1.0 (不透明) の描画不透明度。</td>
-                    </tr>
-                    <tr>
-                        <td class="type-col">Blend</td>
-                        <td class="name-col">Blend</td>
-                        <td>YMM4の合成モード（Normal、Add、Multiply、Subtract、Screen）。</td>
-                    </tr>
-                    <tr>
-                        <td class="type-col">bool</td>
-                        <td class="name-col">IsAlwaysOnTop</td>
-                        <td>true の場合、深度テストを無効にして他の3Dオブジェクトより常に手前に描画します。</td>
-                    </tr>
-                    <tr>
-                        <td class="type-col">ID3D11ShaderResourceView?</td>
-                        <td class="name-col">Texture</td>
-                        <td>RequiresMappedTexture が true の場合に渡される、描画ソース用のテクスチャ（SRV）。</td>
-                    </tr>
-                    <tr>
-                        <td class="type-col">bool</td>
-                        <td class="name-col">OwnsTexture</td>
-                        <td>描画終了後に呼び出し側でテクスチャリソースを自動的に Dispose するかどうかの制御フラグ。</td>
-                    </tr>
-                    <tr>
-                        <td class="type-col">int</td>
-                        <td class="name-col">Frame</td>
-                        <td>アイテムの現在の再生フレーム。</td>
-                    </tr>
-                    <tr>
-                        <td class="type-col">int</td>
-                        <td class="name-col">Length</td>
-                        <td>アイテムの総フレーム数。</td>
-                    </tr>
-                    <tr>
-                        <td class="type-col">int</td>
-                        <td class="name-col">FPS</td>
-                        <td>再生中のプロジェクトのFPS。</td>
-                    </tr>
-                </tbody>
-            </table>
-
-            <div class="section-title">ソースコード定義</div>
-            <pre><code><span class="keyword">public class</span> <span class="type-name">DrawContext3D</span>
-{
-    <span class="keyword">public</span> <span class="type-name">Matrix4x4</span> World { <span class="keyword">get</span>; <span class="keyword">set</span>; }
-    <span class="keyword">public float</span> Opacity { <span class="keyword">get</span>; <span class="keyword">set</span>; }
-    <span class="keyword">public</span> <span class="type-name">Blend</span> Blend { <span class="keyword">get</span>; <span class="keyword">set</span>; } = Blend.Normal;
-    <span class="keyword">public bool</span> IsAlwaysOnTop { <span class="keyword">get</span>; <span class="keyword">set</span>; }
-    <span class="keyword">public int</span> Frame { <span class="keyword">get</span>; <span class="keyword">set</span>; }
-    <span class="keyword">public int</span> Length { <span class="keyword">get</span>; <span class="keyword">set</span>; }
-    <span class="keyword">public int</span> FPS { <span class="keyword">get</span>; <span class="keyword">set</span>; }
-    <span class="keyword">public</span> <span class="type-name">ID3D11ShaderResourceView?</span> Texture { <span class="keyword">get</span>; <span class="keyword">set</span>; }
-    <span class="keyword">public bool</span> OwnsTexture { <span class="keyword">get</span>; <span class="keyword">set</span>; }
-}</code></pre>
-        </div>
-
-        <!-- Vertex -->
-        <div id="Vertex" class="api-content">
-            <div class="class-title">Vertex</div>
-            <div class="class-meta"><span>Struct</span><span>Namespace: YMM43D.Rendering</span></div>
-            <div class="class-desc">
-                D3D11描画エンジンで使用する頂点情報（位置座標、頂点カラー、UV座標）を格納する構造体です。
-            </div>
-
-            <div class="section-title">メンバ変数</div>
-            <table>
-                <thead>
-                    <tr><th>Type</th><th>Name</th><th>Description</th></tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td class="type-col">Vector3</td>
-                        <td class="name-col">Position</td>
-                        <td>頂点の3次元座標 (x, y, z)。</td>
-                    </tr>
-                    <tr>
-                        <td class="type-col">Color4</td>
-                        <td class="name-col">Color</td>
-                        <td>頂点の色およびアルファ (r, g, b, a)。</td>
-                    </tr>
-                    <tr>
-                        <td class="type-col">Vector2</td>
-                        <td class="name-col">TexCoord</td>
-                        <td>テク�        <!-- D3D11RenderSurface -->
-        <div id="D3D11RenderSurface" class="api-content">
-            <div class="class-title">D3D11RenderSurface</div>
-            <div class="class-meta"><span>Class</span><span>Namespace: YMM43D.Rendering</span><span>Extends: IDisposable</span></div>
-            <div class="class-desc">
-                描画対象となるカラーレンダーターゲット、深度バッファ、およびDXGI共有機構を利用したD2D用ビットマップを一体化して管理するサーフェスクラスです。デバイス間共有のために DXGI 共有リソース（ResourceOptionFlags.Shared）を使用し、Flushによる同期制御を行います。
-            </div>
-
-            <div class="section-title">プロパティ</div>
-            <table>
-                <thead>
-                    <tr><th>Type</th><th>Name</th><th>Description</th></tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td class="type-col">ID3D11Texture2D?</td>
-                        <td class="name-col">RenderTarget</td>
-                        <td>カラーバッファとなるD3D11テクスチャ。</td>
-                    </tr>
-                    <tr>
-                        <td class="type-col">ID3D11RenderTargetView?</td>
-                        <td class="name-col">RenderTargetView</td>
-                        <td>カラーバッファに対するレンダーターゲットビュー。</td>
-                    </tr>
-                    <tr>
-                        <td class="type-col">ID3D11Texture2D?</td>
-                        <td class="name-col">DepthBuffer</td>
-                        <td>深度ステンシルバッファとなるD3D11テクスチャ。</td>
-                    </tr>
-                    <tr>
-                        <td class="type-col">ID3D11DepthStencilView?</td>
-                        <td class="name-col">DepthStencilView</td>
-                        <td>深度ステンシルバッファに対するデプスステンシルビュー。</td>
-                    </tr>
-                    <tr>
-                        <td class="type-col">ID2D1Bitmap1?</td>
-                        <td class="name-col">Bitmap</td>
-                        <td>YMM4側（メインデバイス）のDirect2Dで描画先として使用するビットマップ。</td>
-                    </tr>
-                </tbody>
-            </table>
-
-            <div class="section-title">メソッド</div>
-            <table>
-                <thead>
-                    <tr><th>Return Type</th><th>Signature</th><th>Description</th></tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td class="type-col">void</td>
-                        <td class="name-col">Recreate(IGraphicsDevicesAndContext devices, int width, int height)</td>
-                        <td>
-                            指定サイズ（width, height）でテクスチャ、RTV、DSV、および共有ハンドルを通じたD2D用Bitmapを再生成します。
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="type-col">void</td>
-                        <td class="name-col">Dispose()</td>
-                        <td>リソースをすべて解放します。</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>span> へと安全に相互変換・出力するためのレンダラークラスです。引数がカプセル化され、Flushによるスレッド・デバイス間同期を行って出力画像を生成します。
-            </div>
-
-            <div class="section-title">メソッド</div>
-            <table>
-                <thead>
-                    <tr><th>Return Type</th><th>Signature</th><th>Description</th></tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td class="type-col">ID2D1Image</td>
-                        <td class="name-col">Render(IGraphicsDevicesAndContext devices, int width, int height, TimelineContext timelineContext, SceneCamera camera, Vector2 d2dOffset, Action&lt;ID3D11Device, ID3D11DeviceContext, Matrix4x4, Matrix4x4&gt; drawAction)</td>
-                        <td>
-                            D3D11デバイスを使用して3D描画コールバック (<span class="code-inline">drawAction</span>) を呼び出し、レンダリング結果の共有テクスチャを介してD2D用ビットマップイメージを生成します。
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="type-col">void</td>
-                        <td class="name-col">Dispose()</td>
-                        <td>内部で確保したサーフェス等D3D11/D2D1リソースを破棄します。</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-
-        <!-- D3D11RenderSurface -->
-        <div id="D3D11RenderSurface" class="api-content">
-            <div class="class-title">D3D11RenderSurface</div>
-            <div class="class-meta"><span>Class</span><span>Namespace: YMM43D.Rendering</span><span>Extends: IDisposable</span></div>
-            <div class="class-desc">
-                描画対象となるカラーレンダーターゲット、深度バッファ、およびDXGI共有機構を利用したD2D用ビットマップを一体化して管理するサーフェスクラスです。スレッドセーフな同期のための <span class="code-inline">IDXGIKeyedMutex</span> インスタンスを内部で保持します。
-            </div>
-
-            <div class="section-title">プロパティ</div>
-            <table>
-                <thead>
-                    <tr><th>Type</th><th>Name</th><th>Description</th></tr>
-                </thead>
-             <!-- VideoItem3DMapper -->
-        <div id="VideoItem3DMapper" class="api-content">
-            <div class="class-title">VideoItem3DMapper</div>
-            <div class="class-meta"><span>Class</span><span>Namespace: YMM43D.Preview</span></div>
- 
-            <div class="class-desc">
-                YMM4の2Dタイムライン上のアイテム（<code>IVideoItem</code>）から、3D空間上へ配置するための座標変換行列や再生ステータス（<code>DrawContext3D</code>）へ安全にマッピングを行うコアマッパです。引数がカプセル化されました。
-            </div>       <td class="name-col">KeyedMutexIndependent</td>
-                        <td>3Dプレビュー側デバイスでテクスチャの書き込み同期を取るための KeyedMutex。</td>
-                    </tr>
-                    <tr>
-                        <td class="type-col">IDXGIKeyedMutex?</td>
-                        <td class="name-col">KeyedMutexYmm</td>
-                        <td>YMM4側（メインデバイス）でテクスチャの読み込み同期を取るための KeyedMutex。</td>
-                    </tr>
-                </tbody>
-            </table>
-
-            <div class="section-title">メソッド</div>
-            <table>
-                <thead>
-                    <tr><th>Return Type</th><th>Signature</th><th>Description</th></tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td class="type-col">void</td>
-                        <td class="name-col">Recreate(IGraphicsDevicesAndContext devices, int width, int height)</td>
-                        <td>
-                            指定サイズ（width, height）でテクスチャ、RTV、DSV、および共有ハンドルを通じたD2D用Bitmapを再生成し、KeyedMutex を初期化します。
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="type-col">void</td>
-                        <td class="name-col">Dispose()</td>
-                        <td>リソースをすべて解放します。</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-
-        <!-- SharedGraphics -->
-        <div id="SharedGraphics" class="api-content">
-            <div class="class-title">SharedGraphics</div>
-            <div class="class-meta"><span>Static Class</span><span>Namespace: YMM43D.Rendering</span></div>
-            <div class="class-desc">
-                プレビューウィンドウ（独立した3D描画用デバイス）のための専用D3D11デバイス管理や、リソースのクリーンアップ収集、共有キャッシュへの同期を一元管理するクラスです。
-            </div>
-
-            <div class="section-title">プロパティ</div>
-            <table>
-                <thead>
-                    <tr><th>Type</th><th>Name</th><th>Description</th></tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td class="type-col">IGraphicsDevicesAndContext?</td>
-                        <td class="name-col">Devices</td>
-                        <td>YMM4側から渡されたグラフィックス環境の参照。</td>
-                    </tr>
-                    <tr>
-                        <td class="type-col">ID3D11Device</td>
-                        <td class="name-col">IndependentDevice</td>
-                        <td>3Dプレビュー側で独自に動作するD3D11デバイスインスタンス。</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-
-        <!-- ProviderRegistry -->
-        <div id="ProviderRegistry" class="api-content">
-            <div class="class-title">ProviderRegistry</div>
-            <div class="class-meta"><span>Static Class</span><span>Namespace: YMM43D.Rendering</span></div>
-            <div class="class-desc">
-                タイムラインの各種アイテムオブジェクトに対応する <span class="code-inline">I3DProvider</span> 実装を登録・探索するための静的レジストリです。
-            </div>
-        </div>
-
-        <!-- GridResources -->
-        <div id="GridResources" class="api-content">
-            <div class="class-title">GridResources</div>
-            <div class="class-meta"><span>Class</span><span>Namespace: YMM43D.Rendering</span><span>Extends: IDisposable</span></div>
-            <div class="class-desc">
-                3Dプレビューウィンドウの背景に描画されるグリッド（格子状の床）の形状データ、色・フォグ効果用シェーダー、および各種グラフィックスステートを保持するクラスです。
-            </div>
-        </div>
-
-
-        <!-- 2. PREVIEW ENGINE -->
-
-        <!-- VideoItem3DMapper -->
-        <div id="VideoItem3DMapper" class="api-content">
-            <div class="class-title">VideoItem3DMapper</div>
-            <div class="class-meta"><span>Class</span><span>Namespace: YMM43D.Preview</span></div>
-
-            <div class="class-desc">
-                YMM4の2Dタイムライン上のアイテム（<code>IVideoItem</code>）から、3D空間上へ配置するための座標変換行列や再生ステータス（<code>DrawContext3D</code>）へ安全にマッピングを行うコアマッパです。引数がカプセル化されました。
-            </div>
-
-            <div class="section-title">メソッド</div>
-            <table>
-                <thead>
-                    <tr><th>Return Type</th><th>Signature</th><th>Description</th></tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td class="type-col">DrawContext3D</td>
-                        <td class="name-col">Map(IVideoItem item, TimelineContext timelineContext, RenderEnvironmentContext envContext, I3DProvider? targetProvider, bool requireTexture)</td>
-                        <td>
-                            タイムラインアイテムのプロパティ（位置・拡大・回転・適用されているRotateEffect等）を合成し、3D描画用の `DrawContext3D` を構築します。
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="type-col">void</td>
-                        <td class="name-col">ClearCache()</td>
-                        <td>内部に保持されているテクスチャキャッシュや描画判定情報をすべて解放します。</td>
-                    </tr>
-                </tbody>
-            </table>
-
-            <div class="section-title">ソースコード定義</div>
-            <pre><code><span class="keyword">public class</span> <span class="type-name">VideoItem3DMapper</span> : <span class="type-name">IDisposable</span>
-{
-    <span class="keyword">public</span> <span class="type-name">DrawContext3D</span> <span class="method-name">Map</span>(<span class="type-name">IVideoItem</span> item, <span class="type-name">TimelineContext</span> timelineContext, <span class="type-name">RenderEnvironmentContext</span> envContext, <span class="type-name">I3DProvider?</span> targetProvider, <span class="keyword">bool</span> requireTexture = <span class="keyword">true</span>);
-    <span class="keyword">public void</span> <span class="method-name">ClearCache</span>();
-    <span class="keyword">public void</span> <span class="method-name">Dispose</span>();
-}</code></pre>
-        </div>
-
-        <!-- TimelineContext -->
-        <div id="TimelineContext" class="api-content">
-            <div class="class-title">TimelineContext</div>
-            <div class="class-meta"><span>Record Class</span><span>Namespace: YMM43D.Preview</span></div>
-            <div class="class-desc">
-                再生または描画を行うタイムラインのタイミング情報をカプセル化して引き回すための不変レコードクラスです。
-            </div>
-
-            <div class="section-title">プロパティ</div>
-            <table>
-                <thead>
-                    <tr><th>Type</th><th>Name</th><th>Description</th></tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td class="type-col">int</td>
-                        <td class="name-col">Frame</td>
-                        <td>描画する対象フレーム位置。</td>
-                    </tr>
-                    <tr>
-                        <td class="type-col">int</td>
-                        <td class="name-col">Length</td>
-                        <td>再生中のアイテムの総フレーム数。</td>
-                    </tr>
-                    <tr>
-                        <td class="type-col">int</td>
-                        <td class="name-col">Fps</td>
-                        <td>再生プロジェクトのフレームレート (FPS)。</td>
-                    </tr>
-                </tbody>
-            </table>
-
-            <div class="section-title">ソースコード定義</div>
-            <pre><code><span class="keyword">public record class</span> <span class="type-name">TimelineContext</span>(<span class="keyword">int</span> Frame, <span class="keyword">int</span> Length, <span class="keyword">int</span> Fps);</code></pre>
-        </div>
-
-        <!-- RenderEnvironmentContext -->
-        <div id="RenderEnvironmentContext" class="api-content">
-            <div class="class-title">RenderEnvironmentContext</div>
-            <div class="class-meta"><span>Record Class</span><span>Namespace: YMM43D.Preview</span></div>
-            <div class="class-desc">
-                グラフィックスデバイスやタイムラインソース定義、および描画対象となる `SceneCamera` インスタンスを一括して引き回すための不変レコードクラスです。
-            </div>
-
-            <div class="section-title">プロパティ</div>
-            <table>
-                <thead>
-                    <tr><th>Type</th><th>Name</th><th>Description</th></tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td class="type-col">ID3D11Device</td>
-                        <td class="name-col">Device</td>
-                        <td>描画で使用される Direct3D11 デバイス。</td>
-                    </tr>
-                    <tr>
-                        <td class="type-col">object?</td>
-                        <td class="name-col">Scene</td>
-                        <td>YMM4の現在のシーン（内部キャスト用）。</td>
-                    </tr>
-                    <tr>
-                        <td class="type-col">TimelineSourceDescription?</td>
-                        <td class="name-col">TimelineSourceDescription</td>
-                        <td>タイムライン全体の描画メタデータソース。</td>
-                    </tr>
-                    <tr>
-                        <td class="type-col">SceneCamera</td>
-                        <td class="name-col">Camera</td>
-                        <td>この描画セッションにバインドされている固有の `SceneCamera` インスタンス。</td>
-                    </tr>
-                </tbody>
-            </table>
-
-            <div class="section-title">ソースコード定義</div>
-            <pre><code><span class="keyword">public record class</span> <span class="type-name">RenderEnvironmentContext</span>(
-    <span class="type-name">ID3D11Device</span> Device,
-    <span class="keyword">object?</span> Scene,
-    <span class="type-name">TimelineSourceDescription?</span> TimelineSourceDescription,
-    <span class="type-name">SceneCamera</span> Camera
-);</code></pre>
-        </div>
-
-        <!-- SceneCamera -->
-        <div id="SceneCamera" class="api-content">
-            <div class="class-title">SceneCamera</div>
-            <div class="class-meta"><span>Class</span><span>Namespace: YMM43D.Preview</span></div>
-            <div class="class-desc">
-                3D空間内のカメラ設定（水平・垂直・ロール回転、距離、注視点座標）を管理するクラスです。
-                <strong>シングルトンが廃止され、完全にインスタンス化可能になりました。</strong> タイムラインやプレビュー環境ごとに <span class="code-inline">GetCamera(key)</span> を通じて固有のインスタンスを取得し、描画パスごとの干渉を完全に防ぎます。
-            </div>
-
-            <div class="section-title">プロパティ</div>
-            <table>
-                <thead>
-                    <tr><th>Type</th><th>Name</th><th>Description</th></tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td class="type-col">Animation</td>
-                        <td class="name-col">CameraYaw / CameraPitch / CameraRoll</td>
-                        <td>カメラの回転アニメーション情報。</td>
-                    </tr>
-                    <tr>
-                        <td class="type-col">Animation</td>
-                        <td class="name-col">CameraDistance</td>
-                        <td>注視点からカメラまでの距離のアニメーション情報。</td>
-                    </tr>
-                    <tr>
-                        <td class="type-col">Vector3</td>
-                        <td class="name-col">CameraTarget</td>
-                        <td>カメラが向き続ける注視点の3D座標。</td>
-                    </tr>
-                </tbody>
-            </table>
-
-            <div class="section-title">静的メソッド</div>
-            <table>
-                <thead>
-                    <tr><th>Return Type</th><th>Signature</th><th>Description</th></tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td class="type-col">static SceneCamera</td>
-                        <td class="name-col">GetCamera(object? key)</td>
-                        <td>
-                            タイムラインやデバイスなどをキーとして、そのコンテキストに紐付けられた固有の `SceneCamera` を取得します。複数プレビュー時の干渉を防ぎます。
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-
-        <!-- Preview3DRenderer -->
-        <div id="Preview3DRenderer" class="api-content">
-            <div class="class-title">Preview3DRenderer</div>
-            <div class="class-meta"><span>Class</span><span>Namespace: YMM43D.Preview</span></div>
-            <div class="class-desc">
-                3Dプレビューウィンドウにおける実際の描画シーケンスを管理します。背景クリア、グリッド線描画、各アイテムの3Dモデル描画を統括します。
-            </div>
-        </div>
-
-        <!-- CachedItemTexture -->
-        <div id="CachedItemTexture" class="api-content">
-            <div class="class-title">CachedItemTexture</div>
-            <div class="class-meta"><span>Class</span><span>Namespace: YMM43D.Commons</span><span>Implements: IDisposable</span></div>
-            <div class="class-desc">
-                標準プレビューデバイスと3Dプレビューデバイス間での、DXGI Shared Handleを用いたテクスチャ共有とキャッシュ維持をパッケージングした内部管理用クラスです。
-            </div>
-
-            <div class="section-title">プロパティ</div>
-            <table>
-                <thead>
-                    <tr><th>Type</th><th>Name</th><th>Description</th></tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td class="type-col">ID3D11Texture2D</td>
-                        <td class="name-col">RenderTexture</td>
-                        <td>3Dプレビュー側デバイスで作成された、出力先共有元のD3D11テクスチャ。</td>
-                    </tr>
-                    <tr>
-                        <td class="type-col">ID3D11ShaderResourceView</td>
-                        <td class="name-col">Srv</td>
-                        <td>3Dモデル of 描画にバインドされるシェーダーリソースビュー。</td>
-                    </tr>
-                    <tr>
-                        <td class="type-col">ID3D11Texture2D</td>
-                        <td class="name-col">SharedTexture</td>
-                        <td>YMM4側（メインデバイス）でオープンされた共有元のD3D11テクスチャ。</td>
-                    </tr>
-                    <tr>
-                        <td class="type-col">ID2D1Bitmap1</td>
-                        <td class="name-col">TempBitmap</td>
-                        <td>YMM4側（メインデバイス）のDirect2Dイメージを書き込むための共有テクスチャから作成された一時D2Dビットマップ。</td>
-                    </tr>
-                    <tr>
-                        <td class="type-col">int</td>
-                        <td class="name-col">Width</td>
-                        <td>テクスチャの幅（ピクセル単位）。</td>
-                    </tr>
-                    <tr>
-                        <td class="type-col">int</td>
-                        <td class="name-col">Height</td>
-                        <td>テクスチャの高さ（ピクセル単位）。</td>
-                    </tr>
-                </tbody>
-            </table> </div>
-        </div>
-
-        <!-- PreviewItem -->
-        <div id="PreviewItem" class="api-content">
-            <div class="class-title">PreviewItem</div>
-            <div class="class-meta"><span>Class</span><span>Namespace: YMM43D.Preview</span></div>
-            <div class="class-desc">
-                3Dプレビューレンダラーに描画情報を引き渡すための、アイテムデータコンテナです。
-            </div>
-        </div>
-
-        <!-- DefaultItemProvider -->
-        <div id="DefaultItemProvider" class="api-content">
-            <div class="class-title">DefaultItemProvider</div>
-            <div class="class-meta"><span>Class</span><span>Namespace: YMM43D.Preview</span><span>Implements: I3DProvider</span></div>
-            <div class="class-desc">
-                通常の2Dアイテム（画像、テキスト等）に対して、3D効果を適用した状態で3D空間に描画する際にフォールバックされる標準的な3D描画実装プロバイダです。
-            </div>
-        </div>
-
-        <!-- DefaultItemResources -->
-        <div id="DefaultItemResources" class="api-content">
-            <div class="class-title">DefaultItemResources</div>
-            <div class="class-meta"><span>Class</span><span>Namespace: YMM43D.Preview</span><span>Implements: IDisposable</span></div>
-            <div class="class-desc">
-                <span class="code-inline">DefaultItemProvider</span> の描画時に共通で再利用される頂点バッファ、インプットレイアウト、定数バッファ、および各種ステートを保持するリソースオブジェクトです。
-            </div>
-        </div>
-
-
-        <!-- 3. GEOMETRIES & MATERIALS -->
-
-        <!-- PlaneGeometry -->
-        <div id="PlaneGeometry" class="api-content">
-            <div class="class-title">PlaneGeometry</div>
-            <div class="class-meta"><span>Class</span><span>Namespace: YMM43D.Rendering.Geometries</span><span>Implements: I3DGeometry</span></div>
-            <div class="class-desc">
-                中心が (0,0) で 1x1 の大きさを持つ、標準的な3D板ポリゴン形状データです。
-            </div>
-        </div>
-
-        <!-- CubeGeometry -->
-        <div id="CubeGeometry" class="api-content">
-            <div class="class-title">CubeGeometry</div>
-            <div class="class-meta"><span>Class</span><span>Namespace: YMM43D.Rendering.Geometries</span><span>Implements: I3DGeometry</span></div>
-            <div class="class-desc">
-                各辺の長さが 1.0 の、標準的な3D立方体ポリゴン形状データです。
-            </div>
-        </div>
-
-        <!-- GridGeometry -->
-        <div id="GridGeometry" class="api-content">
-            <div class="class-title">GridGeometry</div>
-            <div class="class-meta"><span>Class</span><span>Namespace: YMM43D.Rendering.Geometries</span><span>Implements: IDisposable</span></div>
-            <div class="class-desc">
-                3Dプレビューの背景の床に描かれる、サイズ 1000x1000 の大きな正方形グリッドポリゴン形状データです。
-            </div>
-        </div>
-
-        <!-- DefaultMaterial -->
-        <div id="DefaultMaterial" class="api-content">
-            <div class="class-title">DefaultMaterial</div>
-            <div class="class-meta"><span>Class</span><span>Namespace: YMM43D.Rendering.Materials</span><span>Implements: I3DMaterial</span></div>
-            <div class="class-desc">
-                テクスチャを貼り付けず、頂点カラーと設定された不透明度のみを用いてポリゴンを単色描画するシンプルなマテリアルシェーダーです。
-            </div>
-        </div>
-
-        <!-- TextureMaterial -->
-        <div id="TextureMaterial" class="api-content">
-            <div class="class-title">TextureMaterial</div>
-            <div class="class-meta"><span>Class</span><span>Namespace: YMM43D.Rendering.Materials</span><span>Implements: I3DMaterial</span></div>
-            <div class="class-desc">
-                テクスチャ画像をサンプリングし、頂点カラーおよび不透明度と乗算してポリゴンに貼り付ける、標準的なテクスチャ描画用マテリアルシェーダーです。
-            </div>
-        </div>
-
-        <!-- GridMaterial -->
-        <div id="GridMaterial" class="api-content">
-            <div class="class-title">GridMaterial</div>
-            <div class="class-meta"><span>Class</span><span>Namespace: YMM43D.Rendering.Materials</span><span>Implements: IDisposable</span></div>
-            <div class="class-desc">
-                床の格子状グリッドをフォグフェード効果を含めて描画するための専用マテリアルシェーダーです。
-            </div>
-        </div>
-
-
-        <!-- 4. COMMONS & CACHING -->
-
-        <!-- D3D11Helper -->
-        <div id="D3D11Helper" class="api-content">
-            <div class="class-title">D3D11Helper</div>
-            <div class="class-meta"><span>Static Class</span><span>Namespace: YMM43D.Commons</span></div>
-            <div class="class-desc">
-                Direct3D11やDirect2Dのバッファ作成、テクスチャ転送、および画像の描画矩形算出を補助する低レベル共通関数ライブラリです。
-            </div>
-        </div>
-
-        <!-- DeviceResourceCache -->
-        <div id="DeviceResourceCache" class="api-content">
-            <div class="class-title">DeviceResourceCache&lt;T&gt;</div>
-            <div class="class-meta"><span>Class</span><span>Namespace: YMM43D.Commons</span><span>Implements: IDeviceResourceCache, IDisposable</span></div>
-            <div class="class-desc">
-                複数の異なるD3D11デバイス毎にリソースオブジェクト（頂点バッファやシェーダーなど）をキャッシュして使い分けるための、スレッドセーフなジェネリックキャッシュクラスです。
-            </div>
-        </div>
-
-        <!-- CachedItemTexture -->
-        <div id="CachedItemTexture" class="api-content">
-            <div class="class-title">CachedItemTexture</div>
-            <div class="class-meta"><span>Class</span><span>Namespace: YMM43D.Commons</span><span>Implements: IDisposable</span></div>
-            <div class="class-desc">
-                標準プレビューデバイスと3Dプレビューデバイス間での、DXGI Shared Handleを用いたテクスチャ共有とキャッシュ維持をパッケージングした内部管理用クラスです。スレッド同期用に <span class="code-inline">IDXGIKeyedMutex</span> を組み込んでいます。
-            </div>
-
-            <div class="section-title">プロパティ</div>
-            <table>
-                <thead>
-                    <tr><th>Type</th><th>Name</th><th>Description</th></tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td class="type-col">ID3D11Texture2D</td>
-                        <td class="name-col">RenderTexture</td>
-                        <td>3Dプレビュー側デバイスで作成された、出力先共有元のD3D11テクスチャ。</td>
-                    </tr>
-                    <tr>
-                        <td class="type-col">ID3D11ShaderResourceView</td>
-                        <td class="name-col">Srv</td>
-                        <td>3Dモデルの描画にバインドされるシェーダーリソースビュー。</td>
-                    </tr>
-                    <tr>
-                        <td class="type-col">IDXGIKeyedMutex?</td>
-                        <td class="name-col">KeyedMutexOur</td>
-                        <td>3Dプレビュー側デバイスでテクスチャの読み込み・描画同期を取るための KeyedMutex。</td>
-                    </tr>
-                    <tr>
-                        <td class="type-col">IDXGIKeyedMutex?</td>
-                        <td class="name-col">KeyedMutexYmm</td>
-                        <td>YMM4スレッド側（メインデバイス）でテクスチャの書き込み・描画同期を取るための KeyedMutex。</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-
-        <!-- Math3D -->
-        <div id="Math3D" class="api-content">
-            <div class="class-title">Math3D</div>
-            <div class="class-meta"><span>Static Class</span><span>Namespace: YMM43D.Commons</span></div>
-            <div class="class-desc">
-                ラジアン・度数の変換処理や、3Dカメラおよび3Dオブジェクトそれぞれの回転定義順に基づいた行列（Matrix4x4）の生成を行う静的数学クラスです。
-            </div>
-        </div>
-
-    </main>
-
-    <script>
-        function showAPI(apiId) {
-            // すべてのコンテンツを非表示にする
-            const contents = document.querySelectorAll('.api-content');
-            contents.forEach(content => {
-                content.classList.remove('active');
-            });
-
-            // プレースホルダーを非表示にする
-            const placeholder = document.getElementById('placeholder');
-            if (placeholder) {
-                placeholder.style.display = 'none';
-            }
-
-            // 選択されたコンテンツを表示
-            const activeContent = document.getElementById(apiId);
-            if (activeContent) {
-                activeContent.classList.add('active');
-                // スクロールを一番上に戻す
-                document.getElementById('main-content').scrollTop = 0;
-            }
-
-            // サイドバーのactiveスタイルを更新
-            const items = document.querySelectorAll('.nav-item');
-            items.forEach(item => {
-                item.classList.remove('active');
-                // テキストの先頭一致部分、またはBadgeタグを除くトリム文字列で判定
-                const itemText = item.childNodes[0].textContent.trim();
-                if (itemText === apiId) {
-                    item.classList.add('active');
-                }
-            });
+        var texture = textureBridge.GetTexture(device, devices, input, this, out var bounds);
+        if (texture is not null)
+        {
+            inputSize = new Vector2(bounds.Right - bounds.Left, bounds.Bottom - bounds.Top);
+            inputOffset = new Vector2(bounds.Left, bounds.Top);
         }
-    </script>
+        return texture;
+    }
+
+    // 板の大きさと中心のずれを呼び出し側に伝える
+    public bool TryGetSize(out Vector2 size, out Vector2 offset)
+    {
+        size = inputSize;
+        offset = inputOffset;
+        return size.X &gt; 0 &amp;&amp; size.Y &gt; 0;
+    }
+
+    public void Draw(in Render3DContext render, DrawContext3D item) { /* ... */ }
+
+    public void Dispose()
+    {
+        effect.DetachProcessor(this);
+        textureBridge.Dispose();
+    }
+}</pre>
+</div>
+
+<div class="note">
+<p>
+プロセッサの <code>Dispose</code> では、必ず <code>DetachProcessor(this)</code> を呼んでください。
+呼ばないと、破棄済みのプロセッサにプレビューが描画を要求し続けます。
+</p>
+</div>
+
+<h2 id="drawing">6. 描画のしくみ</h2>
+
+<h3>RenderPipeline</h3>
+
+<p>
+形状・シェーダー・入力レイアウト・定数バッファをひとまとめにした描画単位です。
+<code>Draw</code> を呼ぶと、定数バッファの更新からステート設定、シェーダーとバッファのバインド、描画、後始末までを一度に行います。
+</p>
+
+<div class="wide">
+<pre>var pipeline = new RenderPipeline&lt;TransformConstants&gt;(device, mesh, material);
+
+pipeline.Draw(context, constants, new DrawSettings
+{
+    Blend = BlendMode.Normal,
+    Culling = FaceCulling.Back,
+    Texture = shaderResourceView,
+});</pre>
+</div>
+
+<p>
+型引数の <code>TConstants</code> は HLSL 側の <code>cbuffer</code> と同じレイアウトの構造体です。
+定数バッファの大きさはこの型から決まるため、シェーダー側の宣言と食い違うと描画結果が壊れます。
+HLSL の 16 バイト境界の詰め方に合わせてください。
+</p>
+
+<h3>DrawSettings</h3>
+
+<table>
+<tr><th>メンバー</th><th>説明</th></tr>
+<tr><td><code>Blend</code></td><td>合成方法。<code>Normal</code> / <code>Add</code> / <code>Subtract</code> / <code>Multiply</code> / <code>Screen</code></td></tr>
+<tr><td><code>Culling</code></td><td><code>None</code> / <code>Back</code>（前面のみ）/ <code>Front</code>（背面のみ）</td></tr>
+<tr><td><code>IgnoreDepth</code></td><td>深度テストを無効にして常に手前に描く。YMM4 の「最前面に表示」に対応</td></tr>
+<tr><td><code>SkipDepthWrite</code></td><td>深度テストは行うが書き込まない。半透明な板を描くときに使う</td></tr>
+<tr><td><code>Texture</code></td><td>ピクセルシェーダーのスロット 0 に設定するテクスチャ</td></tr>
+<tr><td><code>Sampler</code></td><td>省略時はリニア補間のサンプラー</td></tr>
+</table>
+
+<p>
+<code>DrawContext3D.ToDrawSettings()</code> を使うと、アイテムの合成モードと「最前面に表示」が反映された
+<code>DrawSettings</code> が得られます。カリングとテクスチャだけを足してください。
+</p>
+
+<h3>メッシュとマテリアル</h3>
+
+<p>
+<code>IMesh</code> と <code>IMaterial</code> を実装すれば独自の形状・シェーダーを使えます。標準で次のものが用意されています。
+</p>
+
+<table>
+<tr><th>種類</th><th>型</th><th>内容</th></tr>
+<tr><td rowspan="4">メッシュ</td><td><code>BoxMesh.CreateUnitCube</code></td><td>一辺 1 の立方体（z が -0.5〜0.5、頂点色つき）</td></tr>
+<tr><td><code>BoxMesh.CreateExtrusionBox</code></td><td>押し出し用の箱（z が 0〜1、白）</td></tr>
+<tr><td><code>PlaneMesh</code></td><td>1×1 の板</td></tr>
+<tr><td><code>LineMesh</code></td><td>線分の並び</td></tr>
+<tr><td rowspan="2">マテリアル</td><td><code>VertexColorMaterial</code></td><td>頂点色をそのまま出す</td></tr>
+<tr><td><code>TextureMaterial</code></td><td>テクスチャを貼る</td></tr>
+</table>
+
+<h3>シェーダーの記述</h3>
+
+<p>
+HLSL は <code>ShaderCompiler.Compile</code> で実行時にコンパイルします。
+共通の宣言は <code>ShaderSource.StandardPrologue</code> にまとまっており、次の 4 つを連結したものです。
+</p>
+
+<table>
+<tr><th>断片</th><th>内容</th></tr>
+<tr><td><code>TransformBuffer</code></td><td><code>WorldViewProjection</code> と <code>Opacity</code> を持つ <code>cbuffer</code>（register b0）</td></tr>
+<tr><td><code>VertexInput</code></td><td>頂点入力 <code>VS_IN</code>（<code>Pos</code> / <code>Col</code> / <code>Tex</code>）</td></tr>
+<tr><td><code>PixelInput</code></td><td>ピクセル入力 <code>PS_IN</code>（<code>Pos</code> / <code>Col</code> / <code>Tex</code>）</td></tr>
+<tr><td><code>VertexShaderMain</code></td><td>座標変換のみを行う頂点シェーダー <code>VSMain</code></td></tr>
+</table>
+
+<div class="wide">
+<pre>private const string Source = ShaderSource.StandardPrologue + """
+    float4 PSMain(PS_IN input) : SV_Target
+    {
+        return input.Col * Opacity;
+    }
+    """;
+
+// 頂点シェーダーは標準実装をそのまま使える
+var vsBytes = ShaderCompiler.Compile(Source, "VSMain", "vs_5_0");
+var psBytes = ShaderCompiler.Compile(Source, "PSMain", "ps_5_0");</pre>
+</div>
+
+<div class="note">
+<p>
+<strong>HLSL に非 ASCII 文字を書かないでください。</strong>
+コンパイラに渡すのは UTF-8 のバイト列で、文字数とバイト数がずれると末尾が切り捨てられます。
+ライブラリ側では UTF-8 に変換してから渡すことでこの問題を回避していますが、
+コメントも含めて ASCII に収めておくのが安全です。
+</p>
+</div>
+
+<h3>デバイスごとの資源</h3>
+
+<p>
+3Dプレビューと動画出力では別々の D3D11 デバイスが使われます。デバイスに紐づく資源（パイプライン、テクスチャ、ステート）は
+デバイスごとに作る必要があるため、<code>DeviceResourceCache&lt;T&gt;</code> を使ってください。
+</p>
+
+<div class="wide">
+<pre>private readonly DeviceResourceCache&lt;RenderPipeline&lt;TransformConstants&gt;&gt; pipelines
+    = new(device =&gt; new RenderPipeline&lt;TransformConstants&gt;(device, mesh, material));
+
+// 描画時
+var pipeline = pipelines.Get(render.Device);</pre>
+</div>
+
+<p>
+描画ステート（ブレンド・深度・ラスタライザー・サンプラー）は不変なので、
+<code>RenderStates.For(device)</code> で共有インスタンスを取得できます。<code>RenderPipeline</code> は既定でこれを使います。
+</p>
+
+<h2 id="reference">7. 型リファレンス</h2>
+
+<h3>YMM43D.Plugin</h3>
+
+<table>
+<tr><th>型</th><th>種別</th><th>説明</th></tr>
+<tr><td><code>I3DProvider</code></td><td>interface</td><td>3D 空間に何かを描画できるオブジェクト。このライブラリの中心となる拡張点</td></tr>
+<tr><td><code>I3DTextureProvider</code></td><td>interface</td><td>自前で用意したテクスチャを 3D 描画に提供できる</td></tr>
+<tr><td><code>I3DSizeProvider</code></td><td>interface</td><td>描画される内容の実寸と原点からのずれを伝えられる</td></tr>
+<tr><td><code>I3DVideoEffect</code></td><td>interface</td><td><code>I3DProvider</code> と <code>I3DTextureProvider</code> の両方</td></tr>
+<tr><td><code>ICameraSync</code></td><td>interface</td><td>カメラの変化を YMM4 に伝える</td></tr>
+<tr><td><code>Shape3DSourceBase</code></td><td>abstract class</td><td>3D 図形アイテムの描画元。プレビューと出力の両経路を受け持つ</td></tr>
+<tr><td><code>ShapeParameter3DBase</code></td><td>abstract class</td><td>3D 図形アイテムの設定値</td></tr>
+<tr><td><code>VideoEffect3DBase</code></td><td>abstract class</td><td>3D 描画を行う映像エフェクト</td></tr>
+<tr><td><code>Render3DContext</code></td><td>struct</td><td>描画先のデバイス・コンテキストとカメラ行列</td></tr>
+<tr><td><code>Provider3DRegistry</code></td><td>static class</td><td>パラメータとプロバイダーの対応表</td></tr>
+<tr><td><code>CameraSync</code></td><td>class</td><td><code>ICameraSync</code> の既定実装</td></tr>
+</table>
+
+<h4>I3DProvider</h4>
+
+<div class="wide">
+<pre>public interface I3DProvider
+{
+    // 描画にアイテム本来の 2D 画像が必要な場合は true。
+    // true のとき DrawContext3D.Texture に描画結果が渡される。
+    bool RequiresMappedTexture { get; }
+
+    void Draw(in Render3DContext render, DrawContext3D item);
+}</pre>
+</div>
+
+<h4>Render3DContext</h4>
+
+<table>
+<tr><th>メンバー</th><th>説明</th></tr>
+<tr><td><code>Device</code> / <code>Context</code></td><td>描画に使う D3D11 デバイスとコンテキスト</td></tr>
+<tr><td><code>View</code> / <code>Projection</code></td><td>ビュー行列と射影行列</td></tr>
+<tr><td><code>ViewProjection</code></td><td>両者の積</td></tr>
+<tr><td><code>GetWorldViewProjection(in Matrix4x4 world)</code></td><td>ワールド行列を掛けた最終変換</td></tr>
+<tr><td><code>GetCameraPosition()</code></td><td>ワールド空間でのカメラ位置。レイマーチングなどで使う</td></tr>
+</table>
+
+<h3>YMM43D.Scene3D</h3>
+
+<table>
+<tr><th>型</th><th>種別</th><th>説明</th></tr>
+<tr><td><code>SceneCamera</code></td><td>class</td><td>シーンを撮影する軌道カメラ。角度・距離はキーフレーム可能</td></tr>
+<tr><td><code>CameraPose</code></td><td>struct</td><td>ある時点でのカメラの位置・注視点・上方向</td></tr>
+<tr><td><code>DrawContext3D</code></td><td>class</td><td>1 つのアイテムを描画するための情報</td></tr>
+<tr><td><code>FrameContext</code></td><td>struct</td><td>フレーム位置・長さ・FPS の組</td></tr>
+<tr><td><code>AnimationExtensions</code></td><td>static class</td><td><code>Animation</code> を <code>FrameContext</code> で評価する</td></tr>
+<tr><td><code>Rotation3D</code></td><td>static class</td><td>度からの回転行列の生成</td></tr>
+<tr><td><code>ProjectionType</code></td><td>enum</td><td><code>Perspective</code> / <code>Orthographic</code></td></tr>
+</table>
+
+<h4>DrawContext3D</h4>
+
+<table>
+<tr><th>メンバー</th><th>説明</th></tr>
+<tr><td><code>World</code></td><td>アイテムの位置・拡大率・回転を反映したワールド行列</td></tr>
+<tr><td><code>Opacity</code></td><td>0.0〜1.0 の不透明度。フェードイン・アウトも反映済み</td></tr>
+<tr><td><code>Blend</code></td><td>合成方法</td></tr>
+<tr><td><code>IsAlwaysOnTop</code></td><td>YMM4 の「最前面に表示」</td></tr>
+<tr><td><code>Time</code></td><td>アイテム内での時間位置</td></tr>
+<tr><td><code>Texture</code></td><td>アイテムの 2D 描画結果。<code>RequiresMappedTexture</code> が false なら null</td></tr>
+<tr><td><code>ToDrawSettings(culling, texture)</code></td><td>合成方法などを反映した <code>DrawSettings</code> を作る</td></tr>
+</table>
+
+<h4>FrameContext と Animation</h4>
+
+<p>
+<code>Animation</code> の値はフレーム位置に応じて変わります。<code>FrameContext</code> を渡して評価してください。
+</p>
+
+<div class="wide">
+<pre>float size = parameter.Size.GetFloat(item.Time);   // 拡張メソッド
+double raw = parameter.Size.GetValue(item.Time);</pre>
+</div>
+
+<p>
+アイテム内の時間は <code>FrameContext.FromItem</code>、タイムライン全体での時間は <code>FrameContext.FromTimeline</code> で取得します。
+カメラはシーン全体に属するため、後者で評価します。
+</p>
+
+<h3>YMM43D.Graphics</h3>
+
+<table>
+<tr><th>型</th><th>種別</th><th>説明</th></tr>
+<tr><td><code>RenderPipeline&lt;T&gt;</code></td><td>class</td><td>形状・シェーダー・定数バッファをまとめた描画単位</td></tr>
+<tr><td><code>DrawSettings</code></td><td>struct</td><td>1 回の描画ごとに変わる設定</td></tr>
+<tr><td><code>RenderStates</code></td><td>class</td><td>デバイス上で共有される描画ステート一式</td></tr>
+<tr><td><code>IMesh</code> / <code>IMaterial</code></td><td>interface</td><td>形状とシェーダー</td></tr>
+<tr><td><code>Vertex</code></td><td>struct</td><td>位置・色・UV を持つ標準頂点</td></tr>
+<tr><td><code>TransformConstants</code></td><td>struct</td><td>変換行列と不透明度を持つ標準定数バッファ</td></tr>
+<tr><td><code>ShaderCompiler</code></td><td>static class</td><td>HLSL の実行時コンパイル</td></tr>
+<tr><td><code>DeviceResourceCache&lt;T&gt;</code></td><td>class</td><td>デバイスごとの資源を保持する</td></tr>
+<tr><td><code>GraphicsDevicePool</code></td><td>static class</td><td>3D 描画用の独立デバイスを貸し出す</td></tr>
+<tr><td><code>D3D11Buffers</code></td><td>static class</td><td>頂点・インデックス・定数バッファの生成</td></tr>
+<tr><td><code>BlendMode</code> / <code>FaceCulling</code></td><td>enum</td><td>合成方法とカリング</td></tr>
+</table>
+
+<h3>YMM43D.Integration</h3>
+
+<p>YMM4 との橋渡しを行う層です。基底クラスを使っていれば、通常は <code>D2DTextureBridge</code> 以外を直接触ることはありません。</p>
+
+<table>
+<tr><th>型</th><th>説明</th></tr>
+<tr><td><code>D2DTextureBridge</code></td><td>YMM4 が描いた画像を、3D 描画用デバイスのテクスチャに変換する</td></tr>
+<tr><td><code>Renderer3DTo2D</code></td><td>3D 描画の結果を YMM4 が扱える <code>ID2D1Image</code> に変換する</td></tr>
+<tr><td><code>RenderSurface3D</code></td><td>3D 描画用のレンダーターゲットと、それを YMM4 側から見たビットマップ</td></tr>
+<tr><td><code>PrivateD2DContext</code></td><td>プラグイン専用の Direct2D デバイスコンテキストを貸し出す</td></tr>
+<tr><td><code>D2DImageBounds</code></td><td>画像の描画範囲を調べる</td></tr>
+<tr><td><code>SceneCameraRegistry</code></td><td>シーンごとのカメラを保持する</td></tr>
+<tr><td><code>TimelineRefresher</code></td><td>カメラが動いたときに標準プレビューの再描画を促す</td></tr>
+</table>
+
+<h2 id="notes">8. 実装上の注意</h2>
+
+<h3>デバイスコンテキストを共有しない</h3>
+
+<p>
+YMM4 の <code>IGraphicsDevicesAndContext.DeviceContext</code> は本体の描画スレッドが使っています。
+描画先（<code>Target</code>）や描画中状態（<code>BeginDraw</code>〜<code>EndDraw</code>）はコンテキストが持つ状態なので、
+これを横から書き換えると本体側の呼び出しが <code>D2DERR_WRONG_STATE</code>（0x88990001）で失敗します。
+</p>
+
+<p>
+Direct2D で自分の描画を行う場合は <code>PrivateD2DContext</code> を使ってください。
+同じ Direct2D デバイスから作った別のコンテキストなので、画像やコマンドリストは本体とそのまま受け渡しできます。
+</p>
+
+<h3>D3D11 コンテキストの状態を戻す</h3>
+
+<p>
+3D 描画用のコンテキストも、プレビューや他のプラグインと共有されます。
+レンダーターゲット、ビューポート、各種ステートを変更したら必ず元に戻してください。
+<code>RenderPipeline.Draw</code> は自分が設定したステートを描画後に戻します。
+</p>
+
+<h3>デバイス間で共有するテクスチャ</h3>
+
+<p>
+3D 描画用デバイスと YMM4 のデバイスは、それぞれ別の命令列を GPU に流します。
+共有テクスチャを <code>Flush()</code> だけで受け渡すと、書き込みの途中を読まれて表示が乱れます。
+<code>D2DTextureBridge</code> と <code>RenderSurface3D</code> は鍵付きミューテックス
+（<code>D3D11_RESOURCE_MISC_SHARED_KEYEDMUTEX</code>）で待ち合わせています。
+自前で共有テクスチャを作る場合も同様の対策が必要です。
+</p>
+
+<h3>カメラ連動</h3>
+
+<p>
+シーンカメラが動いても、YMM4 は自分のパラメータが変わったとは思わないため、標準プレビューを再描画しません。
+<code>CameraSyncAnimation</code> を <code>GetAnimatables()</code> に含めておくと、
+ライブラリ側がこのダミーの値を動かして再描画を促します。
+</p>
+
+<h3>3Dプレビューに反映されないもの</h3>
+
+<p>
+3D 図形アイテムは本物の立体として描かれるため、平面化されたピクセルを加工するエフェクト
+（グリッチノイズやモザイクなど）は 3Dプレビューには現れません。動画出力では一度 2D 画像に焼かれてから
+適用されるため、出力には反映されます。
+</p>
+
+<p>
+一方、<code>DrawDescription.Camera</code> に変換行列を書き込むエフェクト（回り込みカメラなど）は、
+3Dプレビューでも反映されます。
+</p>
+
+<hr>
+
+<p class="meta">
+このドキュメントは YMM43D.dll の公開 API を対象としています。
+<code>YMM43D.PreviewTool</code> 名前空間はツールウィンドウの実装であり、プラグインから利用することは想定していません。
+</p>
+
 </body>
 </html>
