@@ -39,5 +39,30 @@ namespace YMM43D.Scene3D
                  * Matrix4x4.CreateTranslation(
                        ToWorld(centerInPixels.X), -ToWorld(centerInPixels.Y), 0f);
         }
+
+        /// <summary>
+        /// YMM4 の Y 軸下向き・ピクセル単位の行列を、3D 空間の Y 軸上向き・
+        /// ワールド単位の行列に直します。
+        /// </summary>
+        /// <remarks>
+        /// 「3D回転」や「回り込みカメラ」といったエフェクトが
+        /// <c>DrawDescription.Camera</c> に書き込む変換を、3D の形そのものに
+        /// 掛けたいときに使います。
+        /// </remarks>
+        public static Matrix4x4 ToYUpMatrix(Matrix4x4 matrix)
+        {
+            // Y 軸を反転する基底変換 S * M * S（S = diag(1, -1, 1, 1)）は、
+            // Y が絡む成分の符号を入れ替えることと同じ。
+            matrix.M12 = -matrix.M12;
+            matrix.M21 = -matrix.M21;
+            matrix.M23 = -matrix.M23;
+            matrix.M32 = -matrix.M32;
+
+            matrix.M41 = ToWorld(matrix.M41);
+            matrix.M42 = -ToWorld(matrix.M42);
+            matrix.M43 = ToWorld(matrix.M43);
+
+            return matrix;
+        }
     }
 }

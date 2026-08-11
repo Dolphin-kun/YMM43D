@@ -110,7 +110,7 @@ namespace YMM43D.PreviewTool
             if (itemCamera == Matrix4x4.Identity)
                 return sizeScale * zoom * rotation * translation;
 
-            return sizeScale * zoom * rotation * ToYUpMatrix(itemCamera) * translation;
+            return sizeScale * zoom * rotation * WorldScale.ToYUpMatrix(itemCamera) * translation;
         }
 
         /// <summary>
@@ -138,26 +138,6 @@ namespace YMM43D.PreviewTool
             }
 
             return Matrix4x4.Identity;
-        }
-
-        /// <summary>
-        /// YMM4 の Y 軸下向き・ピクセル単位の行列を、3D空間の Y 軸上向き・
-        /// 単位系に変換します。
-        /// </summary>
-        private static Matrix4x4 ToYUpMatrix(Matrix4x4 matrix)
-        {
-            // Y 軸を反転する基底変換 S * M * S（S = diag(1, -1, 1, 1)）は、
-            // Y が絡む成分の符号を入れ替えることと同じ。
-            matrix.M12 = -matrix.M12;
-            matrix.M21 = -matrix.M21;
-            matrix.M23 = -matrix.M23;
-            matrix.M32 = -matrix.M32;
-
-            matrix.M41 = WorldScale.ToWorld(matrix.M41);
-            matrix.M42 = -WorldScale.ToWorld(matrix.M42);
-            matrix.M43 = WorldScale.ToWorld(matrix.M43);
-
-            return matrix;
         }
 
         private static Graphics.BlendMode ToBlendMode(YukkuriMovieMaker.Project.Blend blend) => blend switch

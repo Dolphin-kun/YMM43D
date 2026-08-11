@@ -728,6 +728,35 @@ Direct2D で自分の描画を行う場合は <code>PrivateD2DContext</code> を
 3Dプレビューでも反映されます。
 </p>
 
+<h3>カメラ系エフェクトとの並び順</h3>
+
+<p>
+<code>VideoEffect3DProcessorBase</code> は、自分より<strong>前</strong>に置かれたエフェクトが
+<code>DrawDescription.Camera</code> に書き込んだ変換を、3D の形そのものに掛けます。掛けたぶんは
+後段に渡しません。そうしないと YMM4 が出来上がった平らな絵に 2D の変形として掛けてしまい、
+立体が板のまま歪むためです。
+</p>
+
+<p>
+見えるのは前に置かれたエフェクトだけです。連鎖の後ろにあるものは、この時点でまだ実行されていません。
+</p>
+
+<table>
+<tr><th>並び</th><th>動画出力</th><th>3Dプレビュー</th></tr>
+<tr>
+  <td>回り込みカメラ → 立体化3D</td>
+  <td>立体が 3D で回る</td>
+  <td>同じ</td>
+</tr>
+<tr>
+  <td>立体化3D → 回り込みカメラ</td>
+  <td>立体を描いた絵が 2D で歪む</td>
+  <td>立体が 3D で回る（一致しない）</td>
+</tr>
+</table>
+
+<p><strong>立体化するエフェクトは、カメラ系エフェクトより後ろに置いてください。</strong></p>
+
 <hr>
 
 <p class="meta">

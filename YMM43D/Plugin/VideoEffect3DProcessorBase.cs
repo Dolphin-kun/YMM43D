@@ -105,9 +105,36 @@ namespace YMM43D.Plugin
                 ? WorldScale.CreateSizeMatrix(size, offset + size / 2f)
                 : Matrix4x4.Identity;
 
+            var draw = ConsumeCamera(description.DrawDescription, ref world);
+
             output = renderer.Render(Devices, description, GetLocalBounds(itemTime), world, Draw);
 
-            return description.DrawDescription;
+            return draw;
+        }
+
+        /// <summary>
+        /// 前段のエフェクトが作った変換を 3D の形そのものに掛け、後段には渡さないようにします。
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// 「3D回転」や「回り込みカメラ」は <c>DrawDescription.Camera</c> に変換を書き込みます。
+        /// これをそのまま後段に流すと、YMM4 が出来上がった平らな絵に 2D の変形として掛けてしまい、
+        /// 立体が板のまま歪みます。形の側に掛けてしまえば、3Dプレビューと同じ見た目になります。
+        /// </para>
+        /// <para>
+        /// 見えるのは自分より<b>前</b>に置かれたエフェクトの分だけです。連鎖の後ろに置かれた
+        /// カメラ系エフェクトは、この時点ではまだ実行されていないため取り込めません。
+        /// 立体化するエフェクトは、カメラ系エフェクトより後ろに置いてください。
+        /// </para>
+        /// </remarks>
+        private static DrawDescription ConsumeCamera(DrawDescription draw, ref Matrix4x4 world)
+        {
+            if (draw.Camera == Matrix4x4.Identity)
+                return draw;
+
+            world *= WorldScale.ToYUpMatrix(draw.Camera);
+
+            return draw with { Camera = Matrix4x4.Identity };
         }
 
         /// <inheritdoc/>
