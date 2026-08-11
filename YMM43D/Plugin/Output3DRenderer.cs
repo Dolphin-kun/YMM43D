@@ -57,6 +57,9 @@ namespace YMM43D.Plugin
             Matrix4x4 world,
             Draw3DCallback draw)
         {
+            // アイテムをまたいだ前後関係を出せるかどうかの調査。設計が決まったら外す。
+            SceneAccessProbe.ReportOnce(description);
+
             var itemTime = FrameContext.FromItem(description);
             var timelineTime = FrameContext.FromTimeline(description);
 
