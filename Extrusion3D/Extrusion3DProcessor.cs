@@ -1,45 +1,51 @@
-using System;
 using System.Numerics;
-using Vortice;
-using Vortice.DCommon;
 using Vortice.Direct2D1;
 using Vortice.Direct3D11;
-using Vortice.Mathematics;
-using YMM43D.Rendering;
+using YMM43D.Graphics;
+using YMM43D.Graphics.Meshes;
+using YMM43D.Integration;
+using YMM43D.Plugin;
+using YMM43D.Scene3D;
 using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Player.Video;
-using YukkuriMovieMaker.Project.Effects;
-using YMM43D.Commons;
-using Math = System.Math;
 
 namespace Extrusion3D
 {
-    public class Extrusion3DProcessor : IVideoEffectProcessor, I3DTextureProvider, I3DProvider, IDisposable
+    /// <summary>
+    /// 立体化エフェクトの描画処理。
+    /// </summary>
+    /// <remarks>
+    /// このエフェクトは 2D の出力を変えず（<see cref="Output"/> は入力をそのまま返す）、
+    /// 3D空間での描画だけを担当します。
+    /// </remarks>
+    internal sealed class Extrusion3DProcessor : IVideoEffectProcessor, I3DVideoEffect, I3DSizeProvider
     {
         private readonly Extrusion3DEffect effect;
         private readonly IGraphicsDevicesAndContext devices;
+        private readonly D2DTextureBridge textureBridge = new();
+        private readonly DeviceResourceCache<RenderPipeline<ExtrusionConstants>> pipelines;
+
         private ID2D1Image? input;
-        private readonly Extrusion3DSource source;
-
-        // メインデバイス上の退避用テクスチャ
-        private ID3D11Texture2D? mainTexture;
-
-        // プレビューデバイス用のキャッシュリソース
-        private ID3D11Texture2D? previewTexture;
-        private ID3D11ShaderResourceView? previewSrv;
-        private IntPtr previewDevicePointer;
+        private Vector2 inputSizeInDips;
+        private Vector2 inputOffset;
 
         public Extrusion3DProcessor(Extrusion3DEffect effect, IGraphicsDevicesAndContext devices)
         {
             this.effect = effect;
             this.devices = devices;
-            this.source = new Extrusion3DSource(effect, this);
-            effect.LastProvider = this;
+
+            pipelines = new DeviceResourceCache<RenderPipeline<ExtrusionConstants>>(
+                device => new RenderPipeline<ExtrusionConstants>(
+                    device,
+                    BoxMesh.CreateExtrusionBox(device),
+                    new ExtrusionMaterial(device)));
         }
 
-        public ID2D1Image Output => input ?? throw new NullReferenceException(nameof(input) + " is null");
+        public ID2D1Image Output => input ?? throw new InvalidOperationException("入力画像が設定されていません。");
 
+        /// <summary>直近の <see cref="Update"/> で受け取った描画要求。</summary>
         public EffectDescription? EffectDescription { get; private set; }
+
         public bool RequiresMappedTexture => false;
 
         public DrawDescription Update(EffectDescription effectDescription)
@@ -48,126 +54,86 @@ namespace Extrusion3D
             return effectDescription.DrawDescription;
         }
 
-        public void Draw(ID3D11Device device, ID3D11DeviceContext d3dDc, Matrix4x4 view, Matrix4x4 projection, DrawContext3D drawContext)
-        {
-            source.Draw3D(device, d3dDc, view, projection, drawContext);
-        }
+        public void SetInput(ID2D1Image? input) => this.input = input;
 
-        public void SetInput(ID2D1Image? input)
-        {
-            this.input = input;
-            
-            mainTexture?.Dispose();
-            mainTexture = null;
-            ClearPreviewResources();
+        public void ClearInput() => input = null;
 
-            if (input == null) return;
-
-            var d2dContext = devices.DeviceContext;
-            RawRectF bounds = D3D11Helper.GetImageBounds(d2dContext, input, out _, out _);
-            int width = (int)Math.Max(1, Math.Ceiling(bounds.Right - bounds.Left));
-            int height = (int)Math.Max(1, Math.Ceiling(bounds.Bottom - bounds.Top));
-
-            int texWidth = width;
-            int texHeight = height;
-
-            var desc = new Texture2DDescription
-            {
-                Width = texWidth,
-                Height = texHeight,
-                MipLevels = 1,
-                ArraySize = 1,
-                Format = Vortice.DXGI.Format.B8G8R8A8_UNorm,
-                SampleDescription = new Vortice.DXGI.SampleDescription(1, 0),
-                Usage = ResourceUsage.Default,
-                BindFlags = BindFlags.RenderTarget | BindFlags.ShaderResource,
-                MiscFlags = ResourceOptionFlags.None
-            };
-
-            // メインデバイス上に退避用テクスチャを作成
-            mainTexture = devices.D3D.Device.CreateTexture2D(desc);
-
-            // デフォルトのDPI設定(96DPI)で targetBitmap を生成します。
-            // これにより、d2dContext.Target 切り替え時にD2DがDPI整合を自動で行って描き込みます。
-            using var surface = mainTexture.QueryInterface<Vortice.DXGI.IDXGISurface>();
-            using var targetBitmap = d2dContext.CreateBitmapFromDxgiSurface(surface);
-
-            // D3D11Helper.UpdateSharedTexture を用いて、同期的かつ安全に画像データを等倍（1:1）で描き写す
-            D3D11Helper.UpdateSharedTexture(d2dContext, input, targetBitmap, bounds, devices.D3D.Device);
-        }
-
-        public void ClearInput()
-        {
-            input = null;
-            mainTexture?.Dispose();
-            mainTexture = null;
-            ClearPreviewResources();
-        }
-
+        /// <summary>
+        /// 入力画像を 3D 描画用デバイスのテクスチャとして取得します。
+        /// </summary>
+        /// <remarks>
+        /// 呼ばれるたびに最新の入力内容を焼き直します。以前は入力が差し替わった
+        /// タイミングで本体デバイス上のテクスチャに退避し、さらにプレビュー用
+        /// デバイスへコピーする二段構えだったが、共有テクスチャに直接描き込めば
+        /// 一段で済むうえ、内容が古くなることもない。
+        /// </remarks>
         public ID3D11ShaderResourceView? GetTexture(ID3D11Device device)
         {
-            if (mainTexture == null) return null;
+            if (input is null)
+                return null;
 
-            // キャッシュされているプレビューデバイスが一致する場合は使い回す
-            if (previewSrv != null && previewDevicePointer == device.NativePointer)
+            var texture = textureBridge.GetTexture(device, devices, input, this, out var bounds);
+            if (texture is not null)
             {
-                return previewSrv;
+                inputSizeInDips = new Vector2(bounds.Right - bounds.Left, bounds.Bottom - bounds.Top);
+                inputOffset = new Vector2(bounds.Left, bounds.Top);
             }
 
-            ClearPreviewResources();
-            previewDevicePointer = device.NativePointer;
-
-            // プレビューで渡されたデバイスがメインデバイスと同一の場合は、退避テクスチャから直接 SRV を作成
-            if (device.NativePointer == devices.D3D.Device.NativePointer)
-            {
-                previewSrv = device.CreateShaderResourceView(mainTexture);
-                return previewSrv;
-            }
-
-            // デバイスが異なる場合は、共有テクスチャを利用してデータをプレビューデバイスへ GPU コピーする
-            var desc = mainTexture.Description;
-            desc.MiscFlags = ResourceOptionFlags.Shared;
-
-            // A. プレビュー用デバイスに共有テクスチャを作成
-            previewTexture = device.CreateTexture2D(desc);
-            previewSrv = device.CreateShaderResourceView(previewTexture);
-
-            // B. プレビューデバイス of 共有ハンドルを取得
-            using var dxgiResource = previewTexture.QueryInterface<Vortice.DXGI.IDXGIResource>();
-            nint sharedHandle = dxgiResource.SharedHandle;
-
-            // C. メインデバイス側で、その共有ハンドルを開く
-            using var sharedTextureOnMain = devices.D3D.Device.OpenSharedResource<ID3D11Texture2D>(sharedHandle);
-
-            // D. メインデバイス上で退避テクスチャから共有テクスチャへ高速コピーする
-            lock (devices.D3D.Device)
-            {
-                devices.D3D.Device.ImmediateContext.CopyResource(sharedTextureOnMain, mainTexture);
-                devices.D3D.Device.ImmediateContext.Flush();
-            }
-
-            return previewSrv;
+            return texture;
         }
 
-        private void ClearPreviewResources()
+        public bool TryGetSize(out Vector2 size, out Vector2 offset)
         {
-            previewSrv?.Dispose();
-            previewSrv = null;
-            previewTexture?.Dispose();
-            previewTexture = null;
-            previewDevicePointer = IntPtr.Zero;
+            size = inputSizeInDips;
+            offset = inputOffset;
+            return size.X > 0 && size.Y > 0;
+        }
+
+        public void Draw(in Render3DContext render, DrawContext3D item)
+        {
+            var texture = item.Texture ?? GetTexture(render.Device);
+            if (texture is null)
+                return;
+
+            // エフェクトのパラメータはアイテム内の時間で評価する。描画要求が
+            // 届いていればそちらを優先し、無ければ呼び出し元の時間を使う。
+            var time = EffectDescription is { } description
+                ? FrameContext.FromItem(description)
+                : item.Time;
+
+            var thickness = effect.Thickness.GetFloat(time) / 100f;
+            if (thickness <= 0)
+                return;
+
+            var world = Matrix4x4.CreateScale(1f, 1f, thickness) * item.World;
+
+            // レイマーチングはボックスのローカル座標系で行うため、
+            // カメラ位置もその座標系に持ち込む。
+            Matrix4x4.Invert(world, out var inverseWorld);
+            var cameraLocalPos = Vector3.Transform(render.GetCameraPosition(), inverseWorld);
+
+            var sideColor = effect.SideColor;
+            var constants = new ExtrusionConstants
+            {
+                WorldViewProjection = Matrix4x4.Transpose(render.GetWorldViewProjection(world)),
+                SideColor = new Vector4(sideColor.R, sideColor.G, sideColor.B, sideColor.A) / 255f,
+                CameraLocalPos = cameraLocalPos,
+                Opacity = item.Opacity,
+                ExtrusionType = (int)effect.ExtrusionType,
+                Attenuation = effect.Attenuation.GetFloat(time) / 100f,
+            };
+
+            // ボックスの内側からレイを飛ばすため、手前の面ではなく奥の面を描く。
+            var settings = item.ToDrawSettings(FaceCulling.Front, texture) with { Blend = YMM43D.Graphics.BlendMode.Normal };
+            pipelines.Get(render.Device).Draw(render.Context, constants, settings);
         }
 
         public void Dispose()
         {
-            if (effect.LastProvider == this)
-            {
-                effect.LastProvider = null;
-            }
-            ClearPreviewResources();
-            mainTexture?.Dispose();
-            mainTexture = null;
-            source.Dispose();
+            effect.DetachProcessor(this);
+            pipelines.Dispose();
+            textureBridge.Dispose();
+            input = null;
         }
     }
 }
