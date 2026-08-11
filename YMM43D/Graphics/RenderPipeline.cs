@@ -37,15 +37,16 @@ namespace YMM43D.Graphics
         /// <param name="mesh">描画する形状。所有権はこのインスタンスに移ります。</param>
         /// <param name="material">使用するシェーダー。所有権はこのインスタンスに移ります。</param>
         /// <param name="states">
-        /// デバイス共有の描画ステート。所有権は移らず、このインスタンスは破棄しません。
+        /// 使用する描画ステート。省略すると <see cref="RenderStates.For"/> の共有インスタンスを使います。
+        /// いずれの場合も所有権は移らず、このインスタンスは破棄しません。
         /// </param>
-        public RenderPipeline(ID3D11Device device, IMesh mesh, IMaterial material, RenderStates states)
+        public RenderPipeline(ID3D11Device device, IMesh mesh, IMaterial material, RenderStates? states = null)
         {
             Mesh = mesh;
             disposer.Collect(mesh);
             Material = material;
             disposer.Collect(material);
-            this.states = states;
+            this.states = states ?? RenderStates.For(device);
 
             inputLayout = device.CreateInputLayout(mesh.InputElements, material.VertexShaderBytecode);
             disposer.Collect(inputLayout);

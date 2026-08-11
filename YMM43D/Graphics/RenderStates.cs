@@ -15,6 +15,17 @@ namespace YMM43D.Graphics
     /// </remarks>
     public sealed class RenderStates : IDisposable
     {
+        private static readonly DeviceResourceCache<RenderStates> shared = new(device => new RenderStates(device));
+
+        /// <summary>
+        /// デバイスに対応する共有のステート一式を取得します。
+        /// </summary>
+        /// <remarks>
+        /// ステートは不変なので、同じデバイスを使う描画すべてで1つを使い回せます。
+        /// デバイスが破棄されるときに <see cref="GraphicsDevicePool"/> がまとめて解放します。
+        /// </remarks>
+        public static RenderStates For(ID3D11Device device) => shared.Get(device);
+
         private readonly DisposeCollector disposer = new();
 
         private readonly ID3D11BlendState normal;
