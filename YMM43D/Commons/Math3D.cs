@@ -2,10 +2,10 @@ using System.Numerics;
 
 namespace YMM43D.Commons
 {
-    public static class Math
+    public static class Math3D
     {
-        public static float ToRadians(float degrees) => degrees * (float)System.Math.PI / 180.0f;
-        public static double ToRadians(double degrees) => degrees * System.Math.PI / 180.0;
+        public static float ToRadians(float degrees) => degrees * (float)Math.PI / 180.0f;
+        public static double ToRadians(double degrees) => degrees * Math.PI / 180.0;
 
         public static Matrix4x4 CreateCameraRotation(float yaw, float pitch, float roll)
         {

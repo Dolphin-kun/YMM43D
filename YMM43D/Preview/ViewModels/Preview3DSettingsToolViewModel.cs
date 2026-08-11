@@ -1,9 +1,12 @@
 using System.ComponentModel;
+using System.Linq;
 using System.Windows.Input;
 using System.Windows.Threading;
+using YMM43D.Rendering;
 using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Plugin;
 using YukkuriMovieMaker.Project;
+using YukkuriMovieMaker.Project.Items;
 
 namespace YMM43D.Preview.ViewModels
 {
@@ -12,8 +15,13 @@ namespace YMM43D.Preview.ViewModels
         private Timeline? timeline;
         private DispatcherTimer? pollTimer;
         private readonly CameraChangeTracker sceneCameraTracker = new();
+        private SceneCamera camera = new();
 
-        public SceneCamera Camera => SceneCamera.Instance;
+        public SceneCamera Camera
+        {
+            get => camera;
+            private set => Set(ref camera, value, nameof(Camera));
+        }
 
         public ICommand ResetCameraCommand { get; }
 
@@ -30,6 +38,10 @@ namespace YMM43D.Preview.ViewModels
             timeline?.PropertyChanged -= OnTimelinePropertyChanged;
 
             timeline = info.Timeline;
+            if (timeline != null)
+            {
+                Camera = SceneCamera.GetCamera(SharedGraphics.Devices);
+            }
 
             if (timeline != null)
             {
@@ -76,7 +88,36 @@ namespace YMM43D.Preview.ViewModels
             if (!sceneCameraTracker.HasChanged(Camera, frame, length, fps))
                 return;
 
+            TouchShape3DParameters();
             ForceTimelineRefresh();
+        }
+
+        private void TouchShape3DParameters()
+        {
+            if (timeline?.Items == null)
+                return;
+
+            foreach (var item in timeline.Items)
+            {
+                if (item is ShapeItem shapeItem)
+                {
+                    if (shapeItem.ShapeParameter is ICameraSync param)
+                    {
+                        param.TouchCameraSync();
+                    }
+                }
+
+                if (item is IVideoItem videoItem && videoItem.VideoEffects != null)
+                {
+                    foreach (var effect in videoItem.VideoEffects)
+                    {
+                        if (effect is ICameraSync param)
+                        {
+                            param.TouchCameraSync();
+                        }
+                    }
+                }
+            }
         }
 
         private void ForceTimelineRefresh()

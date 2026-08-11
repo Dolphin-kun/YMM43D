@@ -1,9 +1,8 @@
 using System;
-using System.Numerics;
 using Vortice;
 using Vortice.Direct2D1;
 using Vortice.Direct3D11;
-using Vortice.Mathematics;
+using Vortice.DXGI;
 
 namespace YMM43D.Commons
 {
@@ -27,8 +26,8 @@ namespace YMM43D.Commons
                 Height = height,
                 MipLevels = 1,
                 ArraySize = 1,
-                Format = Vortice.DXGI.Format.B8G8R8A8_UNorm,
-                SampleDescription = new Vortice.DXGI.SampleDescription(1, 0),
+                Format = Format.B8G8R8A8_UNorm,
+                SampleDescription = new SampleDescription(1, 0),
                 Usage = ResourceUsage.Default,
                 BindFlags = BindFlags.RenderTarget | BindFlags.ShaderResource,
                 MiscFlags = ResourceOptionFlags.Shared
@@ -37,11 +36,12 @@ namespace YMM43D.Commons
             RenderTexture = ourDevice.CreateTexture2D(desc);
             Srv = ourDevice.CreateShaderResourceView(RenderTexture);
 
-            using var dxgiResource = RenderTexture.QueryInterface<Vortice.DXGI.IDXGIResource>();
+            using var dxgiResource = RenderTexture.QueryInterface<IDXGIResource>();
             nint sharedHandle = dxgiResource.SharedHandle;
 
             SharedTexture = ymmDevice.OpenSharedResource<ID3D11Texture2D>(sharedHandle);
-            using var surface = SharedTexture.QueryInterface<Vortice.DXGI.IDXGISurface>();
+
+            using var surface = SharedTexture.QueryInterface<IDXGISurface>();
             TempBitmap = d2dContext.CreateBitmapFromDxgiSurface(surface);
         }
 

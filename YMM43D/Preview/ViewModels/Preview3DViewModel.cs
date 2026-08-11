@@ -26,7 +26,7 @@ namespace YMM43D.Preview.ViewModels
         private Timeline? timeline;
         private TimelineToolInfo? toolInfo;
         private List<I3DProvider> lastProviders = [];
-        private SceneCamera sceneCamera = SceneCamera.Instance;
+        private SceneCamera sceneCamera = new();
         private SceneCamera freeCamera = new();
         private D3D11Host? d3dHost;
         private object? scene;
@@ -39,7 +39,20 @@ namespace YMM43D.Preview.ViewModels
         public ObservableCollection<PreviewItem> PreviewItems { get; } = [];
         public object? Scene => scene;
         public TimelineSourceDescription? TimelineSourceDescription => timelineSourceDescription;
-        public SceneCamera SceneCamera => sceneCamera;
+        
+        public SceneCamera SceneCamera
+        {
+            get => sceneCamera;
+            private set
+            {
+                if (sceneCamera != value)
+                {
+                    sceneCamera.PropertyChanged -= OnSceneCameraPropertyChanged;
+                    Set(ref sceneCamera, value, nameof(SceneCamera));
+                    sceneCamera.PropertyChanged += OnSceneCameraPropertyChanged;
+                }
+            }
+        }
         public SceneCamera FreeCamera => freeCamera;
         public ICommand ResetToSceneCameraCommand { get; }
 
@@ -48,6 +61,8 @@ namespace YMM43D.Preview.ViewModels
             get => d3dHost;
             private set => Set(ref d3dHost, value, nameof(D3DHost));
         }
+
+
 
         public Preview3DViewModel()
         {
@@ -58,23 +73,37 @@ namespace YMM43D.Preview.ViewModels
                 _ => true,
                 _ => ResetToSceneCamera()
             );
+
+            sceneCamera.PropertyChanged += OnSceneCameraPropertyChanged;
+            disposer.CollectAction(this, delegate
+            {
+                sceneCamera.PropertyChanged -= OnSceneCameraPropertyChanged;
+            });
+        }
+
+        private void OnSceneCameraPropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(SceneCamera.IsControllingSceneCamera))
+            {
+                if (sceneCamera.IsControllingSceneCamera)
+                {
+                    ResetToSceneCamera();
+                }
+            }
         }
 
         public void ResetToSceneCamera()
         {
             if (timeline == null) return;
 
-            // FreeCamera の値を SceneCamera の現在状態の値で上書きする
             freeCamera.CameraYaw.CopyFrom(sceneCamera.CameraYaw);
             freeCamera.CameraPitch.CopyFrom(sceneCamera.CameraPitch);
             freeCamera.CameraRoll.CopyFrom(sceneCamera.CameraRoll);
             freeCamera.CameraDistance.CopyFrom(sceneCamera.CameraDistance);
             freeCamera.CameraTarget = sceneCamera.CameraTarget;
 
-            // レンダラー側の自由カメラの内部状態フラグをリセットさせる
             renderer.ResetFreeCameraState();
 
-            // プレビューの再描画を促す
             ForceTimelineRefresh();
         }
 
@@ -91,6 +120,40 @@ namespace YMM43D.Preview.ViewModels
 
             if (!sceneCameraTracker.HasChanged(SceneCamera, frame, length, fps))
                 return;
+
+            // IsControllingSceneCamera が true のときのみ、
+            // シーンカメラの変化をフリーカメラ（プレビュー視点）に反映する
+            if (sceneCamera.IsControllingSceneCamera)
+            {
+                freeCamera.CameraYaw.CopyFrom(sceneCamera.CameraYaw);
+                freeCamera.CameraPitch.CopyFrom(sceneCamera.CameraPitch);
+                freeCamera.CameraRoll.CopyFrom(sceneCamera.CameraRoll);
+                freeCamera.CameraDistance.CopyFrom(sceneCamera.CameraDistance);
+                freeCamera.CameraTarget = sceneCamera.CameraTarget;
+                renderer.ResetFreeCameraState();
+            }
+
+            TouchShape3DParameters();
+            ForceTimelineRefresh();
+        }
+
+        /// <summary>
+        /// ドラッグ操作でSceneCameraを直接変更した後に呼ぶ。
+        /// HasChangedチェックなしで即座に標準プレビューを更新する。
+        /// </summary>
+        public void ForceRefreshOutputPreview()
+        {
+            if (timeline == null) return;
+
+            int frame = timeline.CurrentFrame;
+            int length = timeline.Length;
+            int fps = timeline.VideoInfo.FPS;
+
+            SceneCamera.UpdateTimelineContext(frame, length, fps);
+
+            // トラッカーのスナップショットを強制更新（次のRefreshOutputPreviewIfCameraChangedで
+            // 誤検知が起きないよう現在値を記録）
+            sceneCameraTracker.HasChanged(SceneCamera, frame, length, fps);
 
             TouchShape3DParameters();
             ForceTimelineRefresh();
@@ -125,10 +188,16 @@ namespace YMM43D.Preview.ViewModels
                         timelineSourceAndDevices = sourceAndDevices;
                         disposer.Collect(sourceAndDevices);
                         SharedGraphics.Devices = sourceAndDevices.Devices;
+                        SceneCamera = SceneCamera.GetCamera(SharedGraphics.Devices);
                     }
                     catch (Exception)
                     {
+                        SceneCamera = SceneCamera.GetCamera(SharedGraphics.Devices);
                     }
+                }
+                else
+                {
+                    SceneCamera = SceneCamera.GetCamera(SharedGraphics.Devices);
                 }
                 
                 timeline.PropertyChanged += OnTimelinePropertyChanged;
@@ -218,11 +287,25 @@ namespace YMM43D.Preview.ViewModels
             if (timeline?.Items == null)
                 return;
 
-            foreach (var item in timeline.Items.OfType<ShapeItem>())
+            foreach (var item in timeline.Items)
             {
-                if (item.ShapeParameter is ICameraSync param)
+                if (item is ShapeItem shapeItem)
                 {
-                    param.TouchCameraSync();
+                    if (shapeItem.ShapeParameter is ICameraSync param)
+                    {
+                        param.TouchCameraSync();
+                    }
+                }
+
+                if (item is IVideoItem videoItem && videoItem.VideoEffects != null)
+                {
+                    foreach (var effect in videoItem.VideoEffects)
+                    {
+                        if (effect is ICameraSync param)
+                        {
+                            param.TouchCameraSync();
+                        }
+                    }
                 }
             }
         }

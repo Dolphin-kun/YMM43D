@@ -4,24 +4,20 @@ using System.Numerics;
 using Vortice;
 using Vortice.Direct2D1;
 using Vortice.Direct3D11;
+using Vortice.DXGI;
 using YukkuriMovieMaker.Project.Items;
+using YukkuriMovieMaker.Commons;
 
 namespace YMM43D.Commons
 {
     public static class D3D11Helper
     {
-        private static readonly Dictionary<IVideoItem, CachedItemTexture> textureCache = new();
-        private static readonly object cacheLock = new();
-
-        static D3D11Helper()
-        {
-            Rendering.SharedGraphics.RegisterForCleanup(new D3D11HelperCleanupAction(ClearCache));
-        }
-
-        public static ID3D11ShaderResourceView? GetOrCreateSrvFromD2DImage(
+        internal static ID3D11ShaderResourceView? GetOrCreateSrvFromD2DImage(
             ID3D11Device device, 
             ID2D1Image? image, 
             IVideoItem item,
+            IGraphicsDevicesAndContext? imageDevices,
+            Dictionary<IVideoItem, CachedItemTexture> textureCache,
             out float widthInDips,
             out float heightInDips,
             out bool ownsTexture)
@@ -37,7 +33,10 @@ namespace YMM43D.Commons
 
             try
             {
-                var d2dContext = Rendering.SharedGraphics.Devices?.DeviceContext;
+                var activeDevices = imageDevices ?? Rendering.SharedGraphics.Devices;
+                if (activeDevices == null) return null;
+
+                var d2dContext = activeDevices.DeviceContext;
                 RawRectF bounds = GetImageBounds(d2dContext, image, out widthInDips, out heightInDips);
 
                 if (image is ID2D1Bitmap1 b)
@@ -54,43 +53,37 @@ namespace YMM43D.Commons
                     }
                 }
 
-                if (Rendering.SharedGraphics.Devices != null)
+                if (d2dContext == null || d2dContext.NativePointer == IntPtr.Zero) return null;
+
+                int width = (int)Math.Max(1, Math.Ceiling(bounds.Right - bounds.Left));
+                int height = (int)Math.Max(1, Math.Ceiling(bounds.Bottom - bounds.Top));
+
+                lock (textureCache)
                 {
-                    var devices = Rendering.SharedGraphics.Devices;
-                    if (d2dContext == null || d2dContext.NativePointer == IntPtr.Zero) return null;
-
-                    int width = (int)System.Math.Max(1, System.Math.Ceiling(bounds.Right - bounds.Left));
-                    int height = (int)System.Math.Max(1, System.Math.Ceiling(bounds.Bottom - bounds.Top));
-
-                    lock (cacheLock)
+                    if (textureCache.TryGetValue(item, out var cached))
                     {
-                        if (textureCache.TryGetValue(item, out var cached))
+                        if (cached.Width != width || cached.Height != height || cached.SharedTexture.Device.NativePointer != activeDevices.D3D.Device.NativePointer)
                         {
-                            if (cached.Width != width || cached.Height != height)
-                            {
-                                cached.Dispose();
-                                textureCache.Remove(item);
-                                cached = null;
-                            }
+                            cached.Dispose();
+                            textureCache.Remove(item);
+                            cached = null;
                         }
-
-                        if (cached == null)
-                        {
-                            cached = new CachedItemTexture(device, devices.D3D.Device, d2dContext, width, height);
-                            textureCache[item] = cached;
-                        }
-
-                        cached.UpdateTexture(d2dContext, image, bounds, devices.D3D.Device);
-                        return cached.Srv;
                     }
+
+                    if (cached == null)
+                    {
+                        cached = new CachedItemTexture(device, activeDevices.D3D.Device, d2dContext, width, height);
+                        textureCache[item] = cached;
+                    }
+
+                    cached.UpdateTexture(d2dContext, image, bounds, activeDevices.D3D.Device);
+                    return cached.Srv;
                 }
             }
             catch (Exception)
             {
                 return null;
             }
-
-            return null;
         }
 
         public static ID3D11ShaderResourceView? CreateSrvFromD2DImage(ID3D11Device device, ID2D1Image? image)
@@ -119,8 +112,8 @@ namespace YMM43D.Commons
                     if (d2dContext == null || d2dContext.NativePointer == IntPtr.Zero) return null;
 
                     RawRectF bounds = GetImageBounds(d2dContext, image, out _, out _);
-                    int width = (int)System.Math.Max(1, System.Math.Ceiling(bounds.Right - bounds.Left));
-                    int height = (int)System.Math.Max(1, System.Math.Ceiling(bounds.Bottom - bounds.Top));
+                    int width = (int)Math.Max(1, Math.Ceiling(bounds.Right - bounds.Left));
+                    int height = (int)Math.Max(1, Math.Ceiling(bounds.Bottom - bounds.Top));
 
                     var desc = new Texture2DDescription
                     {
@@ -128,8 +121,8 @@ namespace YMM43D.Commons
                         Height = height,
                         MipLevels = 1,
                         ArraySize = 1,
-                        Format = Vortice.DXGI.Format.B8G8R8A8_UNorm,
-                        SampleDescription = new Vortice.DXGI.SampleDescription(1, 0),
+                        Format = Format.B8G8R8A8_UNorm,
+                        SampleDescription = new SampleDescription(1, 0),
                         Usage = ResourceUsage.Default,
                         BindFlags = BindFlags.RenderTarget | BindFlags.ShaderResource,
                         MiscFlags = ResourceOptionFlags.Shared
@@ -138,11 +131,11 @@ namespace YMM43D.Commons
                     var renderTexture = device.CreateTexture2D(desc);
                     var srv = device.CreateShaderResourceView(renderTexture);
 
-                    using var dxgiResource = renderTexture.QueryInterface<Vortice.DXGI.IDXGIResource>();
+                    using var dxgiResource = renderTexture.QueryInterface<IDXGIResource>();
                     nint sharedHandle = dxgiResource.SharedHandle;
 
                     using var sharedTexture = devices.D3D.Device.OpenSharedResource<ID3D11Texture2D>(sharedHandle);
-                    using var surface = sharedTexture.QueryInterface<Vortice.DXGI.IDXGISurface>();
+                    using var surface = sharedTexture.QueryInterface<IDXGISurface>();
                     using var tempBitmap = d2dContext.CreateBitmapFromDxgiSurface(surface);
 
                     UpdateSharedTexture(d2dContext, image, tempBitmap, bounds, devices.D3D.Device);
@@ -248,29 +241,5 @@ namespace YMM43D.Commons
             errorBlob?.Dispose();
             return blob!.AsBytes();
         }
-
-        public static void ClearCache()
-        {
-            lock (cacheLock)
-            {
-                foreach (var cache in textureCache.Values)
-                {
-                    cache.Dispose();
-                }
-                textureCache.Clear();
-            }
-        }
-
-    }
-
-    internal class D3D11HelperCleanupAction : IDisposable
-    {
-        private readonly Action action;
-        public D3D11HelperCleanupAction(Action action)
-        {
-            this.action = action;
-        }
-        public void Dispose() => action();
-
     }
 }

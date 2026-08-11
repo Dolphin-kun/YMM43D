@@ -1,7 +1,9 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
+using Vortice;
 using Vortice.Direct3D;
 using Vortice.Direct3D11;
+using Vortice.DXGI;
 using YMM43D.Rendering;
 using YMM43D.Rendering.Materials;
 using YMM43D.Commons;
@@ -45,7 +47,7 @@ namespace YMM43D.Preview
             context.PSSetShader(res.Material.PixelShader);
             context.IASetInputLayout(res.InputLayout);
             context.IASetVertexBuffer(0, res.Geometry.VertexBuffer, Marshal.SizeOf<Vertex>(), 0);
-            context.IASetIndexBuffer(res.Geometry.IndexBuffer, Vortice.DXGI.Format.R16_UInt, 0);
+            context.IASetIndexBuffer(res.Geometry.IndexBuffer, Format.R16_UInt, 0);
             context.IASetPrimitiveTopology(PrimitiveTopology.TriangleList);
             
             context.VSSetConstantBuffer(0, res.ConstantBuffer);

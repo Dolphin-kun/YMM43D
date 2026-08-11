@@ -14,7 +14,7 @@ using Math = System.Math;
 
 namespace Extrusion3D
 {
-    public class Extrusion3DProcessor : IVideoEffectProcessor, I3DTextureProvider, IDisposable
+    public class Extrusion3DProcessor : IVideoEffectProcessor, I3DTextureProvider, I3DProvider, IDisposable
     {
         private readonly Extrusion3DEffect effect;
         private readonly IGraphicsDevicesAndContext devices;
@@ -34,19 +34,23 @@ namespace Extrusion3D
             this.effect = effect;
             this.devices = devices;
             this.source = new Extrusion3DSource(effect, this);
-            effect.LastProcessor = this;
+            effect.LastProvider = this;
         }
 
         public ID2D1Image Output => input ?? throw new NullReferenceException(nameof(input) + " is null");
 
+        public EffectDescription? EffectDescription { get; private set; }
+        public bool RequiresMappedTexture => false;
+
         public DrawDescription Update(EffectDescription effectDescription)
         {
+            EffectDescription = effectDescription;
             return effectDescription.DrawDescription;
         }
 
         public void Draw(ID3D11Device device, ID3D11DeviceContext d3dDc, Matrix4x4 view, Matrix4x4 projection, DrawContext3D drawContext)
         {
-            source.Draw(device, d3dDc, view, projection, drawContext);
+            source.Draw3D(device, d3dDc, view, projection, drawContext);
         }
 
         public void SetInput(ID2D1Image? input)
@@ -156,9 +160,9 @@ namespace Extrusion3D
 
         public void Dispose()
         {
-            if (effect.LastProcessor == this)
+            if (effect.LastProvider == this)
             {
-                effect.LastProcessor = null;
+                effect.LastProvider = null;
             }
             ClearPreviewResources();
             mainTexture?.Dispose();

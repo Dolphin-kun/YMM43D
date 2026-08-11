@@ -59,7 +59,8 @@ namespace YMM43D.Rendering
                 Format = Format.D24_UNorm_S8_UInt,
                 SampleDescription = new SampleDescription(1, 0),
                 Usage = ResourceUsage.Default,
-                BindFlags = BindFlags.DepthStencil
+                BindFlags = BindFlags.DepthStencil,
+                MiscFlags = ResourceOptionFlags.None
             };
             DepthBuffer = d3d3D.CreateTexture2D(dsDesc);
             disposer.Collect(DepthBuffer);
@@ -69,6 +70,7 @@ namespace YMM43D.Rendering
             using var dxgiResource = RenderTarget.QueryInterface<IDXGIResource>();
             var sharedHandle = dxgiResource.SharedHandle;
             using var sharedTexture = devices.D3D.Device.OpenSharedResource<ID3D11Texture2D>(sharedHandle);
+
             using var surface = sharedTexture.QueryInterface<IDXGISurface>();
             Bitmap = devices.DeviceContext.CreateBitmapFromDxgiSurface(surface);
             disposer.Collect(Bitmap);

@@ -10,8 +10,20 @@ namespace YMM43D.Preview
     [Serializable]
     public class SceneCamera : Bindable
     {
-        public static SceneCamera Instance { get; } = new();
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<object, SceneCamera> registry = new();
+
+        public static SceneCamera GetCamera(object? key)
+        {
+            if (key == null)
+            {
+                return new SceneCamera(); // fallback
+            }
+
+            return registry.GetValue(key, _ => new SceneCamera());
+        }
+
         private Vector3 cameraTarget = Vector3.Zero;
+        private bool isControllingSceneCamera;
         private bool hasTimelineContext;
         private int timelineFrame;
         private int timelineLength = 1;
@@ -22,6 +34,7 @@ namespace YMM43D.Preview
         public Animation CameraRoll { get; } = new Animation(0, -3600, 3600);
         public Animation CameraDistance { get; } = new Animation(10, 0.1, 1000);
         public Vector3 CameraTarget { get => cameraTarget; set => Set(ref cameraTarget, value, nameof(CameraTarget)); }
+        public bool IsControllingSceneCamera { get => isControllingSceneCamera; set => Set(ref isControllingSceneCamera, value, nameof(IsControllingSceneCamera)); }
 
         public void Reset()
         {
@@ -99,7 +112,7 @@ namespace YMM43D.Preview
             var roll = (float)CameraRoll.GetValue(frame, length, fps);
             var dist = (float)CameraDistance.GetValue(frame, length, fps);
 
-            var rotation = Commons.Math.CreateCameraRotation(yaw, pitch, roll);
+            var rotation = Commons.Math3D.CreateCameraRotation(yaw, pitch, roll);
             var lookDir = Vector3.Transform(new Vector3(0, 0, -1), rotation);
             var cameraPos = CameraTarget - lookDir * dist;
             return Matrix4x4.CreateLookAt(cameraPos, CameraTarget, Vector3.Transform(Vector3.UnitY, rotation));
@@ -112,7 +125,7 @@ namespace YMM43D.Preview
             var roll = (float)CameraRoll.GetValue(frame, length, fps);
             var dist = (float)CameraDistance.GetValue(frame, length, fps);
 
-            var rotation = Commons.Math.CreateCameraRotation(yaw, pitch, roll);
+            var rotation = Commons.Math3D.CreateCameraRotation(yaw, pitch, roll);
             var lookDir = Vector3.Transform(new Vector3(0, 0, -1), rotation);
             return CameraTarget - lookDir * dist;
         }

@@ -20,7 +20,7 @@ namespace Shape3D
     /// Shape3DParameter 自体に I3DProvider を実装させることで、
     /// YMM4 のメインレンダラーが実行される前でも 3D プレビューにアイテムが表示されるようにする。
     /// </summary>
-    internal class Shape3DParameter : ShapeParameterBase, I3DProvider, ICameraSync
+    internal class Shape3DParameter : ShapeParameterBase, I3DProvider, ICameraSync, IDisposable
     {
         [Display(GroupName = "", Name = "サイズ")]
         [AnimationSlider("F1", "px", 0, 500)]
@@ -64,15 +64,18 @@ namespace Shape3D
         {
             cameraSyncVersion = (cameraSyncVersion + 1) % 1000000;
             CameraSync.CopyFrom(new Animation(cameraSyncVersion, -1000000, 1000000));
+            OnPropertyChanged(nameof(CameraSync));
         }
 
         // --- I3DProvider 実装 ---
+
+        public bool RequiresMappedTexture => false;
 
         public void Draw(ID3D11Device device, ID3D11DeviceContext context, Matrix4x4 view, Matrix4x4 projection, DrawContext3D drawContext)
         {
             var res = resourceCache.Get(device);
 
-            var localRotation = YMM43D.Commons.Math.CreateObjectRotation(
+            var localRotation = YMM43D.Commons.Math3D.CreateObjectRotation(
                 (float)RX.GetValue(drawContext.Frame, drawContext.Length, drawContext.FPS),
                 (float)RY.GetValue(drawContext.Frame, drawContext.Length, drawContext.FPS),
                 (float)RZ.GetValue(drawContext.Frame, drawContext.Length, drawContext.FPS)
@@ -80,11 +83,17 @@ namespace Shape3D
 
             var finalWorld = Matrix4x4.CreateScale(2.0f) * localRotation * drawContext.World;
             DrawCube(device, context, finalWorld * view, projection, drawContext.Opacity, drawContext.Blend,
-                     drawContext.IsInverted, drawContext.IsAlwaysOnTop, drawContext.IsZOrderEnabled, res);
+                     drawContext.IsAlwaysOnTop, res);
+        }
+
+        public void Dispose()
+        {
+            resourceCache.Dispose();
+            GC.SuppressFinalize(this);
         }
 
         private static void DrawCube(ID3D11Device device, ID3D11DeviceContext d3dDc, Matrix4x4 viewWorld, Matrix4x4 proj, float opacity,
-            YmmBlend blend, bool inverted, bool alwaysOnTop, bool zOrder, CubeResources res)
+            YmmBlend blend, bool alwaysOnTop, CubeResources res)
         {
             var wvpMatrix = viewWorld * proj;
             var data = new CubeResources.ConstantData

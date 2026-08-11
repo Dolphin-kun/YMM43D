@@ -1,4 +1,6 @@
+using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
+using System.Numerics;
 using System.Windows.Media;
 using Vortice.Direct3D11;
 using YMM43D.Rendering;
@@ -12,13 +14,8 @@ using YukkuriMovieMaker.Plugin.Effects;
 namespace Extrusion3D
 {
     [VideoEffect("立体化3D", ["3D"], [])]
-    public class Extrusion3DEffect : VideoEffectBase, I3DProvider, I3DTextureProvider
+    public class Extrusion3DEffect : VideoEffect3DBase
     {
-        public Extrusion3DEffect()
-        {
-            sharedSource = new Extrusion3DSource(this, null);
-        }
-
         public override string Label => "立体化3D";
 
         [Display(GroupName = "立体化3D", Name = "厚み", Description = "3D立体化の厚みを設定します")]
@@ -41,32 +38,20 @@ namespace Extrusion3D
         public Color SideColor { get => sideColor; set => Set(ref sideColor, value); }
         private Color sideColor = Colors.White;
 
-        public Extrusion3DProcessor? LastProcessor { get; internal set; }
-        private Extrusion3DSource? sharedSource;
+        protected override IEnumerable<IAnimatable> GetAnimatables() => [Thickness, Attenuation, .. GetBaseAnimatables()];
 
-        public bool RequiresMappedTexture => true;
+        public override IVideoEffectProcessor CreateVideoEffect(IGraphicsDevicesAndContext devices)
+        {
+            var processor = new Extrusion3DProcessor(this, devices);
+            LastProvider = processor;
+            return processor;
+        }
 
         public override IEnumerable<string> CreateExoVideoFilters(int keyFrameIndex, ExoOutputDescription exoOutputDescription)
         {
             return [];
         }
 
-        public override IVideoEffectProcessor CreateVideoEffect(IGraphicsDevicesAndContext devices)
-        {
-            return new Extrusion3DProcessor(this, devices);
-        }
-
-        protected override IEnumerable<IAnimatable> GetAnimatables() => [Thickness, Attenuation];
-
-        public void Draw(ID3D11Device device, ID3D11DeviceContext d3dDc, System.Numerics.Matrix4x4 view, System.Numerics.Matrix4x4 projection, DrawContext3D drawContext)
-        {
-            sharedSource?.Draw(device, d3dDc, view, projection, drawContext);
-        }
-
-        public ID3D11ShaderResourceView? GetTexture(ID3D11Device device)
-        {
-            return LastProcessor?.GetTexture(device);
-        }
-
+        public override bool RequiresMappedTexture => false;
     }
 }

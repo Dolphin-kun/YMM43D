@@ -1,3 +1,4 @@
+
 using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Windows;
@@ -16,6 +17,7 @@ namespace YMM43D.Preview
     {
         private readonly DeviceResourceCache<GridResources> gridCache;
         private readonly DeviceResourceCache<CameraResources> cameraCache;
+        private readonly VideoItem3DMapper propertyMapper;
 
         private Point lastMousePos;
         private bool isRotating;
@@ -31,6 +33,7 @@ namespace YMM43D.Preview
         {
             gridCache = new DeviceResourceCache<GridResources>(device => new GridResources(device));
             cameraCache = new DeviceResourceCache<CameraResources>(device => new CameraResources(device));
+            propertyMapper = new VideoItem3DMapper();
         }
 
         public void Draw(ID3D11Device device, ID3D11DeviceContext context, int width, int height, D3D11Host d3dHost, ViewModels.Preview3DViewModel vm)
@@ -51,7 +54,7 @@ namespace YMM43D.Preview
 
             EnsureFreeCameraState(vm, frame, length, fps);
 
-            var rotation = Commons.Math.CreateCameraRotation(freeYaw, freePitch, freeRoll);
+            var rotation = Commons.Math3D.CreateCameraRotation(freeYaw, freePitch, freeRoll);
             var lookDir = Vector3.Transform(new Vector3(0, 0, -1), rotation);
             var cameraPos = freeTarget - lookDir * freeDistance;
 
@@ -68,9 +71,32 @@ namespace YMM43D.Preview
                 int itemFrame = frame - previewItem.ItemFrame;
                 int itemLength = previewItem.ItemLength;
 
-                var drawContext = PropertyMapper.Map(previewItem.Item, itemFrame, itemLength, fps, device, vm.Scene, vm.TimelineSourceDescription, previewItem.Provider.RequiresMappedTexture);
+                var timelineContext = new TimelineContext(itemFrame, itemLength, fps);
+                var envContext = new RenderEnvironmentContext(device, vm.Scene, vm.TimelineSourceDescription, vm.SceneCamera);
+                var drawContext = propertyMapper.Map(previewItem.Item, timelineContext, envContext, previewItem.Provider, previewItem.Provider.RequiresMappedTexture);
 
-                previewItem.Provider.Draw(device, context, view, proj, drawContext);
+                // DrawDescription.Camera（YMM4のY-down Object Rotation行列）を
+                // Y-up座標系に変換してプレビューViewに加算合成する。
+                // Identity の場合はそのまま view を使い、既存の動作に影響しない。
+                var itemView = view;
+                var itemCam = drawContext.ItemCameraMatrix;
+                if (itemCam != Matrix4x4.Identity)
+                {
+                    // Y-down → Y-up: Y行・列の符号を反転（Change of Basis: S*M*S, S=diag(1,-1,1,1)）
+                    var converted = itemCam;
+                    converted.M12 = -converted.M12;
+                    converted.M21 = -converted.M21;
+                    converted.M23 = -converted.M23;
+                    converted.M32 = -converted.M32;
+                    // ピクセル単位 → プレビュー空間スケール（1/100）
+                    converted.M41 /= 100.0f;
+                    converted.M42 /= 100.0f;
+                    converted.M43 /= 100.0f;
+                    // アイテムのカメラ変換を View の前に適用（View空間でオフセット）
+                    itemView = converted * view;
+                }
+
+                previewItem.Provider.Draw(device, context, itemView, proj, drawContext);
                 if (drawContext.OwnsTexture)
                     drawContext.Texture?.Dispose();
             }
@@ -97,7 +123,10 @@ namespace YMM43D.Preview
                 case D3D11Host.MouseEventKind.RightUp:
                     isRotating = false;
                     isPanning = false;
-                    CommitFreeCameraState(vm);
+                    if (vm.SceneCamera.IsControllingSceneCamera)
+                        UpdateSceneCameraFromFree(vm);
+                    else
+                        CommitFreeCameraState(vm);
                     break;
                 case D3D11Host.MouseEventKind.Move:
                     var diff = pos - lastMousePos;
@@ -106,19 +135,26 @@ namespace YMM43D.Preview
                     {
                         freeYaw -= (float)diff.X * 0.5f;
                         freePitch = Math.Clamp(freePitch - (float)diff.Y * 0.5f, -89.9f, 89.9f);
+                        if (vm.SceneCamera.IsControllingSceneCamera)
+                            UpdateSceneCameraFromFree(vm);
                     }
                     else if (isPanning)
                     {
-                        var rotation = Commons.Math.CreateCameraRotation(freeYaw, freePitch, freeRoll);
+                        var rotation = Commons.Math3D.CreateCameraRotation(freeYaw, freePitch, freeRoll);
                         var right = Vector3.Transform(Vector3.UnitX, rotation);
                         var up = Vector3.Transform(Vector3.UnitY, rotation);
                         freeTarget += right * (float)-diff.X * freeDistance * 0.0015f;
                         freeTarget += up * (float)diff.Y * freeDistance * 0.0015f;
+                        if (vm.SceneCamera.IsControllingSceneCamera)
+                            UpdateSceneCameraFromFree(vm);
                     }
                     break;
                 case D3D11Host.MouseEventKind.Wheel:
                     freeDistance = Math.Max(0.1f, freeDistance - delta * 0.005f);
-                    CommitFreeCameraState(vm);
+                    if (vm.SceneCamera.IsControllingSceneCamera)
+                        UpdateSceneCameraFromFree(vm);
+                    else
+                        CommitFreeCameraState(vm);
                     break;
             }
         }
@@ -156,7 +192,7 @@ namespace YMM43D.Preview
         {
             var res = cameraCache.Get(device);
 
-            var rotation = Commons.Math.CreateCameraRotation(
+            var rotation = Commons.Math3D.CreateCameraRotation(
                 (float)sceneCamera.CameraYaw.GetValue(frame, length, fps),
                 (float)sceneCamera.CameraPitch.GetValue(frame, length, fps),
                 (float)sceneCamera.CameraRoll.GetValue(frame, length, fps)
@@ -207,6 +243,30 @@ namespace YMM43D.Preview
             camera.CameraTarget = freeTarget;
         }
 
+        private void UpdateSceneCameraFromFree(ViewModels.Preview3DViewModel vm)
+        {
+            if (!hasFreeCameraState)
+                return;
+
+            var camera = vm.SceneCamera;
+            camera.CameraYaw.CopyFrom(new Animation(freeYaw, -3600, 3600));
+            camera.CameraPitch.CopyFrom(new Animation(freePitch, -90, 90));
+            camera.CameraRoll.CopyFrom(new Animation(freeRoll, -3600, 3600));
+            camera.CameraDistance.CopyFrom(new Animation(freeDistance, 0.1, 1000));
+            camera.CameraTarget = freeTarget;
+
+            var freeCam = vm.FreeCamera;
+            freeCam.CameraYaw.CopyFrom(camera.CameraYaw);
+            freeCam.CameraPitch.CopyFrom(camera.CameraPitch);
+            freeCam.CameraRoll.CopyFrom(camera.CameraRoll);
+            freeCam.CameraDistance.CopyFrom(camera.CameraDistance);
+            freeCam.CameraTarget = camera.CameraTarget;
+
+            // ドラッグ操作でSceneCameraを直接設定しているため、
+            // HasChangedチェックなしで即座に標準プレビューを更新する
+            vm.ForceRefreshOutputPreview();
+        }
+
         public void ResetFreeCameraState()
         {
             hasFreeCameraState = false;
@@ -216,8 +276,7 @@ namespace YMM43D.Preview
         {
             gridCache.Dispose();
             cameraCache.Dispose();
-            D3D11Helper.ClearCache();
-            PropertyMapper.ClearCache();
+            propertyMapper.Dispose();
 
             GC.SuppressFinalize(this);
         }

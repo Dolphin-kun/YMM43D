@@ -56,13 +56,13 @@ namespace Shape3D
                     if (this.size != size) { surface.Recreate(devices, renderSize, renderSize); this.size = size; }
                     if (surface.RenderTargetView == null) return;
 
-                    var rotation = YMM43D.Commons.Math.CreateObjectRotation(
+                    var rotation = YMM43D.Commons.Math3D.CreateObjectRotation(
                         (float)parameter.RX.GetValue(frame, length, fps),
                         (float)parameter.RY.GetValue(frame, length, fps),
                         (float)parameter.RZ.GetValue(frame, length, fps)
                     );
                     
-                    var sceneCamera = YMM43D.Preview.SceneCamera.Instance;
+                    var sceneCamera = YMM43D.Preview.SceneCamera.GetCamera(devices);
                     Matrix4x4 view = sceneCamera.GetViewMatrix(timelineItemSourceDescription);
                     Matrix4x4 proj = YMM43D.Preview.SceneCamera.GetProjectionMatrix(1.0f);
 
@@ -78,7 +78,7 @@ namespace Shape3D
                         
                         d3dDc.RSSetViewport(new Viewport(0, 0, renderSize, renderSize));
                         
-                        DrawInternal(d3d3D, d3dDc, Matrix4x4.CreateScale(2.0f) * rotation * view, proj, 1.0f, YukkuriMovieMaker.Project.Blend.Normal, false, false, true, res);
+                        DrawInternal(d3d3D, d3dDc, Matrix4x4.CreateScale(2.0f) * rotation * view, proj, 1.0f, YukkuriMovieMaker.Project.Blend.Normal, false, res);
                     }
                     finally
                     {
@@ -117,7 +117,7 @@ namespace Shape3D
         {
             var res = resourceCache.Get(device);
 
-            var localRotation = YMM43D.Commons.Math.CreateObjectRotation(
+            var localRotation = YMM43D.Commons.Math3D.CreateObjectRotation(
                 (float)parameter.RX.GetValue(drawContext.Frame, drawContext.Length, drawContext.FPS),
                 (float)parameter.RY.GetValue(drawContext.Frame, drawContext.Length, drawContext.FPS),
                 (float)parameter.RZ.GetValue(drawContext.Frame, drawContext.Length, drawContext.FPS)
@@ -125,10 +125,10 @@ namespace Shape3D
             
             var finalWorld = Matrix4x4.CreateScale(2.0f) * localRotation * drawContext.World;
             
-            DrawInternal(device, d3dDc, finalWorld * view, projection, drawContext.Opacity, drawContext.Blend, drawContext.IsInverted, drawContext.IsAlwaysOnTop, drawContext.IsZOrderEnabled, res);
+            DrawInternal(device, d3dDc, finalWorld * view, projection, drawContext.Opacity, drawContext.Blend, drawContext.IsAlwaysOnTop, res);
         }
 
-        private static void DrawInternal(ID3D11Device device, ID3D11DeviceContext d3dDc, Matrix4x4 viewWorld, Matrix4x4 projection, float opacity, YukkuriMovieMaker.Project.Blend blend, bool inverted, bool alwaysOnTop, bool zOrder, CubeResources res)
+        private static void DrawInternal(ID3D11Device device, ID3D11DeviceContext d3dDc, Matrix4x4 viewWorld, Matrix4x4 projection, float opacity, YukkuriMovieMaker.Project.Blend blend, bool alwaysOnTop, CubeResources res)
         {
             var wvpMatrix = viewWorld * projection;
             var data = new CubeResources.ConstantData

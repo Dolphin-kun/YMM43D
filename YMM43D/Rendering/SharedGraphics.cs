@@ -15,8 +15,16 @@ namespace YMM43D.Rendering
 
         private static readonly Lock syncLock = new();
         private static DisposeCollector? disposer;
+        private static readonly System.Collections.Generic.List<WeakReference<YMM43D.Commons.IDeviceResourceCache>> caches = new();
 
-
+        public static void RegisterCache(YMM43D.Commons.IDeviceResourceCache cache)
+        {
+            lock (syncLock)
+            {
+                caches.RemoveAll(r => !r.TryGetTarget(out _));
+                caches.Add(new WeakReference<YMM43D.Commons.IDeviceResourceCache>(cache));
+            }
+        }
 
         public static void RegisterForCleanup(IDisposable resource)
         {
@@ -87,6 +95,18 @@ namespace YMM43D.Rendering
 
         private static void DisposeIndependentDeviceCore()
         {
+            lock (syncLock)
+            {
+                foreach (var weakRef in caches)
+                {
+                    if (weakRef.TryGetTarget(out var cache))
+                    {
+                        cache.Clear();
+                    }
+                }
+                caches.Clear();
+            }
+
             disposer?.Dispose();
             disposer = null;
             independentContext = null;
