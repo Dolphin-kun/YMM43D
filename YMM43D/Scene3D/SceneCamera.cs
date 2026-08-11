@@ -129,7 +129,8 @@ namespace YMM43D.Scene3D
         /// </summary>
         public static float GetFieldOfViewFor(float targetHeight, float screenHeight)
         {
-            if (screenHeight <= 0)
+            // 画角 0 は射影行列を作れない。描画先の大きさが取れない場合は既定値に戻す。
+            if (targetHeight <= 0 || screenHeight <= 0)
                 return DefaultFieldOfView;
 
             return 2f * MathF.Atan(MathF.Tan(DefaultFieldOfView / 2f) * targetHeight / screenHeight);

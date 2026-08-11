@@ -74,6 +74,13 @@ namespace YMM43D.Plugin
             var view = camera.GetViewMatrix(timelineTime);
 
             var renderSize = (int)GetRenderSize(camera, timelineTime, itemTime, description);
+            if (renderSize <= 0)
+            {
+                // 大きさが 0 のときは何も描かない。Output を未設定のままにすると
+                // YMM4 が結果を受け取る際に例外になるため、空の画像を返す。
+                output = renderer.RenderEmpty(Devices);
+                return;
+            }
 
             // 描画先は画面全体より小さいので、そのぶん画角を狭めて縮尺を合わせる。
             // こうしないと、描画先を大きくしただけで図形まで大きく見えてしまう。

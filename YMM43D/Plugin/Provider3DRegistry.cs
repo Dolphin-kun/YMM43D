@@ -17,6 +17,23 @@ namespace YMM43D.Plugin
     {
         private static readonly ConditionalWeakTable<object, I3DProvider> registry = [];
 
+        [ThreadStatic]
+        private static int suppressionDepth;
+
+        /// <summary>
+        /// この場を抜けるまで、<see cref="Register"/> の呼び出しを無視します。
+        /// </summary>
+        /// <remarks>
+        /// 3Dプレビューは、アイテムの変換行列や画像を得るために YMM4 の描画元を
+        /// もう一組作ることがあります。その過程で生まれるプロバイダーは一時的なもので、
+        /// 本来のプロバイダーを置き換えてしまってはいけません。
+        /// <para>
+        /// 置き換わると、登録が差し替わる一瞬だけ <see cref="Find"/> が <c>null</c> を
+        /// 返し、アイテムが既定の描画方法（板にテクスチャを貼る）で表示されてしまいます。
+        /// </para>
+        /// </remarks>
+        public static IDisposable SuppressRegistration() => new Suppression();
+
         /// <summary>
         /// パラメータに対応するプロバイダーを登録します。既存の登録は上書きされます。
         /// </summary>
@@ -25,8 +42,27 @@ namespace YMM43D.Plugin
             ArgumentNullException.ThrowIfNull(parameter);
             ArgumentNullException.ThrowIfNull(provider);
 
+            if (suppressionDepth > 0)
+                return;
+
             registry.Remove(parameter);
             registry.Add(parameter, provider);
+        }
+
+        private sealed class Suppression : IDisposable
+        {
+            private bool disposed;
+
+            public Suppression() => suppressionDepth++;
+
+            public void Dispose()
+            {
+                if (disposed)
+                    return;
+
+                disposed = true;
+                suppressionDepth--;
+            }
         }
 
         /// <summary>登録を解除します。</summary>

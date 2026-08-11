@@ -22,6 +22,16 @@ namespace YMM43D.Integration
         private ID2D1CommandList? commandList;
 
         /// <summary>
+        /// 何も描かれていない画像を返します。
+        /// </summary>
+        /// <remarks>
+        /// 描画するものが無い場合に使います。<c>null</c> を返してしまうと、
+        /// YMM4 が結果を受け取る際に例外になります。
+        /// </remarks>
+        public ID2D1Image RenderEmpty(IGraphicsDevicesAndContext ymmDevices)
+            => BuildCommandList(ymmDevices, null, Vector2.Zero);
+
+        /// <summary>
         /// 3Dシーンを描画し、その結果を含むコマンドリストを返します。
         /// </summary>
         /// <param name="ymmDevices">YMM4 のグラフィックスデバイス。</param>

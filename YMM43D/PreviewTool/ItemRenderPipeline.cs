@@ -127,7 +127,11 @@ namespace YMM43D.PreviewTool
                 {
                     if (!sources.TryGetValue(item, out source))
                     {
-                        source = item.CreateVideoSource(environment.Devices, scene);
+                        // ここで作る描画元はプレビュー専用の写しなので、アイテムが
+                        // 本来持っているプロバイダーの登録を奪わないようにする。
+                        using (Provider3DRegistry.SuppressRegistration())
+                            source = item.CreateVideoSource(environment.Devices, scene);
+
                         if (source is null)
                             return null;
                         sources[item] = source;
