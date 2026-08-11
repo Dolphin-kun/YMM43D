@@ -25,6 +25,7 @@ namespace YMM43D.Integration
     {
         private readonly Lock gate = new();
         private readonly Dictionary<object, SharedItemTexture> cache = [];
+        private readonly PrivateD2DContext privateContext = new();
 
         /// <summary>
         /// 画像を <paramref name="targetDevice"/> 上のテクスチャに焼き込み、その参照を返します。
@@ -33,23 +34,25 @@ namespace YMM43D.Integration
         /// <param name="ymmDevices">画像を保持している YMM4 のデバイス。</param>
         /// <param name="image">変換元の画像。</param>
         /// <param name="key">キャッシュの鍵。通常はアイテムのインスタンス。</param>
-        /// <param name="sizeInDips">画像の論理サイズ。</param>
+        /// <param name="bounds">
+        /// 画像の描画範囲。大きさだけでなく、原点からのずれを知るのにも使えます。
+        /// </param>
         /// <returns>テクスチャの参照。変換できなかった場合は <c>null</c>。</returns>
         public ID3D11ShaderResourceView? GetTexture(
             ID3D11Device targetDevice,
             IGraphicsDevicesAndContext ymmDevices,
             ID2D1Image image,
             object key,
-            out Vector2 sizeInDips)
+            out RawRectF bounds)
         {
-            sizeInDips = Vector2.One;
+            bounds = new RawRectF(0, 0, 1, 1);
 
-            var deviceContext = ymmDevices.DeviceContext;
-            if (deviceContext is null || deviceContext.NativePointer == nint.Zero)
+            // 描画先を差し替えるので、本体のコンテキストは使えない。
+            var deviceContext = privateContext.For(ymmDevices);
+            if (deviceContext.NativePointer == nint.Zero)
                 return null;
 
-            var bounds = D2DImageBounds.Get(deviceContext, image);
-            sizeInDips = new Vector2(bounds.Right - bounds.Left, bounds.Bottom - bounds.Top);
+            bounds = D2DImageBounds.Get(deviceContext, image);
             var (width, height) = D2DImageBounds.ToPixelSize(bounds);
 
             lock (gate)
@@ -61,8 +64,8 @@ namespace YMM43D.Integration
                     texture = null;
                 }
 
-                texture ??= cache[key] = new SharedItemTexture(targetDevice, ymmDevices, width, height);
-                texture.Update(ymmDevices, image, bounds);
+                texture ??= cache[key] = new SharedItemTexture(targetDevice, ymmDevices, deviceContext, width, height);
+                texture.Update(ymmDevices, deviceContext, image, bounds);
                 return texture.ShaderResourceView;
             }
         }
@@ -78,7 +81,11 @@ namespace YMM43D.Integration
             }
         }
 
-        public void Dispose() => Clear();
+        public void Dispose()
+        {
+            Clear();
+            privateContext.Dispose();
+        }
 
         /// <summary>
         /// 3D描画側と YMM4 側の両方から参照できる、1枚分のテクスチャ。
@@ -93,7 +100,12 @@ namespace YMM43D.Integration
 
             public ID3D11ShaderResourceView ShaderResourceView { get; }
 
-            public SharedItemTexture(ID3D11Device targetDevice, IGraphicsDevicesAndContext ymmDevices, int width, int height)
+            public SharedItemTexture(
+                ID3D11Device targetDevice,
+                IGraphicsDevicesAndContext ymmDevices,
+                ID2D1DeviceContext deviceContext,
+                int width,
+                int height)
             {
                 this.width = width;
                 this.height = height;
@@ -117,7 +129,7 @@ namespace YMM43D.Integration
                 using var dxgiResource = texture.QueryInterface<IDXGIResource>();
                 var shared = Collect(ymmDevices.D3D.Device.OpenSharedResource<ID3D11Texture2D>(dxgiResource.SharedHandle));
                 using var surface = shared.QueryInterface<IDXGISurface>();
-                targetBitmap = Collect(ymmDevices.DeviceContext.CreateBitmapFromDxgiSurface(surface));
+                targetBitmap = Collect(deviceContext.CreateBitmapFromDxgiSurface(surface));
             }
 
             /// <summary>
@@ -131,10 +143,12 @@ namespace YMM43D.Integration
             /// <summary>
             /// 最新の画像内容を焼き込みます。
             /// </summary>
-            public void Update(IGraphicsDevicesAndContext ymmDevices, ID2D1Image image, in RawRectF bounds)
+            public void Update(
+                IGraphicsDevicesAndContext ymmDevices,
+                ID2D1DeviceContext deviceContext,
+                ID2D1Image image,
+                in RawRectF bounds)
             {
-                var deviceContext = ymmDevices.DeviceContext;
-
                 lock (deviceContext)
                 {
                     var previousTarget = deviceContext.Target;

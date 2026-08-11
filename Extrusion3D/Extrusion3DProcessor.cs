@@ -72,11 +72,10 @@ namespace Extrusion3D
             if (input is null)
                 return null;
 
-            var texture = textureBridge.GetTexture(device, devices, input, this, out var sizeInDips);
+            var texture = textureBridge.GetTexture(device, devices, input, this, out var bounds);
             if (texture is not null)
             {
-                inputSizeInDips = sizeInDips;
-                var bounds = D2DImageBounds.Get(devices.DeviceContext, input);
+                inputSizeInDips = new Vector2(bounds.Right - bounds.Left, bounds.Bottom - bounds.Top);
                 inputOffset = new Vector2(bounds.Left, bounds.Top);
             }
 

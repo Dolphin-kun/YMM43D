@@ -19,6 +19,7 @@ namespace YMM43D.Integration
     public sealed class Renderer3DTo2D : IDisposable
     {
         private readonly RenderSurface3D surface = new();
+        private readonly PrivateD2DContext privateContext = new();
         private ID2D1CommandList? commandList;
 
         /// <summary>
@@ -59,10 +60,11 @@ namespace YMM43D.Integration
 
             using var lease = GraphicsDevicePool.Acquire();
             var context = lease.Context;
+            var d2dContext = privateContext.For(ymmDevices);
 
             lock (lease.Device)
             {
-                surface.Resize(ymmDevices, width, height);
+                surface.Resize(ymmDevices, d2dContext, width, height);
                 if (surface.RenderTargetView is null)
                     return BuildCommandList(ymmDevices, null, offset);
 
@@ -108,9 +110,11 @@ namespace YMM43D.Integration
 
         private ID2D1Image BuildCommandList(IGraphicsDevicesAndContext ymmDevices, ID2D1Bitmap1? bitmap, Vector2 offset)
         {
-            var deviceContext = ymmDevices.DeviceContext;
+            // 本体のコンテキストではなく専用のものを使う。描画先や描画中状態を
+            // 書き換えるため、共用すると本体側の描画を壊してしまう。
+            var deviceContext = privateContext.For(ymmDevices);
 
-            lock (ymmDevices)
+            lock (deviceContext)
             {
                 commandList?.Dispose();
                 commandList = deviceContext.CreateCommandList();
@@ -133,6 +137,7 @@ namespace YMM43D.Integration
             surface.Dispose();
             commandList?.Dispose();
             commandList = null;
+            privateContext.Dispose();
         }
     }
 }

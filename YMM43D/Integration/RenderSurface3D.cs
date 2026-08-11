@@ -33,7 +33,11 @@ namespace YMM43D.Integration
         /// <summary>
         /// 指定サイズで確保し直します。既に同じサイズなら何もしません。
         /// </summary>
-        public void Resize(IGraphicsDevicesAndContext ymmDevices, int width, int height)
+        /// <param name="deviceContext">
+        /// 共有テクスチャを YMM4 側のビットマップとして開くのに使うコンテキスト。
+        /// 本体のものではなく、プラグイン専用のものを渡してください。
+        /// </param>
+        public void Resize(IGraphicsDevicesAndContext ymmDevices, ID2D1DeviceContext deviceContext, int width, int height)
         {
             if (Size == (width, height) && RenderTargetView is not null)
                 return;
@@ -77,7 +81,7 @@ namespace YMM43D.Integration
             using var dxgiResource = renderTarget.QueryInterface<IDXGIResource>();
             using var sharedTexture = ymmDevices.D3D.Device.OpenSharedResource<ID3D11Texture2D>(dxgiResource.SharedHandle);
             using var surface = sharedTexture.QueryInterface<IDXGISurface>();
-            Bitmap = Collect(ymmDevices.DeviceContext.CreateBitmapFromDxgiSurface(surface));
+            Bitmap = Collect(deviceContext.CreateBitmapFromDxgiSurface(surface));
 
             Size = (width, height);
         }

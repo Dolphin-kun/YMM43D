@@ -46,10 +46,10 @@ namespace YMM43D.PreviewTool
             if (texture is null && needsImage && rendered.Image is { } image)
             {
                 texture = textureBridge.GetTexture(
-                    environment.Device, environment.Devices, image, item, out var sizeInDips);
+                    environment.Device, environment.Devices, image, item, out var bounds);
 
                 if (texture is not null)
-                    imageSize = sizeInDips;
+                    imageSize = new Vector2(bounds.Right - bounds.Left, bounds.Bottom - bounds.Top);
             }
 
             return new DrawContext3D
