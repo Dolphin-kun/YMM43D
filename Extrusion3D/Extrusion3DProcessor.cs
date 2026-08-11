@@ -73,18 +73,17 @@ namespace Extrusion3D
         /// <summary>厚み（ワールド単位）。</summary>
         private float GetThickness(in FrameContext time) => effect.Thickness.GetFloat(time) / 100f;
 
-        protected override float GetWorldExtent(in FrameContext itemTime)
+        protected override WorldBounds GetLocalBounds(in FrameContext itemTime)
         {
-            if (!TryGetSize(out var size, out _))
-                return 0;
+            var thickness = GetThickness(itemTime);
+            if (thickness <= 0)
+                return WorldBounds.Empty;
 
-            // 箱は幅×高さ×厚みの直方体。どの向きに回しても収まるよう対角線を返す。
-            var extent = new Vector3(
-                WorldScale.ToWorld(size.X),
-                WorldScale.ToWorld(size.Y),
-                GetThickness(itemTime));
-
-            return extent.Length();
+            // ワールド行列が入力画像の実寸を掛けてくれるので、ここでは 1×1 の板として
+            // 答える。厚みだけは自分で掛けているぶん、そのまま奥行きになる。
+            return new WorldBounds(
+                new Vector3(-0.5f, -0.5f, 0f),
+                new Vector3(0.5f, 0.5f, thickness));
         }
 
         public override void Dispose()

@@ -53,7 +53,8 @@
 	</ItemGroup>
 
 	<!--ビルド後にYMM4のプラグインフォルダにdllをコピーする-->
+	<!--YMM4が起動中はdllを掴まれていてコピーできない。ビルド自体は成功させ、警告に留める。-->
 	<Target Name="PostBuild" AfterTargets="PostBuildEvent">
-		<Exec Command="copy &quot;$(TargetPath)&quot; &quot;$(YMM4DirPath)user\plugin\YMM43D\&quot;" />
+		<Exec Command="copy &quot;$(TargetPath)&quot; &quot;$(YMM4DirPath)user\plugin\YMM43D\&quot;" ContinueOnError="WarnAndContinue" />
 	</Target>
 </Project>

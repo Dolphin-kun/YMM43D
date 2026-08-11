@@ -50,13 +50,13 @@ namespace YMM43D.Plugin
         public abstract void Draw(in Render3DContext render, DrawContext3D item);
 
         /// <summary>
-        /// この図形がワールド空間で占める差し渡しの大きさ（単位）を返します。
+        /// この図形がワールド空間で占める範囲を返します。
         /// </summary>
         /// <remarks>
-        /// 出力画像の大きさを決めるのに使います。どの向きに回転しても収まるよう、
-        /// 外接球の直径にあたる値を返してください。0 以下を返すと何も描画しません。
+        /// 出力画像の大きさを決めるのに使います。どの向きに回転しても収まる範囲を
+        /// 返してください。大きさが無い範囲を返すと何も描画しません。
         /// </remarks>
-        protected abstract float GetWorldExtent(in FrameContext itemTime);
+        protected abstract WorldBounds GetWorldBounds(in FrameContext itemTime);
 
         /// <inheritdoc/>
         public void Update(TimelineItemSourceDescription description)
@@ -68,7 +68,7 @@ namespace YMM43D.Plugin
             output = renderer.Render(
                 Devices,
                 description,
-                GetWorldExtent(itemTime),
+                GetWorldBounds(itemTime),
                 Matrix4x4.Identity,
                 Draw);
         }

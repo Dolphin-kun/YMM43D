@@ -273,10 +273,11 @@ YMM43D.PreviewTool   3Dプレビューのツールウィンドウ。</pre>
   <td>3D 空間に形状を描きます。プレビューと出力の両方から呼ばれます。</td>
 </tr>
 <tr>
-  <td><code>GetWorldExtent(in FrameContext)</code></td>
+  <td><code>GetWorldBounds(in FrameContext)</code></td>
   <td>
-    形状がワールド空間で占める差し渡しの大きさを返します。出力画像の大きさを決めるのに使います。
-    どの向きに回転しても収まるよう、外接球の直径にあたる値を返してください。0 以下を返すと何も描画しません。
+    形状がワールド空間で占める範囲（<code>WorldBounds</code>）を返します。出力画像の大きさを決めるのに使います。
+    <code>Draw</code> の中で回転を掛ける場合は、どの向きに回っても収まる範囲を返してください。
+    大きさが無い範囲を返すと何も描画しません。
   </td>
 </tr>
 </table>
@@ -286,8 +287,6 @@ YMM43D.PreviewTool   3Dプレビューのツールウィンドウ。</pre>
 <div class="wide">
 <pre>internal sealed class CubeSource : Shape3DSourceBase
 {
-    private const float PixelsPerUnit = 100f;
-
     // 一辺 1 の立方体の外接球の直径
     private static readonly float DiagonalRatio = MathF.Sqrt(3f);
 
@@ -323,10 +322,11 @@ YMM43D.PreviewTool   3Dプレビューのツールウィンドウ。</pre>
     }
 
     private float GetEdgeLength(in FrameContext itemTime)
-        =&gt; parameter.Size.GetFloat(itemTime) / PixelsPerUnit;
+        =&gt; WorldScale.ToWorld(parameter.Size.GetFloat(itemTime));
 
-    protected override float GetWorldExtent(in FrameContext itemTime)
-        =&gt; GetEdgeLength(itemTime) * DiagonalRatio;
+    // 回転は Draw の中で掛けるので、どの向きに回しても収まる範囲を返す
+    protected override WorldBounds GetWorldBounds(in FrameContext itemTime)
+        =&gt; WorldBounds.FromCube(GetEdgeLength(itemTime) * DiagonalRatio);
 
     public override void Dispose()
     {
@@ -604,6 +604,8 @@ var pipeline = pipelines.Get(render.Device);</pre>
 <tr><th>型</th><th>種別</th><th>説明</th></tr>
 <tr><td><code>SceneCamera</code></td><td>class</td><td>シーンを撮影する軌道カメラ。角度・距離はキーフレーム可能</td></tr>
 <tr><td><code>CameraPose</code></td><td>struct</td><td>ある時点でのカメラの位置・注視点・上方向</td></tr>
+<tr><td><code>WorldBounds</code></td><td>struct</td><td>描くものがワールド空間で占める範囲。出力画像の大きさを決めるのに使う</td></tr>
+<tr><td><code>WorldScale</code></td><td>static class</td><td>ピクセルとワールド単位の換算（1 単位 = 100px）</td></tr>
 <tr><td><code>DrawContext3D</code></td><td>class</td><td>1 つのアイテムを描画するための情報</td></tr>
 <tr><td><code>FrameContext</code></td><td>struct</td><td>フレーム位置・長さ・FPS の組</td></tr>
 <tr><td><code>AnimationExtensions</code></td><td>static class</td><td><code>Animation</code> を <code>FrameContext</code> で評価する</td></tr>

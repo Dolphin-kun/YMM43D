@@ -73,14 +73,14 @@ namespace YMM43D.Plugin
         public abstract void Draw(in Render3DContext render, DrawContext3D item);
 
         /// <summary>
-        /// 描くものがワールド空間で占める差し渡しの大きさ（単位）を返します。
+        /// 描くものが占める範囲を返します。<see cref="Update"/> が組み立てる
+        /// ワールド行列を掛ける前の座標系で答えてください。
         /// </summary>
         /// <remarks>
-        /// 出力画像の大きさを決めるのに使います。どの向きに回転しても収まるよう、
-        /// 外接球の直径にあたる値を返してください。0 以下を返すと何も描画しません。
-        /// 入力画像の実寸は <see cref="TryGetSize"/> で得られます。
+        /// 出力画像の大きさを決めるのに使います。大きさが無い範囲を返すと
+        /// 何も描画しません。入力画像の実寸は <see cref="TryGetSize"/> で得られます。
         /// </remarks>
-        protected abstract float GetWorldExtent(in FrameContext itemTime);
+        protected abstract WorldBounds GetLocalBounds(in FrameContext itemTime);
 
         /// <inheritdoc/>
         public DrawDescription Update(EffectDescription description)
@@ -105,7 +105,7 @@ namespace YMM43D.Plugin
                 ? WorldScale.CreateSizeMatrix(size, offset + size / 2f)
                 : Matrix4x4.Identity;
 
-            output = renderer.Render(Devices, description, GetWorldExtent(itemTime), world, Draw);
+            output = renderer.Render(Devices, description, GetLocalBounds(itemTime), world, Draw);
 
             return description.DrawDescription;
         }

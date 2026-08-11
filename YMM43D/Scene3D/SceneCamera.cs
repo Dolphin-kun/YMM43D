@@ -111,6 +111,24 @@ namespace YMM43D.Scene3D
             => Matrix4x4.CreatePerspectiveFieldOfView(verticalFieldOfView, aspectRatio, NearPlane, FarPlane);
 
         /// <summary>
+        /// 視線の正面から外れた範囲を写す射影行列を作ります。
+        /// </summary>
+        /// <param name="minTangent">範囲の左下を、視線からの傾き（<c>x / -z</c>）で表したもの。</param>
+        /// <param name="maxTangent">範囲の右上を、同じく傾きで表したもの。</param>
+        /// <remarks>
+        /// 画面の一部だけを、元の縮尺のまま切り出して描くために使います。中心を
+        /// ずらせるので、対象が視線の正面から外れていても無駄なく収められます。
+        /// </remarks>
+        public static Matrix4x4 GetProjectionMatrix(Vector2 minTangent, Vector2 maxTangent)
+            => Matrix4x4.CreatePerspectiveOffCenter(
+                minTangent.X * NearPlane,
+                maxTangent.X * NearPlane,
+                minTangent.Y * NearPlane,
+                maxTangent.Y * NearPlane,
+                NearPlane,
+                FarPlane);
+
+        /// <summary>
         /// 画面全体に描いたときの、ワールド1単位あたりのピクセル数を求めます。
         /// </summary>
         /// <param name="distance">カメラから対象までの距離。</param>
@@ -120,8 +138,19 @@ namespace YMM43D.Scene3D
             if (distance <= 0)
                 return 0;
 
-            return screenHeight / (2f * distance * MathF.Tan(DefaultFieldOfView / 2f));
+            return GetPixelsPerTangent(screenHeight) / distance;
         }
+
+        /// <summary>
+        /// 視線からの傾き（正接）1 あたりのピクセル数を求めます。
+        /// </summary>
+        /// <remarks>
+        /// カメラから見た方向を <c>x / -z</c> の形で表したとき、それに掛ければ
+        /// 画面上のピクセル位置になります。距離で割る前の <see cref="GetPixelsPerUnit"/>
+        /// にあたる値で、遠近を含めて位置を求めるときに使います。
+        /// </remarks>
+        public static float GetPixelsPerTangent(float screenHeight)
+            => screenHeight / (2f * MathF.Tan(DefaultFieldOfView / 2f));
 
         /// <summary>
         /// 画面全体より小さな描画先で、<see cref="GetPixelsPerUnit"/> と同じ縮尺を

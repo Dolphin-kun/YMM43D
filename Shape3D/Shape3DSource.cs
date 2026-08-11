@@ -55,8 +55,12 @@ namespace Shape3D
         private float GetEdgeLength(in FrameContext itemTime)
             => WorldScale.ToWorld(parameter.Size.GetFloat(itemTime));
 
-        protected override float GetWorldExtent(in FrameContext itemTime)
-            => GetEdgeLength(itemTime) * DiagonalRatio;
+        /// <remarks>
+        /// 回転は <see cref="Draw"/> の中で掛けるため、ここでは答えられない。
+        /// どの向きに回しても収まるよう、外接球に接する立方体を返す。
+        /// </remarks>
+        protected override WorldBounds GetWorldBounds(in FrameContext itemTime)
+            => WorldBounds.FromCube(GetEdgeLength(itemTime) * DiagonalRatio);
 
         public override void Dispose()
         {
