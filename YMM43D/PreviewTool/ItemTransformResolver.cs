@@ -4,6 +4,7 @@ using Vortice.Direct2D1;
 using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Player.Video;
 using YukkuriMovieMaker.Plugin.Effects;
+using YMM43D.Plugin;
 using YukkuriMovieMaker.Project.Items;
 
 namespace YMM43D.PreviewTool
@@ -31,6 +32,12 @@ namespace YMM43D.PreviewTool
         private readonly Dictionary<IVideoItem, EffectChain> chains = [];
 
         /// <summary>
+        /// 変換の取得に失敗したアイテム。毎フレーム作り直しては失敗するのを避けるため、
+        /// 一度失敗したら以降は試みない。
+        /// </summary>
+        private readonly HashSet<IVideoItem> unsupported = [];
+
+        /// <summary>
         /// アイテムのエフェクトが生み出す変換行列を返します。
         /// エフェクトが無い場合や取得に失敗した場合は単位行列を返します。
         /// </summary>
@@ -39,9 +46,10 @@ namespace YMM43D.PreviewTool
             IGraphicsDevicesAndContext devices,
             TimelineItemSourceDescription description)
         {
-            var effects = item.VideoEffects?.Where(e => e.IsEnabled).ToImmutableList()
-                          ?? ImmutableList<IVideoEffect>.Empty;
+            if (unsupported.Contains(item))
+                return Matrix4x4.Identity;
 
+            var effects = CollectEffects(item);
             if (effects.IsEmpty)
             {
                 Release(item);
@@ -60,12 +68,32 @@ namespace YMM43D.PreviewTool
             }
             catch
             {
-                // エフェクトによっては、YMM4 本来の呼び出し順を経ていない状態での
-                // Update に耐えられない。プレビューの見た目が少しずれるだけなので、
-                // 変換なしとして扱い、次回以降は作り直す。
+                // YMM4 本来の呼び出し順を経ていない状態での Update に耐えられない
+                // エフェクトがある。プレビューでの変換が反映されないだけなので、
+                // このアイテムは以降あきらめる。毎フレーム作り直すと例外が出続け、
+                // プロセッサの生成と破棄も繰り返すことになる。
                 Release(item);
+                unsupported.Add(item);
                 return Matrix4x4.Identity;
             }
+        }
+
+        /// <summary>
+        /// 変換の解決に使うエフェクトを選びます。
+        /// </summary>
+        /// <remarks>
+        /// このライブラリ自身の 3D エフェクトは対象外にします。それらのプロセッサは
+        /// エフェクト本体と結び付いており（<see cref="Plugin.VideoEffect3DBase"/>）、
+        /// ここで作り直すと本物のプロセッサが使い捨てのコピーに差し替わってしまいます。
+        /// またこれらの変換は <see cref="I3DProvider"/> として直接描画されるため、
+        /// DrawDescription 経由で取り出す必要もありません。
+        /// </remarks>
+        private static ImmutableList<IVideoEffect> CollectEffects(IVideoItem item)
+        {
+            if (item.VideoEffects is null)
+                return [];
+
+            return [.. item.VideoEffects.Where(e => e.IsEnabled && e is not I3DProvider)];
         }
 
         /// <summary>
@@ -75,6 +103,8 @@ namespace YMM43D.PreviewTool
         {
             foreach (var item in chains.Keys.Where(k => !aliveItems.Contains(k)).ToArray())
                 Release(item);
+
+            unsupported.RemoveWhere(item => !aliveItems.Contains(item));
         }
 
         private void Release(IVideoItem item)
