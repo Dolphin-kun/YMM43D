@@ -287,9 +287,6 @@ YMM43D.PreviewTool   3Dプレビューのツールウィンドウ。</pre>
 <div class="wide">
 <pre>internal sealed class CubeSource : Shape3DSourceBase
 {
-    // 一辺 1 の立方体の外接球の直径
-    private static readonly float DiagonalRatio = MathF.Sqrt(3f);
-
     private readonly CubeParameter parameter;
     private readonly DeviceResourceCache&lt;RenderPipeline&lt;TransformConstants&gt;&gt; pipelines;
 
@@ -307,10 +304,7 @@ YMM43D.PreviewTool   3Dプレビューのツールウィンドウ。</pre>
 
     public override void Draw(in Render3DContext render, DrawContext3D item)
     {
-        var rotation = Rotation3D.ForObject(
-            parameter.RotationX.GetFloat(item.Time), 0f, 0f);
-
-        var world = Matrix4x4.CreateScale(GetEdgeLength(item.Time)) * rotation * item.World;
+        var world = GetLocalMatrix(item.Time) * item.World;
         var constants = TransformConstants.Create(
             render.GetWorldViewProjection(world), item.Opacity);
 
@@ -324,9 +318,15 @@ YMM43D.PreviewTool   3Dプレビューのツールウィンドウ。</pre>
     private float GetEdgeLength(in FrameContext itemTime)
         =&gt; WorldScale.ToWorld(parameter.Size.GetFloat(itemTime));
 
-    // 回転は Draw の中で掛けるので、どの向きに回しても収まる範囲を返す
+    // 大きさと回転を掛けた、この図形だけの変換
+    private Matrix4x4 GetLocalMatrix(in FrameContext itemTime)
+        =&gt; Matrix4x4.CreateScale(GetEdgeLength(itemTime))
+         * Rotation3D.ForObject(parameter.RotationX.GetFloat(itemTime), 0f, 0f);
+
+    // Draw と同じ変換を範囲にも掛ける。どの向きにも対応できる外接立方体を
+    // 返してもよいが、辺が最大 √3 倍になり出力画像が無駄に大きくなる
     protected override WorldBounds GetWorldBounds(in FrameContext itemTime)
-        =&gt; WorldBounds.FromCube(GetEdgeLength(itemTime) * DiagonalRatio);
+        =&gt; WorldBounds.FromCube(1f).Transform(GetLocalMatrix(itemTime));
 
     public override void Dispose()
     {

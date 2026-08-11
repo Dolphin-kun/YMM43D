@@ -13,11 +13,6 @@ namespace Shape3D
     /// </summary>
     internal sealed class Shape3DSource : Shape3DSourceBase
     {
-        /// <summary>
-        /// 一辺 1 の立方体の外接球の直径。どの向きに回転しても収まる大きさです。
-        /// </summary>
-        private static readonly float DiagonalRatio = MathF.Sqrt(3f);
-
         private readonly Shape3DParameter parameter;
         private readonly DeviceResourceCache<RenderPipeline<TransformConstants>> pipelines;
 
@@ -33,12 +28,7 @@ namespace Shape3D
 
         public override void Draw(in Render3DContext render, DrawContext3D item)
         {
-            var rotation = Rotation3D.ForObject(
-                parameter.RotationX.GetFloat(item.Time),
-                parameter.RotationY.GetFloat(item.Time),
-                parameter.RotationZ.GetFloat(item.Time));
-
-            var world = Matrix4x4.CreateScale(GetEdgeLength(item.Time)) * rotation * item.World;
+            var world = GetLocalMatrix(item.Time) * item.World;
             var constants = TransformConstants.Create(render.GetWorldViewProjection(world), item.Opacity);
 
             var pipeline = pipelines.Get(render.Device);
@@ -55,12 +45,23 @@ namespace Shape3D
         private float GetEdgeLength(in FrameContext itemTime)
             => WorldScale.ToWorld(parameter.Size.GetFloat(itemTime));
 
+        /// <summary>
+        /// 大きさと回転を掛けた、この図形だけの変換。
+        /// </summary>
+        private Matrix4x4 GetLocalMatrix(in FrameContext itemTime)
+            => Matrix4x4.CreateScale(GetEdgeLength(itemTime))
+             * Rotation3D.ForObject(
+                   parameter.RotationX.GetFloat(itemTime),
+                   parameter.RotationY.GetFloat(itemTime),
+                   parameter.RotationZ.GetFloat(itemTime));
+
         /// <remarks>
-        /// 回転は <see cref="Draw"/> の中で掛けるため、ここでは答えられない。
-        /// どの向きに回しても収まるよう、外接球に接する立方体を返す。
+        /// 回転角は分かっているので、実際に回した範囲を返す。どの向きにも対応できる
+        /// 外接立方体を返すと、辺の長さが最大で √3 ≒ 1.73 倍になり、そのぶん
+        /// 出力画像が無駄に大きくなる。
         /// </remarks>
         protected override WorldBounds GetWorldBounds(in FrameContext itemTime)
-            => WorldBounds.FromCube(GetEdgeLength(itemTime) * DiagonalRatio);
+            => WorldBounds.FromCube(1f).Transform(GetLocalMatrix(itemTime));
 
         public override void Dispose()
         {
