@@ -13,11 +13,19 @@ namespace YMM43D.Scene3D
     /// </remarks>
     public sealed class SceneCamera : Bindable
     {
-        /// <summary>既定の垂直画角（ラジアン）。</summary>
+        /// <summary>
+        /// 画面の大きさが分からない場合に使う垂直画角（ラジアン）。
+        /// </summary>
+        /// <remarks>
+        /// 通常の画角は <see cref="GetFieldOfView"/> が画面の高さから決めます。
+        /// </remarks>
         public const float DefaultFieldOfView = MathF.PI / 4f;
 
         private const float NearPlane = 0.1f;
         private const float FarPlane = 1000f;
+
+        /// <summary>距離として認める最小値。<see cref="Distance"/> の下限に合わせます。</summary>
+        private const float MinDistance = 0.1f;
 
         private Vector3 target = Vector3.Zero;
         private bool isControlledByPreviewDrag;
@@ -95,20 +103,14 @@ namespace YMM43D.Scene3D
         public Vector3 GetPosition(in FrameContext time) => GetPose(time).Position;
 
         /// <summary>
-        /// 射影行列。画角・クリップ面はシーン全体で共通のため静的メソッドです。
+        /// 射影行列。クリップ面はシーン全体で共通のため静的メソッドです。
         /// </summary>
-        public static Matrix4x4 GetProjectionMatrix(float aspectRatio)
-            => GetProjectionMatrix(aspectRatio, DefaultFieldOfView);
-
-        /// <summary>
-        /// 画角を指定して射影行列を作ります。
-        /// </summary>
-        /// <remarks>
-        /// 画面全体より小さな描画先に、同じ縮尺で描きたい場合に使います。
-        /// 描画先が小さいぶん画角を狭めれば、1単位あたりのピクセル数を保てます。
-        /// </remarks>
-        public static Matrix4x4 GetProjectionMatrix(float aspectRatio, float verticalFieldOfView)
-            => Matrix4x4.CreatePerspectiveFieldOfView(verticalFieldOfView, aspectRatio, NearPlane, FarPlane);
+        /// <param name="aspectRatio">描画先の横縦比。</param>
+        /// <param name="screenHeight">動画の画面の高さ（ピクセル）。</param>
+        /// <param name="distance">注視点までの距離。</param>
+        public static Matrix4x4 GetProjectionMatrix(float aspectRatio, float screenHeight, float distance)
+            => Matrix4x4.CreatePerspectiveFieldOfView(
+                GetFieldOfView(screenHeight, distance), aspectRatio, NearPlane, FarPlane);
 
         /// <summary>
         /// 視線の正面から外れた範囲を写す射影行列を作ります。
@@ -129,40 +131,43 @@ namespace YMM43D.Scene3D
                 FarPlane);
 
         /// <summary>
-        /// 画面全体に描いたときの、ワールド1単位あたりのピクセル数を求めます。
-        /// </summary>
-        /// <param name="distance">カメラから対象までの距離。</param>
-        /// <param name="screenHeight">画面の高さ（ピクセル）。</param>
-        public static float GetPixelsPerUnit(float distance, float screenHeight)
-        {
-            if (distance <= 0)
-                return 0;
-
-            return GetPixelsPerTangent(screenHeight) / distance;
-        }
-
-        /// <summary>
         /// 視線からの傾き（正接）1 あたりのピクセル数を求めます。
         /// </summary>
         /// <remarks>
         /// カメラから見た方向を <c>x / -z</c> の形で表したとき、それに掛ければ
-        /// 画面上のピクセル位置になります。距離で割る前の <see cref="GetPixelsPerUnit"/>
-        /// にあたる値で、遠近を含めて位置を求めるときに使います。
+        /// 画面上のピクセル位置になります。遠近を含めて位置を求めるときに使います。
+        /// <para>
+        /// 注視点の面（Z=0）にあるワールド1単位は、傾きにすると <c>1/距離</c> です。
+        /// これに掛けた結果が <see cref="WorldScale.PixelsPerUnit"/> になるよう
+        /// 定めているので、Z=0 のアイテムは YMM4 が 2D で描く大きさと一致します。
+        /// </para>
         /// </remarks>
-        public static float GetPixelsPerTangent(float screenHeight)
-            => screenHeight / (2f * MathF.Tan(DefaultFieldOfView / 2f));
+        public static float GetPixelsPerTangent(float distance)
+            => WorldScale.PixelsPerUnit * MathF.Max(distance, MinDistance);
 
         /// <summary>
-        /// 画面全体より小さな描画先で、<see cref="GetPixelsPerUnit"/> と同じ縮尺を
-        /// 保つための画角を求めます。
+        /// 垂直画角（ラジアン）を求めます。
         /// </summary>
-        public static float GetFieldOfViewFor(float targetHeight, float screenHeight)
+        /// <remarks>
+        /// <para>
+        /// 画角は固定値ではなく、注視点の面が画面とちょうど1対1で対応するように
+        /// 決めます。こうしないと、3D で描いたアイテムが YMM4 の 2D 配置とずれます。
+        /// 既定値の 45°・距離 10 では画面の高さ 1080px に対して 828px 分しか写らず、
+        /// 1.30 倍に引き伸ばされていました。
+        /// </para>
+        /// <para>
+        /// この決め方だと、<see cref="Distance"/> は「寄り引き」ではなく
+        /// 「遠近の強さ」を決めるつまみになります。近づけるほど画角が広がり、
+        /// 手前と奥の差が強く出ます。
+        /// </para>
+        /// </remarks>
+        public static float GetFieldOfView(float screenHeight, float distance)
         {
-            // 画角 0 は射影行列を作れない。描画先の大きさが取れない場合は既定値に戻す。
-            if (targetHeight <= 0 || screenHeight <= 0)
+            // 画面の大きさが取れない場面では既定値に戻す。
+            if (!float.IsFinite(screenHeight) || screenHeight <= 0)
                 return DefaultFieldOfView;
 
-            return 2f * MathF.Atan(MathF.Tan(DefaultFieldOfView / 2f) * targetHeight / screenHeight);
+            return 2f * MathF.Atan(screenHeight / (2f * GetPixelsPerTangent(distance)));
         }
     }
 

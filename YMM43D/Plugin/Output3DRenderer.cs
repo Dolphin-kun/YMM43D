@@ -40,6 +40,15 @@ namespace YMM43D.Plugin
         /// </remarks>
         private const float MinViewDistance = 0.01f;
 
+        /// <summary>
+        /// 描画先として認める、視線からの傾きの上限。
+        /// </summary>
+        /// <remarks>
+        /// 画面に写るのはせいぜい傾き1程度までです。これを大きく超えた範囲は
+        /// 見えないうえ、描画先のずれが桁外れの値になって Direct2D を壊します。
+        /// </remarks>
+        private const float MaxTangent = 64f;
+
         private readonly Renderer3DTo2D renderer = new();
 
         /// <summary>
@@ -69,6 +78,7 @@ namespace YMM43D.Plugin
             // 位置で評価する。
             var camera = SceneCameraRegistry.Get(description);
             var view = camera.GetViewMatrix(timelineTime);
+            var distance = camera.Distance.GetFloat(timelineTime);
 
             // シーン内での自分の居場所と、他の 3D 物体を調べる。
             var scene = SceneDepthCollector.Collect(description, self);
@@ -78,7 +88,7 @@ namespace YMM43D.Plugin
             // 3D 空間での位置と画面上の位置が食い違う。
             var placedWorld = world * scene.OwnerPlacement;
 
-            var area = GetRenderArea(bounds.Transform(placedWorld), view, description.ScreenSize.Height);
+            var area = GetRenderArea(bounds.Transform(placedWorld), view, distance);
             if (area is not { } target)
             {
                 // 描くものが無いときに Output を未設定のままにすると、YMM4 が結果を
@@ -192,9 +202,9 @@ namespace YMM43D.Plugin
         /// なく、範囲そのものを描画先にします。射影行列も中心をずらしたものを使います。
         /// </para>
         /// </remarks>
-        private static RenderArea? GetRenderArea(in WorldBounds bounds, in Matrix4x4 view, float screenHeight)
+        private static RenderArea? GetRenderArea(in WorldBounds bounds, in Matrix4x4 view, float cameraDistance)
         {
-            if (bounds.IsEmpty || screenHeight <= 0)
+            if (bounds.IsEmpty)
                 return null;
 
             var minTan = new Vector2(float.MaxValue);
@@ -205,14 +215,23 @@ namespace YMM43D.Plugin
                 var viewSpace = Vector3.Transform(corner, view);
 
                 // 右手系のビュー空間では、カメラの前方は -Z。
-                var distance = MathF.Max(-viewSpace.Z, MinViewDistance);
-                var tan = new Vector2(viewSpace.X / distance, viewSpace.Y / distance);
+                var depth = MathF.Max(-viewSpace.Z, MinViewDistance);
+                var tan = new Vector2(viewSpace.X / depth, viewSpace.Y / depth);
 
                 minTan = Vector2.Min(minTan, tan);
                 maxTan = Vector2.Max(maxTan, tan);
             }
 
-            var pixelsPerTangent = SceneCamera.GetPixelsPerTangent(screenHeight);
+            // カメラの真横や背後にある隅は、傾きが際限なく大きくなる。そのままだと
+            // 描画先のずれが桁外れの値になり、Direct2D に渡した時点で落ちる。
+            // 画面から遠く外れた範囲は描いても見えないので、ここで切り落とす。
+            if (!IsUsable(minTan) || !IsUsable(maxTan))
+                return null;
+
+            minTan = Vector2.Clamp(minTan, new Vector2(-MaxTangent), new Vector2(MaxTangent));
+            maxTan = Vector2.Clamp(maxTan, new Vector2(-MaxTangent), new Vector2(MaxTangent));
+
+            var pixelsPerTangent = SceneCamera.GetPixelsPerTangent(cameraDistance);
             var width = (int)MathF.Ceiling((maxTan.X - minTan.X) * pixelsPerTangent);
             var height = (int)MathF.Ceiling((maxTan.Y - minTan.Y) * pixelsPerTangent);
 
@@ -249,6 +268,10 @@ namespace YMM43D.Plugin
 
             return new RenderArea(width, height, projection, offset);
         }
+
+        /// <summary>傾きとして計算に使える値かどうかを調べます。</summary>
+        private static bool IsUsable(in Vector2 tangent)
+            => float.IsFinite(tangent.X) && float.IsFinite(tangent.Y);
 
         public void Dispose() => renderer.Dispose();
 

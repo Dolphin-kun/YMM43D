@@ -68,14 +68,18 @@ namespace YMM43D.Integration
 
             using var lease = GraphicsDevicePool.Acquire();
             var context = lease.Context;
-            var d2dContext = privateContext.For(ymmDevices);
 
             // 入れ子の順序は 3D デバイス → Direct2D の鍵で固定する。逆順に取る箇所を
             // 作ると詰まるので、この鍵を持ったままデバイスをロックしないこと。
+            //
+            // コマンドリストの組み立てまで鍵を握り続ける。ここで手放すと、描き終えた
+            // 結果を DrawImage に渡すまでの隙に別のスレッドが Resize を走らせ、
+            // 破棄済みのビットマップを渡してしまう。
             lock (lease.Device)
+            lock (D2DGate.Sync)
             {
-                lock (D2DGate.Sync)
-                    surface.Resize(ymmDevices, d2dContext, width, height);
+                var d2dContext = privateContext.For(ymmDevices);
+                surface.Resize(ymmDevices, d2dContext, width, height);
 
                 if (surface.RenderTargetView is null)
                     return BuildCommandList(ymmDevices, null, offset, imageTransform);
@@ -121,9 +125,9 @@ namespace YMM43D.Integration
 
                     surface.EndWrite();
                 }
-            }
 
-            return BuildCommandList(ymmDevices, surface.Bitmap, offset, imageTransform);
+                return BuildCommandList(ymmDevices, surface.Bitmap, offset, imageTransform);
+            }
         }
 
         private ID2D1Image BuildCommandList(

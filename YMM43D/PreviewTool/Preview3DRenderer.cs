@@ -1,3 +1,4 @@
+using System.Numerics;
 using Vortice.Direct3D11;
 using Vortice.Mathematics;
 using YMM43D.Plugin;
@@ -55,7 +56,14 @@ namespace YMM43D.PreviewTool
             context.RSSetViewport(new Viewport(0, 0, width, height));
 
             var viewPose = scene.ViewPose;
-            var projection = SceneCamera.GetProjectionMatrix((float)width / Math.Max(1, height));
+
+            // 画角はシーンカメラの距離と動画の画面の高さで決まる。プレビュー用の
+            // 視点をどこへ動かしても、写り方の縮尺は出力と揃う。
+            var projection = SceneCamera.GetProjectionMatrix(
+                (float)width / Math.Max(1, height),
+                scene.ScreenHeight,
+                scene.SceneCameraDistance);
+
             var render = new Render3DContext(device, context, viewPose.ViewMatrix, projection);
 
             grid.Draw(render, viewPose.Position);
@@ -84,6 +92,20 @@ namespace YMM43D.PreviewTool
 
         /// <summary>ガイド表示するシーンカメラの姿勢。</summary>
         public required CameraPose SceneCameraPose { get; init; }
+
+        /// <summary>
+        /// シーンカメラから注視点までの距離。画角を決めるのに使います。
+        /// </summary>
+        /// <remarks>
+        /// プレビュー用の視点ではなくシーンカメラの距離を使います。視点を動かしても
+        /// 出力と縮尺が変わらないようにするためです。
+        /// </remarks>
+        public float SceneCameraDistance
+            => Vector3.Distance(SceneCameraPose.Position, SceneCameraPose.Target);
+
+        /// <summary>動画の画面の高さ（ピクセル）。</summary>
+        public float ScreenHeight
+            => Environment.SourceDescription?.ScreenSize.Height ?? 0f;
 
         /// <summary>タイムライン上の現在位置。</summary>
         public required FrameContext Time { get; init; }
