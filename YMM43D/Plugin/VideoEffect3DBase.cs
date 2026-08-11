@@ -19,7 +19,8 @@ namespace YMM43D.Plugin
     /// 用意済みです。<c>GetAnimatables()</c> の戻り値に必ず含めてください。
     /// </para>
     /// </remarks>
-    public abstract class VideoEffect3DBase : VideoEffectBase, I3DVideoEffect, ICameraSync, I3DSizeProvider
+    public abstract class VideoEffect3DBase
+        : VideoEffectBase, I3DVideoEffect, ICameraSync, I3DSizeProvider, I3DLocalTransform
     {
         private readonly CameraSync cameraSync = new();
 
@@ -75,6 +76,16 @@ namespace YMM43D.Plugin
         /// <inheritdoc/>
         public virtual ID3D11ShaderResourceView? GetTexture(ID3D11Device device)
             => Processor is I3DTextureProvider provider ? provider.GetTexture(device) : null;
+
+        /// <inheritdoc/>
+        public virtual bool TryGetLocalMatrix(out System.Numerics.Matrix4x4 matrix)
+        {
+            if (Processor is I3DLocalTransform provider)
+                return provider.TryGetLocalMatrix(out matrix);
+
+            matrix = System.Numerics.Matrix4x4.Identity;
+            return false;
+        }
 
         /// <inheritdoc/>
         public virtual bool TryGetSize(out System.Numerics.Vector2 size, out System.Numerics.Vector2 offset)

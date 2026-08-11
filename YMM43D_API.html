@@ -564,6 +564,7 @@ var pipeline = pipelines.Get(render.Device);</pre>
 <tr><td><code>I3DProvider</code></td><td>interface</td><td>3D 空間に何かを描画できるオブジェクト。このライブラリの中心となる拡張点</td></tr>
 <tr><td><code>I3DTextureProvider</code></td><td>interface</td><td>自前で用意したテクスチャを 3D 描画に提供できる</td></tr>
 <tr><td><code>I3DSizeProvider</code></td><td>interface</td><td>描画される内容の実寸と原点からのずれを伝えられる</td></tr>
+<tr><td><code>I3DLocalTransform</code></td><td>interface</td><td>自分が使っているワールド行列を伝えられる。アイテムをまたいだ前後関係に使う</td></tr>
 <tr><td><code>I3DVideoEffect</code></td><td>interface</td><td><code>I3DProvider</code> と <code>I3DTextureProvider</code> の両方</td></tr>
 <tr><td><code>ICameraSync</code></td><td>interface</td><td>カメラの変化を YMM4 に伝える</td></tr>
 <tr><td><code>Shape3DSourceBase</code></td><td>abstract class</td><td>3D 図形アイテムの描画元。プレビューと出力の両経路を受け持つ</td></tr>

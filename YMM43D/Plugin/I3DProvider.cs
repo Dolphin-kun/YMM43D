@@ -67,6 +67,25 @@ namespace YMM43D.Plugin
     }
 
     /// <summary>
+    /// 自分が使っているワールド行列を答えられるオブジェクト。
+    /// </summary>
+    /// <remarks>
+    /// アイテムをまたいだ前後関係を出すとき、他のアイテムをどこに置くかを決めるのに使います。
+    /// アイテムの配置（位置・拡大率・回転）は呼び出し側が知っているので、それを<b>除いた</b>
+    /// 自分自身の変換だけを返してください。
+    /// <para>
+    /// 実寸だけなら <see cref="I3DSizeProvider"/> で足りますが、エフェクトが
+    /// <c>DrawDescription.Camera</c> を取り込んでいる場合など、実寸から組み立て直せない
+    /// 変換を持っているときはこちらを実装します。
+    /// </para>
+    /// </remarks>
+    public interface I3DLocalTransform
+    {
+        /// <summary>変換が分かる場合は <c>true</c> を返し、行列を設定します。</summary>
+        bool TryGetLocalMatrix(out Matrix4x4 matrix);
+    }
+
+    /// <summary>
     /// 3D対応の映像エフェクトであることを示すインターフェース。
     /// 3D描画とテクスチャ提供の両方を担います。
     /// </summary>

@@ -87,8 +87,8 @@ namespace YMM43D.Integration
                     if (ReferenceEquals(provider, self))
                         continue;
 
-                    var size = GetSizeMatrix(provider);
-                    occluders.Add(new Occluder(provider, size * placement * toSelfSpace, itemTime));
+                    var local = GetLocalMatrix(provider);
+                    occluders.Add(new Occluder(provider, local * placement * toSelfSpace, itemTime));
                 }
             }
 
@@ -144,10 +144,18 @@ namespace YMM43D.Integration
         }
 
         /// <summary>
-        /// プロバイダーが実寸を答えられる場合、それを行列にして返します。
+        /// アイテムの配置を除いた、プロバイダー自身の変換を求めます。
         /// </summary>
-        private static Matrix4x4 GetSizeMatrix(I3DProvider provider)
+        /// <remarks>
+        /// エフェクトは <c>DrawDescription.Camera</c> を取り込んでいることがあり、
+        /// その値は実寸からは組み立て直せません。連鎖を辿り直すのは高くつくので、
+        /// 使った変換を本人に答えてもらいます。答えられない場合だけ実寸から作ります。
+        /// </remarks>
+        private static Matrix4x4 GetLocalMatrix(I3DProvider provider)
         {
+            if (provider is I3DLocalTransform transform && transform.TryGetLocalMatrix(out var matrix))
+                return matrix;
+
             if (provider is I3DSizeProvider sizeProvider
                 && sizeProvider.TryGetSize(out var size, out var offset))
             {

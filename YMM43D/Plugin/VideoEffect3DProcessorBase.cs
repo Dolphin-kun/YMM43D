@@ -28,7 +28,8 @@ namespace YMM43D.Plugin
     /// この基底クラスが行います。
     /// </para>
     /// </remarks>
-    public abstract class VideoEffect3DProcessorBase : IVideoEffectProcessor, I3DVideoEffect, I3DSizeProvider
+    public abstract class VideoEffect3DProcessorBase
+        : IVideoEffectProcessor, I3DVideoEffect, I3DSizeProvider, I3DLocalTransform
     {
         private readonly VideoEffect3DBase? owner;
         private readonly D2DTextureBridge textureBridge = new();
@@ -37,6 +38,7 @@ namespace YMM43D.Plugin
         private ID2D1Image? output;
         private Vector2 inputSize;
         private Vector2 inputOffset;
+        private Matrix4x4? localMatrix;
 
         /// <summary>YMM4 のグラフィックスデバイス。</summary>
         protected IGraphicsDevicesAndContext Devices { get; }
@@ -107,6 +109,10 @@ namespace YMM43D.Plugin
 
             var draw = ConsumeCamera(description.DrawDescription, ref world);
 
+            // 他のアイテムがこの物体を遮蔽物として扱うときに参照する。
+            // 実寸とカメラ変換を合わせたもので、外からは組み立て直せない。
+            localMatrix = world;
+
             // 3Dプレビューがアイテムから辿るのはエフェクト本体なので、自分の代わりに
             // そちらを渡す。渡さないと自分自身を遮蔽物として数えてしまう。
             output = renderer.Render(
@@ -167,6 +173,13 @@ namespace YMM43D.Plugin
             }
 
             return texture;
+        }
+
+        /// <inheritdoc/>
+        public bool TryGetLocalMatrix(out Matrix4x4 matrix)
+        {
+            matrix = localMatrix ?? Matrix4x4.Identity;
+            return localMatrix.HasValue;
         }
 
         /// <inheritdoc/>
