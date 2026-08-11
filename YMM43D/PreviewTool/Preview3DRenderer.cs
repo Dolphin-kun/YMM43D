@@ -32,6 +32,23 @@ namespace YMM43D.PreviewTool
             int height,
             PreviewScene scene)
         {
+            // 描画情報の組み立ては、アイテムの 2D 描画やエフェクトの評価を伴い、
+            // その過程で同じコンテキストに別の 3D 描画が走ることがある。
+            // パスを開いた後に呼ぶと描画先やビューポートが入れ替わってしまうため、
+            // 必要な情報をすべて先に揃えてから描き始める。
+            var drawContexts = new DrawContext3D[scene.Items.Count];
+            for (var i = 0; i < scene.Items.Count; i++)
+            {
+                var previewItem = scene.Items[i];
+                drawContexts[i] = contextBuilder.Build(
+                    previewItem.Item,
+                    previewItem.GetItemTime(scene.Time),
+                    scene.Environment,
+                    previewItem.Provider);
+            }
+
+            contextBuilder.RetainOnly(scene.Items.Select(i => i.Item).ToHashSet());
+
             context.OMSetRenderTargets(renderTarget, depthStencil);
             context.ClearRenderTargetView(renderTarget, BackgroundColor);
             context.ClearDepthStencilView(depthStencil, DepthStencilClearFlags.Depth, 1f, 0);
@@ -44,16 +61,8 @@ namespace YMM43D.PreviewTool
             grid.Draw(render, viewPose.Position);
             cameraGizmo.Draw(render, scene.SceneCameraPose);
 
-            foreach (var previewItem in scene.Items)
-            {
-                var itemTime = previewItem.GetItemTime(scene.Time);
-                var drawContext = contextBuilder.Build(
-                    previewItem.Item, itemTime, scene.Environment, previewItem.Provider);
-
-                previewItem.Provider.Draw(render, drawContext);
-            }
-
-            contextBuilder.RetainOnly(scene.Items.Select(i => i.Item).ToHashSet());
+            for (var i = 0; i < scene.Items.Count; i++)
+                scene.Items[i].Provider.Draw(render, drawContexts[i]);
         }
 
         public void Dispose()

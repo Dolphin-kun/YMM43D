@@ -66,11 +66,17 @@ namespace YMM43D.Integration
                 if (surface.RenderTargetView is null)
                     return BuildCommandList(ymmDevices, null, offset);
 
-                // このコンテキストは他の描画とも共有されるため、
-                // 元のレンダーターゲットを退避して必ず戻す。
+                // このコンテキストは他の描画とも共有されるため、書き換える状態は
+                // すべて退避して必ず戻す。3Dプレビューは描画の途中でこのメソッドを
+                // 呼ぶことがあり、戻し漏れがあるとプレビュー側の描画が崩れる。
                 var previousTargets = new ID3D11RenderTargetView[1];
                 context.OMGetRenderTargets(1, previousTargets, out var previousDepth);
                 var previousTarget = previousTargets[0];
+
+                var viewportCount = context.RSGetViewports();
+                var previousViewports = viewportCount > 0 ? new Viewport[viewportCount] : null;
+                if (previousViewports is not null)
+                    context.RSGetViewports(previousViewports);
 
                 try
                 {
@@ -88,6 +94,9 @@ namespace YMM43D.Integration
                     context.OMSetRenderTargets(previousTarget, previousDepth);
                     previousTarget?.Dispose();
                     previousDepth?.Dispose();
+
+                    if (previousViewports is not null)
+                        context.RSSetViewports(previousViewports);
                 }
 
                 // 本体デバイスが共有テクスチャを読む前に、書き込みを完了させる。
