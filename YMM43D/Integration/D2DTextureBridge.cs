@@ -90,13 +90,47 @@ namespace YMM43D.Integration
         /// <summary>
         /// 3D描画側と YMM4 側の両方から参照できる、1枚分のテクスチャ。
         /// </summary>
+        /// <remarks>
+        /// 書き込むのは YMM4 のデバイス、読むのは 3D 描画用のデバイスで、両者は
+        /// 別々の命令列を GPU に流します。何も調整しないと、書き込みが終わる前に
+        /// 読み出しが走り、消去直後の透明な状態が見えてしまいます。これが
+        /// プレビューのちらつきの正体でした。
+        /// <para>
+        /// そこで鍵付きミューテックスで受け渡しします。書き込み側が鍵 0 を取って
+        /// 描き、鍵 1 で手放す。読み出し側は鍵 1 を取り、次に書き込む直前まで
+        /// 握り続けてから鍵 0 で返します。GPU 側で順序が保証されるため、
+        /// 中途半端な状態を読むことがなくなります。
+        /// </para>
+        /// </remarks>
         private sealed class SharedItemTexture : IDisposable
         {
+            /// <summary>書き込み側（YMM4 のデバイス）が取得する鍵。</summary>
+            private const ulong WriteKey = 0;
+
+            /// <summary>読み出し側（3D 描画用のデバイス）が取得する鍵。</summary>
+            private const ulong ReadKey = 1;
+
+            /// <summary>相手が鍵を返すのを待つ上限（ミリ秒）。</summary>
+            private const int SyncTimeoutMs = 500;
+
             private readonly DisposeCollector disposer = new();
             private readonly int width;
             private readonly int height;
             private readonly nint ymmDevicePointer;
             private readonly ID2D1Bitmap1 targetBitmap;
+            private readonly IDXGIKeyedMutex writeMutex;
+            private readonly IDXGIKeyedMutex readMutex;
+
+            private bool holdsReadLock;
+
+            /// <summary>
+            /// 鍵の受け渡しに失敗し、このテクスチャが使えなくなったかどうか。
+            /// </summary>
+            /// <remarks>
+            /// 鍵を取り損ねると誰も持っていない鍵番号のまま止まってしまうため、
+            /// 復帰させずに作り直します。
+            /// </remarks>
+            private bool isBroken;
 
             public ID3D11ShaderResourceView ShaderResourceView { get; }
 
@@ -121,13 +155,17 @@ namespace YMM43D.Integration
                     SampleDescription = new SampleDescription(1, 0),
                     Usage = ResourceUsage.Default,
                     BindFlags = BindFlags.RenderTarget | BindFlags.ShaderResource,
-                    MiscFlags = ResourceOptionFlags.Shared,
+                    // 両デバイスの読み書きを取り違えないよう、鍵付きで共有する。
+                    MiscFlags = ResourceOptionFlags.SharedKeyedMutex,
                 }));
 
                 ShaderResourceView = Collect(targetDevice.CreateShaderResourceView(texture));
+                readMutex = Collect(texture.QueryInterface<IDXGIKeyedMutex>());
 
                 using var dxgiResource = texture.QueryInterface<IDXGIResource>();
                 var shared = Collect(ymmDevices.D3D.Device.OpenSharedResource<ID3D11Texture2D>(dxgiResource.SharedHandle));
+                writeMutex = Collect(shared.QueryInterface<IDXGIKeyedMutex>());
+
                 using var surface = shared.QueryInterface<IDXGISurface>();
                 targetBitmap = Collect(deviceContext.CreateBitmapFromDxgiSurface(surface));
             }
@@ -136,7 +174,8 @@ namespace YMM43D.Integration
             /// このテクスチャが指定の条件で再利用できるかを返します。
             /// </summary>
             public bool Matches(int width, int height, ID3D11Device ymmDevice)
-                => this.width == width
+                => !isBroken
+                && this.width == width
                 && this.height == height
                 && ymmDevicePointer == ymmDevice.NativePointer;
 
@@ -149,24 +188,65 @@ namespace YMM43D.Integration
                 ID2D1Image image,
                 in RawRectF bounds)
             {
-                lock (deviceContext)
+                // 前フレームの描画で握ったままの鍵を返す。
+                ReleaseReadLock();
+
+                if (isBroken || !TryAcquire(writeMutex, WriteKey))
+                    return;
+
+                try
                 {
-                    var previousTarget = deviceContext.Target;
-                    var previousTransform = deviceContext.Transform;
+                    lock (deviceContext)
+                    {
+                        var previousTarget = deviceContext.Target;
+                        var previousTransform = deviceContext.Transform;
 
-                    deviceContext.Target = targetBitmap;
-                    deviceContext.BeginDraw();
-                    deviceContext.Clear(null);
-                    // 描画範囲の左上がテクスチャの原点に来るようにずらす。
-                    deviceContext.Transform = Matrix3x2.CreateTranslation(-bounds.Left, -bounds.Top);
-                    deviceContext.DrawImage(image);
-                    deviceContext.EndDraw();
+                        deviceContext.Target = targetBitmap;
+                        deviceContext.BeginDraw();
+                        deviceContext.Clear(null);
+                        // 描画範囲の左上がテクスチャの原点に来るようにずらす。
+                        deviceContext.Transform = Matrix3x2.CreateTranslation(-bounds.Left, -bounds.Top);
+                        deviceContext.DrawImage(image);
+                        deviceContext.EndDraw();
 
-                    deviceContext.Transform = previousTransform;
-                    deviceContext.Target = previousTarget;
+                        deviceContext.Transform = previousTransform;
+                        deviceContext.Target = previousTarget;
 
-                    // 3D側のデバイスが読む前に、この書き込みを完了させる。
-                    ymmDevices.D3D.Device.ImmediateContext.Flush();
+                        // 鍵を手放す前に、溜まっている描画命令を GPU に送り出す。
+                        ymmDevices.D3D.Device.ImmediateContext.Flush();
+                    }
+                }
+                finally
+                {
+                    writeMutex.ReleaseSync(ReadKey);
+                }
+
+                // 3D 側が読み終えるまで握り続ける。返すのは次に書き込む直前。
+                holdsReadLock = TryAcquire(readMutex, ReadKey);
+            }
+
+            private void ReleaseReadLock()
+            {
+                if (!holdsReadLock)
+                    return;
+
+                holdsReadLock = false;
+                readMutex.ReleaseSync(WriteKey);
+            }
+
+            private bool TryAcquire(IDXGIKeyedMutex mutex, ulong key)
+            {
+                try
+                {
+                    mutex.AcquireSync(key, SyncTimeoutMs);
+                    return true;
+                }
+                catch
+                {
+                    // 待ち時間を超えたか、相手が鍵を持ったまま消えた。どちらの場合も
+                    // 鍵の持ち主が分からなくなるため、このテクスチャは作り直す。
+                    isBroken = true;
+                    return false;
                 }
             }
 
@@ -176,7 +256,15 @@ namespace YMM43D.Integration
                 return resource;
             }
 
-            public void Dispose() => disposer.Dispose();
+            public void Dispose()
+            {
+                if (!isBroken)
+                {
+                    try { ReleaseReadLock(); } catch { }
+                }
+
+                disposer.Dispose();
+            }
         }
     }
 }

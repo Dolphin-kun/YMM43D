@@ -1,4 +1,5 @@
 using System.Numerics;
+using Vortice;
 using Vortice.Direct3D11;
 using YMM43D.Integration;
 using YMM43D.Plugin;
@@ -42,19 +43,19 @@ namespace YMM43D.PreviewTool
             var rendered = pipeline.Render(item, itemTime, environment, needsImage);
 
             var texture = providerTexture;
-            Vector2? imageSize = null;
+            RawRectF? imageBounds = null;
             if (texture is null && needsImage && rendered.Image is { } image)
             {
                 texture = textureBridge.GetTexture(
                     environment.Device, environment.Devices, image, item, out var bounds);
 
                 if (texture is not null)
-                    imageSize = new Vector2(bounds.Right - bounds.Left, bounds.Bottom - bounds.Top);
+                    imageBounds = bounds;
             }
 
             return new DrawContext3D
             {
-                World = BuildWorldMatrix(item, itemTime, provider, rendered.CameraMatrix, imageSize),
+                World = BuildWorldMatrix(item, itemTime, provider, rendered.CameraMatrix, imageBounds),
                 Opacity = Math.Clamp(GetOpacity(item, itemTime), 0f, 1f),
                 Blend = ToBlendMode(item.Blend),
                 IsAlwaysOnTop = item.IsAlwaysOnTop,
@@ -97,9 +98,9 @@ namespace YMM43D.PreviewTool
             in FrameContext time,
             I3DProvider provider,
             Matrix4x4 itemCamera,
-            Vector2? imageSize)
+            RawRectF? imageBounds)
         {
-            var sizeScale = BuildSizeMatrix(provider, imageSize);
+            var sizeScale = BuildSizeMatrix(provider, imageBounds);
             var zoom = Matrix4x4.CreateScale(item.Zoom.GetFloat(time) / 100f);
 
             // YMM4 の回転は時計回り、3D空間は反時計回りなので符号を反転する。
@@ -120,28 +121,45 @@ namespace YMM43D.PreviewTool
         /// <summary>
         /// 描画対象の実寸を、3D空間での大きさと中心のずれに変換します。
         /// </summary>
-        /// <param name="imageSize">
-        /// テクスチャ化したアイテム画像の論理サイズ。プロバイダーが実寸を答えられない
-        /// 場合に、板をこの大きさに合わせます。これが無いとすべてのアイテムが
+        /// <param name="imageBounds">
+        /// テクスチャ化したアイテム画像の描画範囲。プロバイダーが実寸を答えられない
+        /// 場合に、板をこの範囲に合わせます。これが無いとすべてのアイテムが
         /// 1単位（100px）四方で描かれてしまいます。
         /// </param>
-        private static Matrix4x4 BuildSizeMatrix(I3DProvider provider, Vector2? imageSize)
+        private static Matrix4x4 BuildSizeMatrix(I3DProvider provider, RawRectF? imageBounds)
         {
             // プロバイダーが実寸を知っている場合はそちらを優先する。
             if (provider is I3DSizeProvider sizeProvider
                 && sizeProvider.TryGetSize(out var size, out var offset))
             {
-                // トリミングされている場合、画像の中心はアイテムの原点からずれる。
-                var center = offset + size / 2f;
-
-                return Matrix4x4.CreateScale(size.X / PixelsPerUnit, size.Y / PixelsPerUnit, 1f)
-                     * Matrix4x4.CreateTranslation(center.X / PixelsPerUnit, -center.Y / PixelsPerUnit, 0f);
+                return BuildSizeMatrix(size, offset + size / 2f);
             }
 
-            if (imageSize is { } dips && dips.X > 0 && dips.Y > 0)
-                return Matrix4x4.CreateScale(dips.X / PixelsPerUnit, dips.Y / PixelsPerUnit, 1f);
+            if (imageBounds is { } bounds)
+            {
+                return BuildSizeMatrix(
+                    new Vector2(bounds.Right - bounds.Left, bounds.Bottom - bounds.Top),
+                    new Vector2((bounds.Left + bounds.Right) / 2f, (bounds.Top + bounds.Bottom) / 2f));
+            }
 
             return Matrix4x4.Identity;
+        }
+
+        /// <summary>
+        /// 実寸と中心位置から、単位板を実際の大きさ・位置に置く行列を作ります。
+        /// </summary>
+        /// <remarks>
+        /// 中心がアイテムの原点と一致するとは限りません。テキストの文字揃えや、
+        /// トリミングされた画像では、描画範囲が原点から偏ります。大きさだけを見て
+        /// 中心を無視すると、揃え方を変えても同じ場所に表示されてしまいます。
+        /// </remarks>
+        private static Matrix4x4 BuildSizeMatrix(Vector2 size, Vector2 center)
+        {
+            if (size.X <= 0 || size.Y <= 0)
+                return Matrix4x4.Identity;
+
+            return Matrix4x4.CreateScale(size.X / PixelsPerUnit, size.Y / PixelsPerUnit, 1f)
+                 * Matrix4x4.CreateTranslation(center.X / PixelsPerUnit, -center.Y / PixelsPerUnit, 0f);
         }
 
         /// <summary>

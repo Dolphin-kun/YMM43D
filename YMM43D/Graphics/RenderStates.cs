@@ -40,6 +40,9 @@ namespace YMM43D.Graphics
         /// <summary>深度を無視して常に描画するステート（最前面表示用）。</summary>
         public ID3D11DepthStencilState DepthDisabled { get; }
 
+        /// <summary>深度テストは行うが、深度バッファには書き込まないステート。</summary>
+        public ID3D11DepthStencilState DepthTestOnly { get; }
+
         /// <summary>カリングなし（両面を描画）。</summary>
         public ID3D11RasterizerState CullNone { get; }
 
@@ -73,6 +76,13 @@ namespace YMM43D.Graphics
                 DepthEnable = false,
                 DepthWriteMask = DepthWriteMask.Zero,
                 DepthFunc = ComparisonFunction.Always,
+            }));
+
+            DepthTestOnly = Collect(device.CreateDepthStencilState(new DepthStencilDescription
+            {
+                DepthEnable = true,
+                DepthWriteMask = DepthWriteMask.Zero,
+                DepthFunc = ComparisonFunction.LessEqual,
             }));
 
             CullNone = CreateRasterizer(device, CullMode.None);

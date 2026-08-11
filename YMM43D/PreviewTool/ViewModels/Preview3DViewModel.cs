@@ -234,11 +234,15 @@ namespace YMM43D.PreviewTool.ViewModels
             var frame = timeline.CurrentFrame;
             var updated = new List<PreviewItem>();
 
-            foreach (var item in items.OfType<IVideoItem>())
-            {
-                if (frame < item.Frame || frame >= item.Frame + item.Length)
-                    continue;
+            // 半透明な板は深度を書き込まないため、重なりは描画順で決まる。
+            // YMM4 と同じく、番号の小さいレイヤーから先に描いて奥に置く。
+            var visible = items
+                .OfType<IVideoItem>()
+                .Where(item => frame >= item.Frame && frame < item.Frame + item.Length)
+                .OrderBy(item => item.Layer);
 
+            foreach (var item in visible)
+            {
                 foreach (var provider in FindProviders(item))
                     updated.Add(new PreviewItem(provider, item, item.Frame, item.Length));
             }
