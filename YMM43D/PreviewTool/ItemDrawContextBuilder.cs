@@ -50,8 +50,9 @@ namespace YMM43D.PreviewTool
 
             return new DrawContext3D
             {
-                World = BuildWorldMatrix(item, itemTime, provider, rendered.CameraMatrix, imageBounds),
-                Opacity = Math.Clamp(GetOpacity(item, itemTime), 0f, 1f),
+                World = BuildSizeMatrix(provider, imageBounds)
+                      * ItemPlacement.GetWorldMatrix(item, itemTime, rendered.CameraMatrix),
+                Opacity = Math.Clamp(ItemPlacement.GetOpacity(item, itemTime), 0f, 1f),
                 Blend = ToBlendMode(item.Blend),
                 IsAlwaysOnTop = item.IsAlwaysOnTop,
                 Time = itemTime,
@@ -68,49 +69,6 @@ namespace YMM43D.PreviewTool
         {
             pipeline.Dispose();
             textureBridge.Dispose();
-        }
-
-        /// <summary>
-        /// 不透明度に、フェードイン・フェードアウトの効果を掛け合わせます。
-        /// </summary>
-        private static float GetOpacity(IVideoItem item, in FrameContext time)
-        {
-            var opacity = item.Opacity.GetFloat(time) / 100f;
-
-            var fadeInFrames = item.FadeIn * time.Fps;
-            if (fadeInFrames > 0 && time.Frame < fadeInFrames)
-                opacity *= (float)(time.Frame / fadeInFrames);
-
-            var fadeOutFrames = item.FadeOut * time.Fps;
-            if (fadeOutFrames > 0 && time.Frame > time.Length - fadeOutFrames)
-                opacity *= (float)((time.Length - time.Frame) / fadeOutFrames);
-
-            return opacity;
-        }
-
-        private static Matrix4x4 BuildWorldMatrix(
-            IVideoItem item,
-            in FrameContext time,
-            I3DProvider provider,
-            Matrix4x4 itemCamera,
-            RawRectF? imageBounds)
-        {
-            var sizeScale = BuildSizeMatrix(provider, imageBounds);
-            var zoom = Matrix4x4.CreateScale(item.Zoom.GetFloat(time) / 100f);
-
-            // YMM4 の回転は時計回り、3D空間は反時計回りなので符号を反転する。
-            var rotation = Matrix4x4.CreateRotationZ(-Rotation3D.ToRadians(item.Rotation.GetFloat(time)));
-
-            // YMM4 の Y 軸は下向き、3D空間は上向き。
-            var translation = Matrix4x4.CreateTranslation(
-                WorldScale.ToWorld(item.X.GetFloat(time)),
-                -WorldScale.ToWorld(item.Y.GetFloat(time)),
-                WorldScale.ToWorld(item.Z.GetFloat(time)));
-
-            if (itemCamera == Matrix4x4.Identity)
-                return sizeScale * zoom * rotation * translation;
-
-            return sizeScale * zoom * rotation * WorldScale.ToYUpMatrix(itemCamera) * translation;
         }
 
         /// <summary>

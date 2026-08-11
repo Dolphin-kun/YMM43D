@@ -70,7 +70,8 @@ namespace YMM43D.Plugin
                 description,
                 GetWorldBounds(itemTime),
                 Matrix4x4.Identity,
-                Draw);
+                Draw,
+                self: this);
         }
 
         public virtual void Dispose()

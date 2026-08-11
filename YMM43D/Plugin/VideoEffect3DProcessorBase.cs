@@ -107,7 +107,11 @@ namespace YMM43D.Plugin
 
             var draw = ConsumeCamera(description.DrawDescription, ref world);
 
-            output = renderer.Render(Devices, description, GetLocalBounds(itemTime), world, Draw);
+            // 3Dプレビューがアイテムから辿るのはエフェクト本体なので、自分の代わりに
+            // そちらを渡す。渡さないと自分自身を遮蔽物として数えてしまう。
+            output = renderer.Render(
+                Devices, description, GetLocalBounds(itemTime), world, Draw,
+                self: (I3DProvider?)owner ?? this);
 
             return draw;
         }

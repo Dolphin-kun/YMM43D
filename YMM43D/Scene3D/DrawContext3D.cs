@@ -25,6 +25,16 @@ namespace YMM43D.Scene3D
         /// <summary>YMM4 の「最前面に表示」。深度テストを無効にして描画します。</summary>
         public bool IsAlwaysOnTop { get; init; }
 
+        /// <summary>
+        /// <c>true</c> のとき、色を書かずに深度だけを書き込みます。
+        /// </summary>
+        /// <remarks>
+        /// アイテムをまたいだ前後関係を出すために、呼び出し側が他のアイテムの
+        /// 形だけを深度バッファに埋めるときに立てます。プロバイダーは
+        /// <see cref="ToDrawSettings"/> を使っていれば意識する必要はありません。
+        /// </remarks>
+        public bool DepthOnly { get; init; }
+
         /// <summary>アイテム内での時間位置。<see cref="AnimationExtensions"/> と組み合わせて使います。</summary>
         public required FrameContext Time { get; init; }
 
@@ -46,6 +56,7 @@ namespace YMM43D.Scene3D
         {
             Blend = Blend,
             IgnoreDepth = IsAlwaysOnTop,
+            DepthOnly = DepthOnly,
             Culling = culling,
             Texture = texture ?? Texture,
         };

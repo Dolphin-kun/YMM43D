@@ -64,10 +64,12 @@ namespace YMM43D.Graphics
         {
             context.UpdateSubresource(in constants, constantBuffer);
 
-            context.OMSetBlendState(states.GetBlend(settings.Blend));
+            context.OMSetBlendState(
+                settings.DepthOnly ? states.NoColorWrite : states.GetBlend(settings.Blend));
+
             context.OMSetDepthStencilState(
-                settings.IgnoreDepth ? states.DepthDisabled
-                : settings.SkipDepthWrite ? states.DepthTestOnly
+                settings.IgnoreDepth && !settings.DepthOnly ? states.DepthDisabled
+                : settings.SkipDepthWrite && !settings.DepthOnly ? states.DepthTestOnly
                 : states.DepthDefault);
             context.RSSetState(settings.Culling switch
             {

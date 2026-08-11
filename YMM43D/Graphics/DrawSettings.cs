@@ -36,6 +36,16 @@ namespace YMM43D.Graphics
         /// </remarks>
         public bool SkipDepthWrite { get; init; }
 
+        /// <summary>
+        /// <c>true</c> のとき、色を書かずに深度だけを書き込みます。
+        /// </summary>
+        /// <remarks>
+        /// アイテムをまたいだ前後関係を出すために使います。自分を描く前に、
+        /// 同じシーンにある他の 3D 物体をこの設定で描いておくと、後から描く自分が
+        /// 深度テストで正しく隠されます。シェーダーはそのまま使えます。
+        /// </remarks>
+        public bool DepthOnly { get; init; }
+
         /// <summary>ピクセルシェーダーのスロット 0 に設定するテクスチャ。</summary>
         public ID3D11ShaderResourceView? Texture { get; init; }
 

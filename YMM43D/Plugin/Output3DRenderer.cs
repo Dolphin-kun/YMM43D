@@ -50,16 +50,18 @@ namespace YMM43D.Plugin
         /// <param name="bounds">描くものがワールド空間で占める範囲（<paramref name="world"/> を掛ける前）。</param>
         /// <param name="world">描くものに掛けるワールド行列。</param>
         /// <param name="draw">実際の 3D 描画。</param>
+        /// <param name="self">
+        /// いま描こうとしているプロバイダー。同じシーンにある他の 3D 物体との前後関係を
+        /// 出すために使います。<c>null</c> を渡すと、自分だけを描きます。
+        /// </param>
         public ID2D1Image Render(
             IGraphicsDevicesAndContext devices,
             TimelineItemSourceDescription description,
             WorldBounds bounds,
             Matrix4x4 world,
-            Draw3DCallback draw)
+            Draw3DCallback draw,
+            I3DProvider? self = null)
         {
-            // アイテムをまたいだ前後関係を出せるかどうかの調査。設計が決まったら外す。
-            SceneAccessProbe.ReportOnce(description);
-
             var itemTime = FrameContext.FromItem(description);
             var timelineTime = FrameContext.FromTimeline(description);
 
@@ -83,9 +85,50 @@ namespace YMM43D.Plugin
                 Time = itemTime,
             };
 
+            // 同じシーンにある他の 3D 物体。自分より手前にあるものに隠されるよう、
+            // 先に深度だけ埋めておく。
+            var occluders = SceneDepthCollector.Collect(description, self);
+
             return renderer.Render(
                 devices, target.Width, target.Height, view, target.Projection, target.Offset,
-                render => draw(render, item));
+                render =>
+                {
+                    DrawOccluders(render, occluders);
+                    draw(render, item);
+                });
+        }
+
+        /// <summary>
+        /// 他のアイテムの形を、色を書かずに深度バッファへ埋めます。
+        /// </summary>
+        /// <remarks>
+        /// 描画そのものは各プロバイダーに任せます。<see cref="DrawContext3D.DepthOnly"/> が
+        /// <see cref="DrawSettings"/> まで伝わるため、プロバイダー側の実装は変えずに済みます。
+        /// </remarks>
+        private static void DrawOccluders(
+            in Render3DContext render,
+            IReadOnlyList<SceneDepthCollector.Occluder> occluders)
+        {
+            foreach (var occluder in occluders)
+            {
+                var context = new DrawContext3D
+                {
+                    World = occluder.World,
+                    Opacity = 1f,
+                    Time = occluder.Time,
+                    DepthOnly = true,
+                };
+
+                try
+                {
+                    occluder.Provider.Draw(render, context);
+                }
+                catch
+                {
+                    // 他のアイテムの都合で自分の描画まで巻き込まれないようにする。
+                    // 隠れ方が甘くなるだけで、絵は出る。
+                }
+            }
         }
 
         /// <summary>

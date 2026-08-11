@@ -29,6 +29,7 @@ namespace YMM43D.Graphics
         private readonly DisposeCollector disposer = new();
 
         private readonly ID3D11BlendState normal;
+        private readonly ID3D11BlendState noColorWrite;
         private readonly ID3D11BlendState add;
         private readonly ID3D11BlendState subtract;
         private readonly ID3D11BlendState multiply;
@@ -64,6 +65,19 @@ namespace YMM43D.Graphics
             multiply = CreateBlend(device, D3DBlend.DestinationColor, D3DBlend.InverseSourceAlpha, BlendOperation.Add);
             screen = CreateBlend(device, D3DBlend.One, D3DBlend.InverseSourceColor, BlendOperation.Add);
 
+            // 色を一切書かないステート。深度だけを埋めたいときに使う。
+            noColorWrite = Collect(device.CreateBlendState(new BlendDescription
+            {
+                RenderTarget =
+                {
+                    [0] = new RenderTargetBlendDescription
+                    {
+                        IsBlendEnabled = false,
+                        RenderTargetWriteMask = ColorWriteEnable.None,
+                    },
+                },
+            }));
+
             DepthDefault = Collect(device.CreateDepthStencilState(new DepthStencilDescription
             {
                 DepthEnable = true,
@@ -92,6 +106,9 @@ namespace YMM43D.Graphics
             LinearSampler = CreateSampler(device, Filter.MinMagMipLinear);
             PointSampler = CreateSampler(device, Filter.MinMagMipPoint);
         }
+
+        /// <summary>色を書かず、深度だけを書き込むステート。</summary>
+        public ID3D11BlendState NoColorWrite => noColorWrite;
 
         /// <summary>
         /// <see cref="BlendMode"/> に対応するブレンドステートを返します。
