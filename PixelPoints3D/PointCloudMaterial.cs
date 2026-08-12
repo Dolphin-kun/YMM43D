@@ -36,16 +36,31 @@ namespace PixelPoints3D
 
         public float Seed;
 
-        /// <summary>粒の横方向。カメラに正対させるため、ローカル座標系に持ち込んだもの。</summary>
-        public Vector3 PointRight;
+        /// <summary>カメラの右方向を、この形状のローカル座標系に持ち込んだもの。</summary>
+        public Vector3 ViewRight;
+
+        /// <summary>粒の一辺の半分（ワールド単位）。</summary>
+        public float PointHalfSize;
+
+        /// <summary>カメラの上方向。</summary>
+        public Vector3 ViewUp;
+
+        /// <summary>線の太さの半分（ワールド単位）。</summary>
+        public float LineHalfWidth;
+
+        /// <summary>カメラの前方向。線を画面に正対させるのに使う。</summary>
+        public Vector3 ViewForward;
 
         /// <summary>0 以外なら、色の代わりに画像の色を使う。</summary>
         public float UseSourceColor;
 
-        /// <summary>粒の縦方向。</summary>
-        public Vector3 PointUp;
+        /// <summary>この描画だけに掛かる不透明度。面に指定した値を入れる。</summary>
+        public float ExtraOpacity;
 
-        private float padding;
+        /// <summary>面ごとに不透明度を散らす量（0〜1）。</summary>
+        public float OpacityRandomness;
+
+        private Vector2 padding;
     }
 
     /// <summary>
@@ -80,22 +95,31 @@ namespace PixelPoints3D
                 float  Opacity;
                 float3 Scatter;
                 float  Seed;
-                float3 PointRight;
+                float3 ViewRight;
+                float  PointHalfSize;
+                float3 ViewUp;
+                float  LineHalfWidth;
+                float3 ViewForward;
                 float  UseSourceColor;
-                float3 PointUp;
-                float  Padding;
+                float  ExtraOpacity;
+                float  OpacityRandomness;
+                float2 Padding;
             };
 
             struct VS_INPUT
             {
                 float3 Cell   : CELL;
                 float2 Corner : CORNER;
+                float3 Other  : OTHER;
             };
 
             struct PS_INPUT
             {
                 float4 Position : SV_POSITION;
                 float2 TexCoord : TEXCOORD;
+
+                // 面ごとに一定の乱数。補間すると三角形の中で濃さが変わってしまう。
+                nointerpolation float Random : RANDOM;
             };
             """;
 
@@ -109,26 +133,50 @@ namespace PixelPoints3D
                 return frac((p.xxy + p.yxx) * p.zyx) * 2.0 - 1.0;
             }
 
-            PS_INPUT VSMain(VS_INPUT input)
+            // 格子番号を、格子の中での割合（0〜1）に直す。分割数が1なら中央。
+            float3 Ratio(float3 cell)
             {
-                PS_INPUT output;
+                return GridCount > 1.5 ? cell / max(GridCount - 1.0, 1.0) : 0.5;
+            }
 
-                // 端の点が格子の両端にちょうど乗るようにする。分割数が1なら中央。
-                float3 steps = max(GridCount - 1.0, 1.0);
-                float3 ratio = GridCount > 1.5 ? input.Cell / steps : 0.5;
+            // 格子番号から、ばらつきまで含めた点の位置を求める。
+            float3 Place(float3 cell)
+            {
+                float3 ratio = Ratio(cell);
 
                 // 画像は Y が下向き、3D 空間は上向き。
-                output.TexCoord = ratio.xy;
-
                 float3 local = float3(
                      (ratio.x - 0.5) * Extent.x,
                     -(ratio.y - 0.5) * Extent.y,
                      (ratio.z - 0.5) * Extent.z);
 
-                local += Hash(input.Cell) * Scatter;
+                return local + Hash(cell) * Scatter;
+            }
 
-                // 粒はカメラに正対させる。線と面では Corner が 0 なので効かない。
-                local += PointRight * input.Corner.x + PointUp * input.Corner.y;
+            PS_INPUT VSMain(VS_INPUT input)
+            {
+                PS_INPUT output;
+
+                output.TexCoord = Ratio(input.Cell).xy;
+                output.Random = Hash(input.Cell).x * 0.5 + 0.5;
+
+                float3 local = Place(input.Cell);
+
+                if (any(input.Other != input.Cell))
+                {
+                    // 線。相手へ向かう向きと視線から、画面に正対する幅の向きを作る。
+                    float3 along = Place(input.Other) - local;
+                    float3 side = cross(along, ViewForward);
+                    float length2 = dot(side, side);
+
+                    if (length2 > 1e-12)
+                        local += normalize(side) * input.Corner.x * LineHalfWidth;
+                }
+                else
+                {
+                    // 粒。カメラに正対させる。面では Corner が 0 なので効かない。
+                    local += (ViewRight * input.Corner.x + ViewUp * input.Corner.y) * PointHalfSize;
+                }
 
                 output.Position = mul(float4(local, 1.0), WorldViewProjection);
                 return output;
@@ -149,7 +197,10 @@ namespace PixelPoints3D
 
                 float3 rgb = UseSourceColor > 0.5 ? source.rgb : Color.rgb;
 
-                return float4(rgb, Color.a * Opacity);
+                // ばらつきは 1 倍から Random 倍までの間で効かせる。
+                float scatter = lerp(1.0, input.Random, OpacityRandomness);
+
+                return float4(rgb, Color.a * Opacity * ExtraOpacity * scatter);
             }
             """;
 

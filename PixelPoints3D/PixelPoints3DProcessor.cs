@@ -63,12 +63,22 @@ namespace PixelPoints3D
             var settings = item.ToDrawSettings(FaceCulling.None, texture);
 
             if (effect.DrawFaces && grid.Faces is { } faces)
-                pipeline.Draw(render.Context, constants, settings, faces);
+            {
+                // 面だけに掛かる不透明度とそのばらつき。他の形状には効かせない。
+                var faceConstants = constants with
+                {
+                    ExtraOpacity = Math.Clamp(effect.FaceOpacity.GetFloat(time) / 100f, 0f, 1f),
+                    OpacityRandomness = Math.Clamp(
+                        effect.FaceOpacityRandomness.GetFloat(time) / 100f, 0f, 1f),
+                };
 
-            if (effect.DrawLines && grid.Lines is { } lines)
+                pipeline.Draw(render.Context, faceConstants, settings, faces);
+            }
+
+            if (effect.DrawLines && grid.Lines is { } lines && constants.LineHalfWidth > 0f)
                 pipeline.Draw(render.Context, constants, settings, lines);
 
-            if (effect.DrawPoints)
+            if (effect.DrawPoints && constants.PointHalfSize > 0f)
                 pipeline.Draw(render.Context, constants, settings, grid.Points);
         }
 
@@ -96,41 +106,39 @@ namespace PixelPoints3D
                     WorldScale.ToWorld(effect.ScatterZ.GetFloat(time))),
                 Seed = effect.Seed.GetFloat(time),
                 UseSourceColor = effect.UseSourceColor ? 1f : 0f,
-                PointRight = GetPointAxis(render, world, Vector3.UnitX, time),
-                PointUp = GetPointAxis(render, world, Vector3.UnitY, time),
+                ViewRight = GetViewAxis(render, world, Vector3.UnitX),
+                ViewUp = GetViewAxis(render, world, Vector3.UnitY),
+                ViewForward = GetViewAxis(render, world, -Vector3.UnitZ),
+                PointHalfSize = WorldScale.ToWorld(effect.PointSize.GetFloat(time)) / 2f,
+                LineHalfWidth = WorldScale.ToWorld(effect.LineWidth.GetFloat(time)) / 2f,
+                ExtraOpacity = 1f,
+                OpacityRandomness = 0f,
             };
         }
 
         /// <summary>
-        /// 粒をカメラに正対させるための、ローカル座標系での縦横の向きを求めます。
+        /// カメラの向きを、この形状のローカル座標系に持ち込みます。
         /// </summary>
         /// <remarks>
-        /// カメラの右方向・上方向をワールド行列の逆で戻します。逆行列が取れない場合
-        /// （大きさが 0 など）は、正対をあきらめて素直な軸を使います。
+        /// 粒と線を画面に正対させるのに使います。逆行列が取れない場合（大きさが 0 など）は、
+        /// 正対をあきらめて素直な軸を返します。
         /// </remarks>
-        private Vector3 GetPointAxis(
+        private static Vector3 GetViewAxis(
             in Render3DContext render,
             in Matrix4x4 world,
-            Vector3 viewAxis,
-            in FrameContext time)
+            Vector3 viewAxis)
         {
-            var half = WorldScale.ToWorld(effect.PointSize.GetFloat(time)) / 2f;
-            if (half <= 0)
-                return Vector3.Zero;
-
             if (!Matrix4x4.Invert(render.View, out var inverseView)
                 || !Matrix4x4.Invert(world, out var inverseWorld))
             {
-                return viewAxis * half;
+                return viewAxis;
             }
 
             // 平行移動を除いた向きだけを持ち込む。
             var worldAxis = Vector3.TransformNormal(viewAxis, inverseView);
             var localAxis = Vector3.TransformNormal(worldAxis, inverseWorld);
 
-            return localAxis.LengthSquared() > 0f
-                ? Vector3.Normalize(localAxis) * half
-                : viewAxis * half;
+            return localAxis.LengthSquared() > 0f ? Vector3.Normalize(localAxis) : viewAxis;
         }
 
         /// <summary>格子が占める大きさ（ワールド単位）。</summary>
@@ -166,12 +174,16 @@ namespace PixelPoints3D
 
             var extent = GetExtent(itemTime, sizePixels);
 
-            // ばらつきと粒の大きさのぶん、格子より一回り広がる。
+            // ばらつきと、粒や線の太さのぶん、格子より一回り広がる。
+            var thickness = MathF.Max(
+                effect.PointSize.GetFloat(itemTime),
+                effect.LineWidth.GetFloat(itemTime));
+
             var margin = new Vector3(
                 WorldScale.ToWorld(effect.ScatterX.GetFloat(itemTime)),
                 WorldScale.ToWorld(effect.ScatterY.GetFloat(itemTime)),
                 WorldScale.ToWorld(effect.ScatterZ.GetFloat(itemTime)))
-                + new Vector3(WorldScale.ToWorld(effect.PointSize.GetFloat(itemTime)) / 2f);
+                + new Vector3(WorldScale.ToWorld(thickness) / 2f);
 
             var half = extent / 2f + margin;
 

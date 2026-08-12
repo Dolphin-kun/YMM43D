@@ -77,6 +77,11 @@ namespace PixelPoints3D
         }
         private bool drawLines;
 
+        [Display(GroupName = Shape, Name = "線の太さ", Description = "つなぐ線の太さ")]
+        [AnimationSlider("F1", "px", 0, 20)]
+        [ShowPropertyEditorWhen(nameof(DrawLines), true)]
+        public Animation LineWidth { get; } = new(2, 0, 500);
+
         [Display(GroupName = Shape, Name = "面を描く", Description = "隣り合う4点を三角形2枚で埋めます")]
         [ToggleSlider]
         public bool DrawFaces
@@ -85,6 +90,16 @@ namespace PixelPoints3D
             set => Set(ref drawFaces, value);
         }
         private bool drawFaces;
+
+        [Display(GroupName = Shape, Name = "面の不透明度", Description = "面だけに掛かる不透明度")]
+        [AnimationSlider("F0", "%", 0, 100)]
+        [ShowPropertyEditorWhen(nameof(DrawFaces), true)]
+        public Animation FaceOpacity { get; } = new(100, 0, 100);
+
+        [Display(GroupName = Shape, Name = "不透明度のばらつき", Description = "面ごとに不透明度をランダムに散らす量")]
+        [AnimationSlider("F0", "%", 0, 100)]
+        [ShowPropertyEditorWhen(nameof(DrawFaces), true)]
+        public Animation FaceOpacityRandomness { get; } = new(0, 0, 100);
 
         [Display(GroupName = Shape, Name = "色", Description = "点・線・面の色")]
         [ColorPicker]
@@ -116,7 +131,7 @@ namespace PixelPoints3D
         [AnimationSlider("F0", "px", 0, 100)]
         public Animation ScatterZ { get; } = new(0, 0, 2000);
 
-        [Display(GroupName = Scatter, Name = "種", Description = "ばらつき方を変えます")]
+        [Display(GroupName = Scatter, Name = "シード", Description = "ばらつき方を変えます")]
         [AnimationSlider("F0", "", 0, 100)]
         public Animation Seed { get; } = new(0, 0, 10000);
 
@@ -153,7 +168,8 @@ namespace PixelPoints3D
 
         protected override IEnumerable<IAnimatable> GetAnimatables() =>
         [
-            SpacingX, SpacingY, SpacingZ, Depth, Threshold, PointSize,
+            SpacingX, SpacingY, SpacingZ, Depth, Threshold,
+            PointSize, LineWidth, FaceOpacity, FaceOpacityRandomness,
             ScatterX, ScatterY, ScatterZ, Seed,
             PositionX, PositionY, PositionZ, Scale,
             RotationX, RotationY, RotationZ,

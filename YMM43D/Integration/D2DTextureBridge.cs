@@ -60,8 +60,39 @@ namespace YMM43D.Integration
                 bounds = D2DImageBounds.Get(deviceContext, image);
                 var (width, height) = D2DImageBounds.ToPixelSize(bounds);
 
-                return GetTextureCore(targetDevice, ymmDevices, deviceContext, image, key, bounds, width, height);
+                // 極端に大きな画像は、縮めて焼き込む。テクスチャが覆う範囲は変わらない
+                // ので、シェーダー側の UV はそのまま使える。落ちるよりは粗いほうがよい。
+                var scale = GetFittingScale(width, height);
+                if (scale < 1f)
+                {
+                    width = Math.Max(1, (int)MathF.Ceiling(width * scale));
+                    height = Math.Max(1, (int)MathF.Ceiling(height * scale));
+                }
+
+                return GetTextureCore(
+                    targetDevice, ymmDevices, deviceContext, image, key, bounds, width, height, scale);
             }
+        }
+
+        /// <summary>
+        /// テクスチャ1枚あたりに認める画素数。
+        /// </summary>
+        /// <remarks>
+        /// 一辺だけを見ていると、16384×16384 のような 1GB 級の確保を通してしまいます。
+        /// 面積で頭打ちにします。
+        /// </remarks>
+        private const long MaxTexturePixels = 4096L * 4096L;
+
+        /// <summary>
+        /// 上限に収めるための縮小率を返します。収まっていれば 1。
+        /// </summary>
+        private static float GetFittingScale(int width, int height)
+        {
+            var pixels = (long)width * height;
+
+            return pixels <= MaxTexturePixels
+                ? 1f
+                : MathF.Sqrt((float)MaxTexturePixels / pixels);
         }
 
         private ID3D11ShaderResourceView? GetTextureCore(
@@ -72,7 +103,8 @@ namespace YMM43D.Integration
             object key,
             in RawRectF bounds,
             int width,
-            int height)
+            int height,
+            float scale)
         {
             lock (gate)
             {
@@ -99,7 +131,7 @@ namespace YMM43D.Integration
                     }
                 }
 
-                texture.Update(ymmDevices, deviceContext, image, bounds);
+                texture.Update(ymmDevices, deviceContext, image, bounds, scale);
                 return texture.ShaderResourceView;
             }
         }
@@ -228,11 +260,16 @@ namespace YMM43D.Integration
             /// <summary>
             /// 最新の画像内容を焼き込みます。
             /// </summary>
+            /// <param name="scale">
+            /// 焼き込むときの縮小率。テクスチャが覆う範囲は <paramref name="bounds"/> の
+            /// ままなので、粗くなるだけで UV は変わりません。
+            /// </param>
             public void Update(
                 IGraphicsDevicesAndContext ymmDevices,
                 ID2D1DeviceContext deviceContext,
                 ID2D1Image image,
-                in RawRectF bounds)
+                in RawRectF bounds,
+                float scale)
             {
                 // 前フレームの描画で握ったままの鍵を返す。
                 ReleaseReadLock();
@@ -251,7 +288,9 @@ namespace YMM43D.Integration
                         deviceContext.BeginDraw();
                         deviceContext.Clear(null);
                         // 描画範囲の左上がテクスチャの原点に来るようにずらす。
-                        deviceContext.Transform = Matrix3x2.CreateTranslation(-bounds.Left, -bounds.Top);
+                        deviceContext.Transform =
+                            Matrix3x2.CreateTranslation(-bounds.Left, -bounds.Top)
+                            * Matrix3x2.CreateScale(scale);
                         deviceContext.DrawImage(image);
                         deviceContext.EndDraw();
 

@@ -117,9 +117,47 @@ namespace YMM43D.Plugin
             // そちらを渡す。渡さないと自分自身を遮蔽物として数えてしまう。
             output = renderer.Render(
                 Devices, description, GetLocalBounds(itemTime), world, Draw,
-                self: (I3DProvider?)owner ?? this);
+                self: (I3DProvider?)owner ?? this,
+                placement: ToWorldPlacement(description.DrawDescription));
 
             return Neutralize(description.DrawDescription);
+        }
+
+        /// <summary>
+        /// YMM4 が画像に掛けようとしている配置を、3D のワールド行列に直します。
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// アイテムのプロパティ（位置・拡大率・回転）ではなく、<c>DrawDescription</c> を
+        /// 使うのが要点です。ここに入っているのは、アイテムの設定に加えて描画元の都合や
+        /// 前段のエフェクトまで織り込んだ<b>最終的な</b>配置だからです。
+        /// </para>
+        /// <para>
+        /// たとえば画像アイテムは、実寸と表示したい大きさの差を <c>Zoom</c> に載せてきます。
+        /// アイテムのプロパティだけを見ていると、この分が抜け落ちて大きさが変わります。
+        /// </para>
+        /// </remarks>
+        private static Matrix4x4 ToWorldPlacement(DrawDescription draw)
+        {
+            var zoom = draw.Zoom;
+
+            // 奥行きには縦横のどちらを使うべきか決まらないので、平均を使う。
+            var scale = new Vector3(
+                (float)zoom.X,
+                (float)zoom.Y,
+                (float)(zoom.X + zoom.Y) / 2f);
+
+            // YMM4 の回転は時計回り、3D空間は反時計回りなので符号を反転する。
+            var rotation = Rotation3D.ForObject(
+                -(float)draw.Rotation.X, -(float)draw.Rotation.Y, -(float)draw.Rotation.Z);
+
+            // YMM4 の Y 軸は下向き、3D空間は上向き。
+            var translation = Matrix4x4.CreateTranslation(
+                WorldScale.ToWorld((float)draw.Draw.X),
+                -WorldScale.ToWorld((float)draw.Draw.Y),
+                WorldScale.ToWorld((float)draw.Draw.Z));
+
+            return Matrix4x4.CreateScale(scale) * rotation * translation;
         }
 
         /// <summary>

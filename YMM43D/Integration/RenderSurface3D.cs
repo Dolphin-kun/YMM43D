@@ -34,6 +34,26 @@ namespace YMM43D.Integration
         /// <summary>相手が鍵を返すのを待つ上限（ミリ秒）。</summary>
         private const int SyncTimeoutMs = 500;
 
+        /// <summary>
+        /// 確保する大きさの刻み（ピクセル）。
+        /// </summary>
+        /// <remarks>
+        /// 要求どおりの大きさで確保すると、ホイールで拡大縮小している間は毎フレーム
+        /// 作り直しになります。刻みで切り上げて確保し、要求が収まっている限り使い回します。
+        /// </remarks>
+        private const int SizeGranularity = 128;
+
+        /// <summary>
+        /// 作り直したあと、古い資源を手元に残しておく世代数。
+        /// </summary>
+        /// <remarks>
+        /// YMM4 がいつコマンドリストを再生し終えるか分かりません。作り直した直後に
+        /// 前の資源を解放すると、まだ参照されているビットマップを消してしまいます。
+        /// </remarks>
+        private const int RetiredGenerations = 2;
+
+        private readonly List<DisposeCollector> retired = [];
+
         private DisposeCollector? disposer;
         private DeviceLease? lease;
         private IDXGIKeyedMutex? writeMutex;
@@ -66,9 +86,9 @@ namespace YMM43D.Integration
             // デバイスが作り直された場合、開き直したテクスチャは古いデバイスに
             // 属したままなので、大きさが同じでも作り直す。
             if (!isBroken
-                && Size == (width, height)
                 && RenderTargetView is not null
-                && ymmDeviceKey == ymmDevice.NativePointer)
+                && ymmDeviceKey == ymmDevice.NativePointer
+                && Fits(width, height))
             {
                 return;
             }
@@ -77,6 +97,9 @@ namespace YMM43D.Integration
 
             if (width <= 0 || height <= 0)
                 return;
+
+            width = Quantize(width);
+            height = Quantize(height);
 
             var device = (lease ??= GraphicsDevicePool.Acquire()).Device;
 
@@ -121,6 +144,21 @@ namespace YMM43D.Integration
             ymmDeviceKey = ymmDevice.NativePointer;
             isBroken = false;
         }
+
+        /// <summary>
+        /// いま確保してある大きさで、要求された大きさを賄えるかを返します。
+        /// </summary>
+        /// <remarks>
+        /// 大きすぎるまま抱え続けないよう、余りが倍を超えたら作り直します。
+        /// </remarks>
+        private bool Fits(int width, int height)
+            => Size.Width >= width
+            && Size.Height >= height
+            && Size.Width <= Quantize(width) * 2
+            && Size.Height <= Quantize(height) * 2;
+
+        private static int Quantize(int length)
+            => (Math.Max(length, 1) + SizeGranularity - 1) / SizeGranularity * SizeGranularity;
 
         /// <summary>
         /// 3D側がこのテクスチャに描き込む権利を取ります。
@@ -195,8 +233,17 @@ namespace YMM43D.Integration
             readMutex = null;
             ymmDeviceKey = nint.Zero;
 
-            disposer?.Dispose();
+            // すぐには解放せず、数世代あとまで持ち回す。
+            if (disposer is not null)
+                retired.Add(disposer);
+
             disposer = null;
+
+            while (retired.Count > RetiredGenerations)
+            {
+                retired[0].Dispose();
+                retired.RemoveAt(0);
+            }
 
             Bitmap = null;
             DepthStencilView = null;
@@ -207,6 +254,12 @@ namespace YMM43D.Integration
         public void Dispose()
         {
             ReleaseResources();
+
+            foreach (var generation in retired)
+                generation.Dispose();
+
+            retired.Clear();
+
             lease?.Dispose();
             lease = null;
         }

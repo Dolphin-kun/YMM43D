@@ -68,6 +68,11 @@ namespace YMM43D.Plugin
         /// <c>true</c>。図形アイテムがこれにあたります。映像エフェクトは
         /// <c>DrawDescription</c> を無効化して自分で配置するため <c>false</c> です。
         /// </param>
+        /// <param name="placement">
+        /// このアイテムの配置行列。省略するとタイムライン上のアイテム設定から組み立てます。
+        /// <c>DrawDescription</c> を読める呼び出し側は、そちらから作ったものを渡してください。
+        /// 描画元の都合や前段のエフェクトまで織り込まれているぶん正確です。
+        /// </param>
         public ID2D1Image Render(
             IGraphicsDevicesAndContext devices,
             TimelineItemSourceDescription description,
@@ -75,7 +80,8 @@ namespace YMM43D.Plugin
             Matrix4x4 world,
             Draw3DCallback draw,
             I3DProvider? self = null,
-            bool hostAppliesPlacement = false)
+            bool hostAppliesPlacement = false,
+            Matrix4x4? placement = null)
         {
             var itemTime = FrameContext.FromItem(description);
             var timelineTime = FrameContext.FromTimeline(description);
@@ -91,7 +97,7 @@ namespace YMM43D.Plugin
 
             // アイテムの位置・拡大率・回転はワールド行列に取り込む。こうしないと、
             // 深度がアイテムごとに別の空間で測られ、前後関係が食い違う。
-            var placedWorld = world * scene.OwnerPlacement;
+            var placedWorld = world * (placement ?? scene.OwnerPlacement);
 
             // 取り込んだ配置を YMM4 も画像に掛けるなら、その逆変換を射影に畳み込んで
             // 打ち消す。畳み込むので、Direct2D 側には変換が一切残らない。

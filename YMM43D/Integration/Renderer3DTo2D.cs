@@ -1,4 +1,5 @@
 ﻿using System.Numerics;
+using Vortice;
 using Vortice.Direct2D1;
 using Vortice.Mathematics;
 using Vortice.Direct3D11;
@@ -129,7 +130,10 @@ namespace YMM43D.Integration
                     surface.EndWrite();
                 }
 
-                return BuildCommandList(ymmDevices, surface.Bitmap, offset);
+                // 確保してあるビットマップは要求より大きいことがある。実際に描いた
+                // 範囲だけを切り出さないと、余白のぶん画像が大きくなってしまう。
+                return BuildCommandList(
+                    ymmDevices, surface.Bitmap, offset, new RawRectF(0, 0, width, height));
             }
         }
 
@@ -140,7 +144,8 @@ namespace YMM43D.Integration
         private ID2D1Image BuildCommandList(
             IGraphicsDevicesAndContext ymmDevices,
             ID2D1Bitmap1? bitmap,
-            Vector2 offset)
+            Vector2 offset,
+            RawRectF? sourceRectangle = null)
         {
             lock (D2DGate.Sync)
             {
@@ -158,7 +163,8 @@ namespace YMM43D.Integration
                 deviceContext.Clear(null);
 
                 if (bitmap is not null)
-                    deviceContext.DrawImage(bitmap, offset, null, InterpolationMode.Linear, CompositeMode.SourceOver);
+                    deviceContext.DrawImage(
+                        bitmap, offset, sourceRectangle, InterpolationMode.Linear, CompositeMode.SourceOver);
 
                 deviceContext.EndDraw();
                 deviceContext.Target = null;

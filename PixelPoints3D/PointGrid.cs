@@ -9,17 +9,34 @@ using YukkuriMovieMaker.Commons;
 namespace PixelPoints3D
 {
     /// <summary>
-    /// 格子の何番目の点か、粒の場合はその四隅のどれかを表す頂点。
+    /// 格子の何番目の点かを表す頂点。
     /// </summary>
     /// <remarks>
+    /// <para>
     /// 座標は持ちません。実際の位置は頂点シェーダーが格子番号から組み立てます。
     /// 間隔・ばらつき・奥行きを変えても、格子の数が同じならバッファを作り直さずに済みます。
+    /// </para>
+    /// <para>
+    /// <see cref="Corner"/> と <see cref="Other"/> の使い方は形状ごとに違います。
+    /// </para>
+    /// <list type="table">
+    /// <item><term>粒</term><description>四隅を <c>Corner</c> の ±1 で表す。<c>Other</c> は自分自身</description></item>
+    /// <item><term>線</term><description><c>Other</c> がもう一方の端。<c>Corner.x</c> の ±1 で太さの左右に開く</description></item>
+    /// <item><term>面</term><description>どちらも使わない</description></item>
+    /// </list>
     /// </remarks>
     [StructLayout(LayoutKind.Sequential)]
-    internal struct GridVertex(Vector3 cell, Vector2 corner)
+    internal struct GridVertex(Vector3 cell, Vector2 corner, Vector3 other)
     {
         public Vector3 Cell = cell;
         public Vector2 Corner = corner;
+
+        /// <summary>線のもう一方の端。線以外では自分自身と同じ値。</summary>
+        public Vector3 Other = other;
+
+        public GridVertex(Vector3 cell) : this(cell, Vector2.Zero, cell) { }
+
+        public GridVertex(Vector3 cell, Vector2 corner) : this(cell, corner, cell) { }
 
         public static int Stride => Marshal.SizeOf<GridVertex>();
 
@@ -27,6 +44,7 @@ namespace PixelPoints3D
         [
             new("CELL", 0, Format.R32G32B32_Float, 0, 0),
             new("CORNER", 0, Format.R32G32_Float, 12, 0),
+            new("OTHER", 0, Format.R32G32B32_Float, 20, 0),
         ];
     }
 
@@ -142,6 +160,11 @@ namespace PixelPoints3D
             return new GridMesh(device, vertices, indices, PrimitiveTopology.TriangleList);
         }
 
+        /// <remarks>
+        /// 線は <c>LineList</c> ではなく細長い四角形で作ります。D3D11 の線は太さを
+        /// 持てず、常に 1 ピクセルになってしまうためです。四角形なら太さを指定でき、
+        /// 面や粒と同じシェーダーで描けます。
+        /// </remarks>
         private static IMesh? BuildLines(ID3D11Device device, GridSize size)
         {
             // 各点から右・下・奥へ1本ずつ。端の点は伸ばす先が無い。
@@ -152,13 +175,31 @@ namespace PixelPoints3D
             if (count <= 0)
                 return null;
 
-            var vertices = new GridVertex[count * 2];
+            var vertices = new GridVertex[count * 4];
+            var indices = new uint[count * 6];
+
             var v = 0;
+            var i = 0;
 
             void Connect(int x, int y, int z, int dx, int dy, int dz)
             {
-                vertices[v++] = new GridVertex(new Vector3(x, y, z), Vector2.Zero);
-                vertices[v++] = new GridVertex(new Vector3(x + dx, y + dy, z + dz), Vector2.Zero);
+                var from = new Vector3(x, y, z);
+                var to = new Vector3(x + dx, y + dy, z + dz);
+                var start = (uint)v;
+
+                // 太さの向きは「相手へ向かう方向」から決まるので、相手側の2点は
+                // 符号を入れ替えないと四角形がねじれる。
+                vertices[v++] = new GridVertex(from, new Vector2(-1, 0), to);
+                vertices[v++] = new GridVertex(from, new Vector2(1, 0), to);
+                vertices[v++] = new GridVertex(to, new Vector2(1, 0), from);
+                vertices[v++] = new GridVertex(to, new Vector2(-1, 0), from);
+
+                indices[i++] = start;
+                indices[i++] = start + 1;
+                indices[i++] = start + 2;
+                indices[i++] = start;
+                indices[i++] = start + 2;
+                indices[i++] = start + 3;
             }
 
             for (var z = 0; z < size.Z; z++)
@@ -174,7 +215,7 @@ namespace PixelPoints3D
                 }
             }
 
-            return new GridMesh(device, vertices, null, PrimitiveTopology.LineList);
+            return new GridMesh(device, vertices, indices, PrimitiveTopology.TriangleList);
         }
 
         private static IMesh? BuildFaces(ID3D11Device device, GridSize size)
