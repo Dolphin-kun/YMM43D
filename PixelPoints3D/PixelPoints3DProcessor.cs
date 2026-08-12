@@ -72,35 +72,39 @@ namespace PixelPoints3D
             var constants = BuildConstants(time, item, render, world, size, extent);
             var settings = item.ToDrawSettings(FaceCulling.None, texture);
 
-            if (effect.DrawFaces && grid.Faces is { } faces)
+            if (effect.DrawFaces && effect.FaceSettings.Count > 0 && grid.Faces is { } faces)
             {
+                var face = effect.FaceSettings[0];
                 // 面だけに掛かる不透明度とそのばらつき。他の形状には効かせない。
-                var faceConstants = WithColor(constants, effect.FaceColor, effect.FaceColorSource) with
+                var faceConstants = WithColor(constants, face.Color, face.ColorSource) with
                 {
-                    ExtraOpacity = Math.Clamp(effect.FaceOpacity.GetFloat(time) / 100f, 0f, 1f),
+                    ExtraOpacity = Math.Clamp(face.Opacity.GetFloat(time) / 100f, 0f, 1f),
                     OpacityRandomness = Math.Clamp(
-                        effect.FaceOpacityRandomness.GetFloat(time) / 100f, 0f, 1f),
+                        face.OpacityRandomness.GetFloat(time) / 100f, 0f, 1f),
                 };
 
                 pipeline.Draw(render.Context, faceConstants, settings, faces);
             }
 
-            if (effect.DrawLines && grid.Lines is { } lines && constants.LineHalfWidth > 0f)
+            if (effect.DrawLines && effect.LineSettings.Count > 0 && grid.Lines is { } lines && constants.LineHalfWidth > 0f)
             {
+                var line = effect.LineSettings[0];
                 pipeline.Draw(
                     render.Context,
-                    WithColor(constants, effect.LineColor, effect.LineColorSource),
+                    WithColor(constants, line.Color, line.ColorSource),
                     settings,
                     lines);
             }
 
-            if (effect.DrawPoints && constants.PointHalfSize > 0f)
+            if (effect.DrawPoints && effect.PointSettings.Count > 0 && constants.PointHalfSize > 0f)
             {
-                pipeline.Draw(
-                    render.Context,
-                    WithColor(constants, effect.PointColor, effect.PointColorSource),
-                    settings,
-                    grid.Points);
+                var point = effect.PointSettings[0];
+                var pointConstants = WithColor(constants, point.Color, point.ColorSource) with
+                {
+                    PointIsRound = point.Shape == PointShape.Circle ? 1f : 0f,
+                };
+
+                pipeline.Draw(render.Context, pointConstants, settings, grid.Points);
             }
         }
 
@@ -136,8 +140,10 @@ namespace PixelPoints3D
                 ViewRight = GetViewAxis(render, world, Vector3.UnitX),
                 ViewUp = GetViewAxis(render, world, Vector3.UnitY),
                 ViewForward = GetViewAxis(render, world, -Vector3.UnitZ),
-                PointHalfSize = WorldScale.ToWorld(effect.PointSize.GetFloat(time)) / 2f,
-                LineHalfWidth = WorldScale.ToWorld(effect.LineWidth.GetFloat(time)) / 2f,
+                PointHalfSize = effect.PointSettings.Count > 0
+                    ? WorldScale.ToWorld(effect.PointSettings[0].Size.GetFloat(time)) / 2f : 0f,
+                LineHalfWidth = effect.LineSettings.Count > 0
+                    ? WorldScale.ToWorld(effect.LineSettings[0].Width.GetFloat(time)) / 2f : 0f,
                 ExtraOpacity = 1f,
                 OpacityRandomness = 0f,
             };
@@ -213,8 +219,8 @@ namespace PixelPoints3D
 
             // ばらつきと、粒や線の太さのぶん、格子より一回り広がる。
             var thickness = MathF.Max(
-                effect.PointSize.GetFloat(itemTime),
-                effect.LineWidth.GetFloat(itemTime));
+                effect.PointSettings.Count > 0 ? effect.PointSettings[0].Size.GetFloat(itemTime) : 0f,
+                effect.LineSettings.Count > 0 ? effect.LineSettings[0].Width.GetFloat(itemTime) : 0f);
 
             var margin = new Vector3(
                 WorldScale.ToWorld(effect.ScatterX.GetFloat(itemTime)),

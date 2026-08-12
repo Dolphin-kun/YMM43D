@@ -60,7 +60,10 @@ namespace PixelPoints3D
         /// <summary>面ごとに不透明度を散らす量（0〜1）。</summary>
         public float OpacityRandomness;
 
-        private Vector2 padding;
+        /// <summary>0 以外なら、粒を四角形ではなく円で描く。</summary>
+        public float PointIsRound;
+
+        private float padding;
     }
 
     /// <summary>
@@ -103,7 +106,8 @@ namespace PixelPoints3D
                 float  UseSourceColor;
                 float  ExtraOpacity;
                 float  OpacityRandomness;
-                float2 Padding;
+                float  PointIsRound;
+                float  Padding;
             };
 
             struct VS_INPUT
@@ -205,8 +209,17 @@ namespace PixelPoints3D
             //
             // 面は edge が 0 のまま動かないので、差も 0 になり、割合は常に 1 です。
             // 隣り合う三角形の継ぎ目に隙間を作らないための性質で、意図的です。
+            //
+            // 円い粒は、四角形の板の中で中心からの距離を見て縁を丸く抜きます。
+            // 頂点の数は四角形と変わりません。
             float Coverage(float2 edge)
             {
+                if (PointIsRound > 0.5)
+                {
+                    float radius = length(edge);
+                    return saturate((1.0 - radius) / max(fwidth(radius), 1e-6));
+                }
+
                 float2 width = fwidth(edge);
                 float2 coverage = saturate((1.0 - abs(edge)) / max(width, 1e-6));
 
@@ -215,6 +228,10 @@ namespace PixelPoints3D
 
             float4 main(PS_INPUT input) : SV_Target
             {
+                // 覆っている割合は捨てる前に求める。捨てたあとの画素は隣との差が
+                // 定まらなくなるため、後に回すと縁の計算が崩れる。
+                float coverage = Coverage(input.Edge);
+
                 float4 source = txDiffuse.SampleLevel(samLinear, input.TexCoord, 0);
 
                 // 中身が無いところは描かない。
@@ -226,9 +243,7 @@ namespace PixelPoints3D
                 // ばらつきは 1 倍から Random 倍までの間で効かせる。
                 float scatter = lerp(1.0, input.Random, OpacityRandomness);
 
-                float alpha = Color.a * Opacity * ExtraOpacity * scatter * Coverage(input.Edge);
-
-                return float4(rgb, alpha);
+                return float4(rgb, Color.a * Opacity * ExtraOpacity * scatter * coverage);
             }
             """;
 
