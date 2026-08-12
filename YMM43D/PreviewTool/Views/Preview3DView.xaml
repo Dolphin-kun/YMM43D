@@ -4,33 +4,36 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:local="clr-namespace:YMM43D.PreviewTool.Views"
-             xmlns:icons="clr-namespace:YukkuriMovieMaker.Resources.Icons;assembly=YukkuriMovieMaker.Plugin"
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="600"
              Background="Black"
              Focusable="True"
              PreviewKeyDown="UserControl_PreviewKeyDown">
+    <!--
+        3D表示は HwndHost（子ウィンドウ）なので、WPF の要素を重ねても必ず下に隠れ、
+        その範囲のクリックも子ウィンドウが持っていく。操作は重ねずに行を分ける。
+    -->
     <Grid x:Name="RootGrid">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="6,4">
+            <Button Content="カメラを追加"
+                    Command="{Binding AddCameraCommand}"
+                    IsEnabled="{Binding CanAddCamera}"
+                    ToolTip="いまの再生位置に「3Dカメラ」アイテムを置きます。空いているレイヤーを下から探します。"
+                    Padding="8,2"/>
+
+            <CheckBox Content="ドラッグでカメラを動かす"
+                      IsChecked="{Binding DrivesSceneCamera}"
+                      VerticalAlignment="Center"
+                      Margin="10,0,0,0"
+                      ToolTip="入れると、ドラッグがカメラアイテムを直接動かします。外すと見る位置だけが動き、出力は変わりません。カメラアイテムが無い間は常に見る位置だけが動きます。"/>
+        </StackPanel>
+
         <!-- 3D表示 -->
-        <ContentControl Content="{Binding D3DHost}" />
-
-        <!-- 操作。3D表示に重ねて置く -->
-        <Border VerticalAlignment="Top" HorizontalAlignment="Left" Margin="8"
-                Background="#B0000000" CornerRadius="4" Padding="6,4">
-            <StackPanel Orientation="Horizontal">
-                <Button Content="カメラを追加"
-                        Command="{Binding AddCameraCommand}"
-                        IsEnabled="{Binding CanAddCamera}"
-                        ToolTip="いまの再生位置に「3Dカメラ」アイテムを置きます。空いているレイヤーを下から探します。"
-                        Padding="8,2"/>
-
-                <CheckBox Content="ドラッグでカメラを動かす"
-                          IsChecked="{Binding DrivesSceneCamera}"
-                          Foreground="White"
-                          VerticalAlignment="Center"
-                          Margin="10,0,0,0"
-                          ToolTip="入れると、ドラッグがカメラアイテムを直接動かします。外すと見る位置だけが動き、出力は変わりません。"/>
-            </StackPanel>
-        </Border>
+        <ContentControl Grid.Row="1" Content="{Binding D3DHost}"/>
     </Grid>
 </UserControl>

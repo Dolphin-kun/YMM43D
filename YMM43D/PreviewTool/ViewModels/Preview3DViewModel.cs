@@ -181,8 +181,10 @@ namespace YMM43D.PreviewTool.ViewModels
             if (d3dHost is null || timeline is null)
                 return;
 
-            // カメラを直接動かしているあいだは、見る位置もカメラに追従させる。
-            if (drivesSceneCamera)
+            // カメラアイテムを動かしているあいだは、見る位置もそのカメラに追従させる。
+            // アイテムが無いときまで追従させると、自由に見て回るための視点が
+            // 毎フレーム既定の位置へ戻され、ドラッグしても動かなくなる。
+            if (drivesSceneCamera && SceneCameraResolver.Find(timeline) is not null)
                 freeCamera.Invalidate();
 
             refresher?.RefreshIfCameraChanged(timeline);
