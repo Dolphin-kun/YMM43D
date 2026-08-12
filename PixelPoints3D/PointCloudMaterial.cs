@@ -317,10 +317,17 @@ namespace PixelPoints3D
                 if (source.a < Threshold)
                     discard;
 
-                float3 rgb = UseSourceColor > 0.5 ? source.rgb : Color.rgb;
                 float scatter = lerp(1.0, input.Random.x, OpacityRandomness);
+                float alpha = Color.a * Opacity * ExtraOpacity * scatter * coverage;
 
-                return float4(rgb, Color.a * Opacity * ExtraOpacity * scatter * coverage);
+                // 透けている画素も、捨てなければ深度は書いてしまう。円い粒では
+                // 四角い板の隅がそのまま残り、後ろの粒を隠して黒く抜けて見える。
+                if (alpha < 1.0 / 255.0)
+                    discard;
+
+                float3 rgb = UseSourceColor > 0.5 ? source.rgb : Color.rgb;
+
+                return float4(rgb, alpha);
             }
             """;
 
