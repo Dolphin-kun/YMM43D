@@ -48,6 +48,23 @@ namespace YMM43D.Integration
         }
 
         /// <summary>
+        /// 同じ配置を、YMM4 が画像に掛ける 2D の形で返します。
+        /// </summary>
+        /// <remarks>
+        /// <see cref="GetWorldMatrix"/> と同じ値から作ります。片方だけを直すと
+        /// 3D 側の配置と打ち消しがずれるので、必ず対で使ってください。
+        /// </remarks>
+        public static ScreenPlacement GetScreenPlacement(IVideoItem item, in FrameContext time)
+        {
+            var zoom = item.Zoom.GetFloat(time) / 100f;
+
+            return new ScreenPlacement(
+                new Vector2(item.X.GetFloat(time), item.Y.GetFloat(time)),
+                float.IsFinite(zoom) && zoom > 0f ? zoom : 1f,
+                item.Rotation.GetFloat(time));
+        }
+
+        /// <summary>
         /// 不透明度に、フェードイン・フェードアウトの効果を掛け合わせます。
         /// </summary>
         public static float GetOpacity(IVideoItem item, in FrameContext time)

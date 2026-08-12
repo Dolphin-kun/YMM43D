@@ -63,15 +63,17 @@ namespace YMM43D.Plugin
         {
             var itemTime = FrameContext.FromItem(description);
 
-            // 出力経路ではアイテムの位置や回転は YMM4 が後から適用するので、
-            // ワールド行列は単位行列でよい。
+            // 図形アイテムには DrawDescription を返す口が無いので、アイテムの配置は
+            // YMM4 が出来上がった画像に掛ける。3D 側でも同じ配置を取り込むため、
+            // その逆変換を射影に畳み込んで打ち消してもらう。
             output = renderer.Render(
                 Devices,
                 description,
                 GetWorldBounds(itemTime),
                 Matrix4x4.Identity,
                 Draw,
-                self: this);
+                self: this,
+                hostAppliesPlacement: true);
         }
 
         public virtual void Dispose()

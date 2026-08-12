@@ -18,9 +18,20 @@ namespace YMM43D.Integration
     /// </remarks>
     public sealed class Renderer3DTo2D : IDisposable
     {
+        /// <summary>
+        /// 手元に残しておくコマンドリストの数。
+        /// </summary>
+        /// <remarks>
+        /// YMM4 がいつ再生し終えるかは分かりません。次のフレームを作るそばから
+        /// 前回の分を破棄すると、まだ参照されている資源を消してしまい、native 側で
+        /// アクセス違反になります。数フレーム分を持ち回して使い捨てます。
+        /// </remarks>
+        private const int CommandListRetention = 3;
+
         private readonly RenderSurface3D surface = new();
         private readonly PrivateD2DContext privateContext = new();
-        private ID2D1CommandList? commandList;
+        private readonly ID2D1CommandList?[] commandLists = new ID2D1CommandList?[CommandListRetention];
+        private int commandListIndex;
 
         /// <summary>
         /// 何も描かれていない画像を返します。
@@ -30,7 +41,7 @@ namespace YMM43D.Integration
         /// YMM4 が結果を受け取る際に例外になります。
         /// </remarks>
         public ID2D1Image RenderEmpty(IGraphicsDevicesAndContext ymmDevices)
-            => BuildCommandList(ymmDevices, null, Vector2.Zero, Matrix3x2.Identity);
+            => BuildCommandList(ymmDevices, null, Vector2.Zero);
 
         /// <summary>
         /// 3Dシーンを描画し、その結果を含むコマンドリストを返します。
@@ -40,14 +51,10 @@ namespace YMM43D.Integration
         /// <param name="height">描画する高さ（ピクセル）。</param>
         /// <param name="view">ビュー行列。</param>
         /// <param name="projection">射影行列。</param>
-        /// <param name="offset">結果を配置する 2D 上のずれ。</param>
+        /// <param name="offset">結果を配置する、アイテムの画像の中での左上。</param>
         /// <param name="draw">実際の 3D 描画を行うコールバック。</param>
-        /// <param name="imageTransform">
-        /// 結果に掛ける 2D 変換。YMM4 がこの画像に後から掛ける拡大・回転を
-        /// 打ち消すのに使います。
-        /// </param>
         /// <returns>
-        /// 描画結果のコマンドリスト。次に <see cref="Render"/> を呼ぶか
+        /// 描画結果のコマンドリスト。数回 <see cref="Render"/> を呼ぶか
         /// このオブジェクトを破棄するまで有効です。
         /// </returns>
         public ID2D1Image Render(
@@ -57,14 +64,10 @@ namespace YMM43D.Integration
             Matrix4x4 view,
             Matrix4x4 projection,
             Vector2 offset,
-            Action<Render3DContext> draw,
-            Matrix3x2 imageTransform = default)
+            Action<Render3DContext> draw)
         {
-            if (imageTransform == default)
-                imageTransform = Matrix3x2.Identity;
-
             if (width <= 0 || height <= 0)
-                return BuildCommandList(ymmDevices, null, offset, imageTransform);
+                return BuildCommandList(ymmDevices, null, offset);
 
             using var lease = GraphicsDevicePool.Acquire();
             var context = lease.Context;
@@ -82,11 +85,11 @@ namespace YMM43D.Integration
                 surface.Resize(ymmDevices, d2dContext, width, height);
 
                 if (surface.RenderTargetView is null)
-                    return BuildCommandList(ymmDevices, null, offset, imageTransform);
+                    return BuildCommandList(ymmDevices, null, offset);
 
                 // YMM4 側が前回の結果を読み終えるまで待ってから描き換える。
                 if (!surface.BeginWrite())
-                    return BuildCommandList(ymmDevices, null, offset, imageTransform);
+                    return BuildCommandList(ymmDevices, null, offset);
 
                 // このコンテキストは他の描画とも共有されるため、書き換える状態は
                 // すべて退避して必ず戻す。3Dプレビューは描画の途中でこのメソッドを
@@ -126,15 +129,18 @@ namespace YMM43D.Integration
                     surface.EndWrite();
                 }
 
-                return BuildCommandList(ymmDevices, surface.Bitmap, offset, imageTransform);
+                return BuildCommandList(ymmDevices, surface.Bitmap, offset);
             }
         }
 
+        /// <remarks>
+        /// 描くのはビットマップ1枚だけで、変換は掛けません。位置・拡大率・回転の
+        /// 打ち消しは射影行列に畳み込んであるので、ここに残す仕事はありません。
+        /// </remarks>
         private ID2D1Image BuildCommandList(
             IGraphicsDevicesAndContext ymmDevices,
             ID2D1Bitmap1? bitmap,
-            Vector2 offset,
-            Matrix3x2 imageTransform)
+            Vector2 offset)
         {
             lock (D2DGate.Sync)
             {
@@ -142,21 +148,18 @@ namespace YMM43D.Integration
                 // 書き換えるため、共用すると本体側の描画を壊してしまう。
                 var deviceContext = privateContext.For(ymmDevices);
 
-                commandList?.Dispose();
-                commandList = deviceContext.CreateCommandList();
+                commandListIndex = (commandListIndex + 1) % commandLists.Length;
+                commandLists[commandListIndex]?.Dispose();
+
+                var commandList = commandLists[commandListIndex] = deviceContext.CreateCommandList();
 
                 deviceContext.Target = commandList;
                 deviceContext.BeginDraw();
                 deviceContext.Clear(null);
 
-                // 拡大や回転を打ち消す変換。位置のずれは DrawImage 側で与えるので、
-                // ここでは掛からないように変換を設定してから描く順序にしている。
-                deviceContext.Transform = imageTransform;
-
                 if (bitmap is not null)
                     deviceContext.DrawImage(bitmap, offset, null, InterpolationMode.Linear, CompositeMode.SourceOver);
 
-                deviceContext.Transform = Matrix3x2.Identity;
                 deviceContext.EndDraw();
                 deviceContext.Target = null;
 
@@ -168,8 +171,16 @@ namespace YMM43D.Integration
         public void Dispose()
         {
             surface.Dispose();
-            commandList?.Dispose();
-            commandList = null;
+
+            lock (D2DGate.Sync)
+            {
+                for (var i = 0; i < commandLists.Length; i++)
+                {
+                    commandLists[i]?.Dispose();
+                    commandLists[i] = null;
+                }
+            }
+
             privateContext.Dispose();
         }
     }

@@ -63,13 +63,19 @@ namespace YMM43D.Plugin
         /// いま描こうとしているプロバイダー。同じシーンにある他の 3D 物体との前後関係を
         /// 出すために使います。<c>null</c> を渡すと、自分だけを描きます。
         /// </param>
+        /// <param name="hostAppliesPlacement">
+        /// YMM4 が出来上がった画像にアイテムの配置（位置・拡大率・回転）を掛けるなら
+        /// <c>true</c>。図形アイテムがこれにあたります。映像エフェクトは
+        /// <c>DrawDescription</c> を無効化して自分で配置するため <c>false</c> です。
+        /// </param>
         public ID2D1Image Render(
             IGraphicsDevicesAndContext devices,
             TimelineItemSourceDescription description,
             WorldBounds bounds,
             Matrix4x4 world,
             Draw3DCallback draw,
-            I3DProvider? self = null)
+            I3DProvider? self = null,
+            bool hostAppliesPlacement = false)
         {
             var itemTime = FrameContext.FromItem(description);
             var timelineTime = FrameContext.FromTimeline(description);
@@ -78,25 +84,22 @@ namespace YMM43D.Plugin
             // 位置で評価する。
             var camera = SceneCameraRegistry.Get(description);
             var view = camera.GetViewMatrix(timelineTime);
-            var distance = camera.Distance.GetFloat(timelineTime);
+            var pixelsPerTangent = SceneCamera.GetPixelsPerTangent(camera.Distance.GetFloat(timelineTime));
 
             // シーン内での自分の居場所と、他の 3D 物体を調べる。
             var scene = SceneDepthCollector.Collect(description, self);
 
-            // アイテムの位置・拡大率・回転をワールド行列に取り込む。取り込んだぶんは
-            // YMM4 が画像に掛ける 2D 配置を打ち消して相殺する。こうしないと、
-            // 3D 空間での位置と画面上の位置が食い違う。
+            // アイテムの位置・拡大率・回転はワールド行列に取り込む。こうしないと、
+            // 深度がアイテムごとに別の空間で測られ、前後関係が食い違う。
             var placedWorld = world * scene.OwnerPlacement;
 
-            // YMM4 が後から画像を拡大率で拡大するぶん、あらかじめ縮めた縮尺で描く。
-            // 拡大率はワールド行列に取り込んであるので、両者は打ち消し合う。
-            //
-            // 大きさで割るのではなく縮尺で割るのが要点で、描画先の画素数は拡大率に
-            // よらず一定に保たれる。画像を引き伸ばして打ち消す方法だと、縮小するほど
-            // 中間画像が巨大になって破綻する。
-            var pixelsPerTangent = SceneCamera.GetPixelsPerTangent(distance) / scene.OwnerZoom;
+            // 取り込んだ配置を YMM4 も画像に掛けるなら、その逆変換を射影に畳み込んで
+            // 打ち消す。畳み込むので、Direct2D 側には変換が一切残らない。
+            var tangentToImage = ImageProjection.TangentToImage(
+                pixelsPerTangent,
+                hostAppliesPlacement ? scene.OwnerScreenPlacement : ScreenPlacement.None);
 
-            var area = GetRenderArea(bounds.Transform(placedWorld), view, pixelsPerTangent);
+            var area = GetRenderArea(bounds, placedWorld, view, tangentToImage);
             if (area is not { } target)
             {
                 // 描くものが無いときに Output を未設定のままにすると、YMM4 が結果を
@@ -111,56 +114,17 @@ namespace YMM43D.Plugin
                 Time = itemTime,
             };
 
-            var placement = GetPlacementCancel(scene, target.Offset);
+            var projection = ImageProjection.Compose(
+                tangentToImage, target.Origin, target.Width, target.Height);
 
             return renderer.Render(
-                devices, target.Width, target.Height, view, target.Projection, placement.Offset,
+                devices, target.Width, target.Height, view, projection, target.Origin,
                 render =>
                 {
                     // 自分より手前にあるものに隠されるよう、先に深度だけ埋めておく。
                     DrawOccluders(render, scene.Occluders);
                     draw(render, item);
-                },
-                placement.Transform);
-        }
-
-        /// <summary>
-        /// YMM4 がこの画像に後から掛ける 2D 配置を打ち消す、ずれと変換を求めます。
-        /// </summary>
-        /// <remarks>
-        /// <para>
-        /// アイテムの位置・拡大率・回転は 3D のワールド行列に取り込んであります。YMM4 は
-        /// それと同じものを画像に対しても掛けるため、そのままだと二重になります。
-        /// 逆変換を先に掛けておくことで打ち消します。
-        /// </para>
-        /// <para>
-        /// 拡大率は縮尺の側で相殺済みなので、ここでは扱いません。ただし YMM4 は
-        /// 位置のずれにも拡大率を掛けるため、打ち消す量も同じだけ縮めておきます。
-        /// </para>
-        /// <para>
-        /// 自分がどのアイテムに属するか分からなかった場合は、取り込みも行っていないので
-        /// 何も打ち消しません。
-        /// </para>
-        /// </remarks>
-        private static (Vector2 Offset, Matrix3x2 Transform) GetPlacementCancel(
-            SceneDepthCollector.SceneView scene,
-            Vector2 offset)
-        {
-            if (scene.Owner is not { } owner)
-                return (offset, Matrix3x2.Identity);
-
-            var time = scene.OwnerTime;
-
-            // 位置は描画先のずれで打ち消す。YMM4 の Y は下向きで、ずれも下向き。
-            // 打ち消す量を拡大率で割るのは、YMM4 がこのずれごと拡大するため。
-            var moved = offset - new Vector2(
-                owner.X.GetFloat(time), owner.Y.GetFloat(time)) / scene.OwnerZoom;
-
-            var rotation = owner.Rotation.GetFloat(time);
-            if (rotation == 0f)
-                return (moved, Matrix3x2.Identity);
-
-            return (moved, Matrix3x2.CreateRotation(-Rotation3D.ToRadians(rotation)));
+                });
         }
 
         /// <summary>
@@ -207,44 +171,55 @@ namespace YMM43D.Plugin
         /// 溢れてしまいます。
         /// </para>
         /// <para>
-        /// 求めた範囲は対象の中心からずれていることがあるので、中心を合わせた正方形では
-        /// なく、範囲そのものを描画先にします。射影行列も中心をずらしたものを使います。
+        /// 隅はアイテムの画像空間まで移してから比べます。描画先を決める空間と実際に
+        /// 描く空間が同じになるので、範囲が無駄に広がったり端が切れたりしません。
+        /// </para>
+        /// <para>
+        /// ワールド行列は隅ごとに掛けます。<see cref="WorldBounds"/> は軸に平行な箱なので、
+        /// 先に掛けて箱に戻すと回転のたびに膨らみます。打ち消しでもう一度回すと二重に
+        /// 効き、30 度で 1.87 倍にもなります。
         /// </para>
         /// </remarks>
-        private static RenderArea? GetRenderArea(in WorldBounds bounds, in Matrix4x4 view, float pixelsPerTangent)
+        private static RenderArea? GetRenderArea(
+            in WorldBounds bounds,
+            in Matrix4x4 world,
+            in Matrix4x4 view,
+            in Matrix3x2 tangentToImage)
         {
             if (bounds.IsEmpty)
                 return null;
 
-            var minTan = new Vector2(float.MaxValue);
-            var maxTan = new Vector2(float.MinValue);
+            var worldView = world * view;
+
+            var min = new Vector2(float.MaxValue);
+            var max = new Vector2(float.MinValue);
 
             foreach (var corner in bounds.GetCorners())
             {
-                var viewSpace = Vector3.Transform(corner, view);
+                var viewSpace = Vector3.Transform(corner, worldView);
 
                 // 右手系のビュー空間では、カメラの前方は -Z。
                 var depth = MathF.Max(-viewSpace.Z, MinViewDistance);
-                var tan = new Vector2(viewSpace.X / depth, viewSpace.Y / depth);
+                var tangent = new Vector2(viewSpace.X / depth, viewSpace.Y / depth);
 
-                minTan = Vector2.Min(minTan, tan);
-                maxTan = Vector2.Max(maxTan, tan);
+                // カメラの真横や背後にある隅は、傾きが際限なく大きくなる。そのままだと
+                // 描画先の位置が桁外れの値になり、Direct2D に渡した時点で落ちる。
+                // 画面から遠く外れた範囲は描いても見えないので、ここで切り落とす。
+                if (!IsUsable(tangent))
+                    return null;
+
+                tangent = Vector2.Clamp(tangent, new Vector2(-MaxTangent), new Vector2(MaxTangent));
+
+                var image = Vector2.Transform(tangent, tangentToImage);
+                if (!IsUsable(image))
+                    return null;
+
+                min = Vector2.Min(min, image);
+                max = Vector2.Max(max, image);
             }
 
-            // カメラの真横や背後にある隅は、傾きが際限なく大きくなる。そのままだと
-            // 描画先のずれが桁外れの値になり、Direct2D に渡した時点で落ちる。
-            // 画面から遠く外れた範囲は描いても見えないので、ここで切り落とす。
-            if (!IsUsable(minTan) || !IsUsable(maxTan))
-                return null;
-
-            minTan = Vector2.Clamp(minTan, new Vector2(-MaxTangent), new Vector2(MaxTangent));
-            maxTan = Vector2.Clamp(maxTan, new Vector2(-MaxTangent), new Vector2(MaxTangent));
-
-            if (!float.IsFinite(pixelsPerTangent) || pixelsPerTangent <= 0)
-                return null;
-
-            var width = (int)MathF.Ceiling((maxTan.X - minTan.X) * pixelsPerTangent);
-            var height = (int)MathF.Ceiling((maxTan.Y - minTan.Y) * pixelsPerTangent);
+            var width = (int)MathF.Ceiling(max.X - min.X);
+            var height = (int)MathF.Ceiling(max.Y - min.Y);
 
             if (width <= 0 || height <= 0)
                 return null;
@@ -254,43 +229,26 @@ namespace YMM43D.Plugin
             // 範囲の方を諦める。
             if (width > MaxRenderSize)
             {
-                var excess = (width - MaxRenderSize) / (2f * pixelsPerTangent);
-                minTan.X += excess;
-                maxTan.X -= excess;
+                min.X += (width - MaxRenderSize) / 2f;
                 width = MaxRenderSize;
             }
 
             if (height > MaxRenderSize)
             {
-                var excess = (height - MaxRenderSize) / (2f * pixelsPerTangent);
-                minTan.Y += excess;
-                maxTan.Y -= excess;
+                min.Y += (height - MaxRenderSize) / 2f;
                 height = MaxRenderSize;
             }
 
-            var projection = SceneCamera.GetProjectionMatrix(minTan, maxTan);
-
-            // 出力画像はアイテムの原点を中心として扱われる。原点は視線上の
-            // (0, 0) に投影されるので、そこから範囲の左上までのずれを渡す。
-            // 3D の Y は上向き、2D の Y は下向きなので符号が反転する。
-            var offset = new Vector2(
-                minTan.X * pixelsPerTangent,
-                -maxTan.Y * pixelsPerTangent);
-
-            return new RenderArea(width, height, projection, offset);
+            return new RenderArea(width, height, min);
         }
 
-        /// <summary>傾きとして計算に使える値かどうかを調べます。</summary>
-        private static bool IsUsable(in Vector2 tangent)
-            => float.IsFinite(tangent.X) && float.IsFinite(tangent.Y);
+        /// <summary>座標として計算に使える値かどうかを調べます。</summary>
+        private static bool IsUsable(in Vector2 value)
+            => float.IsFinite(value.X) && float.IsFinite(value.Y);
 
         public void Dispose() => renderer.Dispose();
 
-        /// <summary>描画先の大きさと、そこに描くための射影。</summary>
-        private readonly record struct RenderArea(
-            int Width,
-            int Height,
-            Matrix4x4 Projection,
-            Vector2 Offset);
+        /// <summary>描画先の大きさと、アイテムの画像の中でのその左上。</summary>
+        private readonly record struct RenderArea(int Width, int Height, Vector2 Origin);
     }
 }

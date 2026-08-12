@@ -113,22 +113,20 @@ namespace YMM43D.Scene3D
                 GetFieldOfView(screenHeight, distance), aspectRatio, NearPlane, FarPlane);
 
         /// <summary>
-        /// 視線の正面から外れた範囲を写す射影行列を作ります。
+        /// 視線からの傾き（<c>x / -z</c>）をそのまま出す射影行列を返します。
         /// </summary>
-        /// <param name="minTangent">範囲の左下を、視線からの傾き（<c>x / -z</c>）で表したもの。</param>
-        /// <param name="maxTangent">範囲の右上を、同じく傾きで表したもの。</param>
         /// <remarks>
-        /// 画面の一部だけを、元の縮尺のまま切り出して描くために使います。中心を
-        /// ずらせるので、対象が視線の正面から外れていても無駄なく収められます。
+        /// <para>
+        /// 除算後の x・y が傾きそのものになります。ここから先は <see cref="ImageProjection"/> が
+        /// 2D のアフィン変換として画面ピクセル・アイテムの画像・NDC へ順に移します。
+        /// </para>
+        /// <para>
+        /// クリップ面はここで決まるので、どのアイテムを描くときも深度の目盛りは共通です。
+        /// </para>
         /// </remarks>
-        public static Matrix4x4 GetProjectionMatrix(Vector2 minTangent, Vector2 maxTangent)
+        public static Matrix4x4 GetTangentProjection()
             => Matrix4x4.CreatePerspectiveOffCenter(
-                minTangent.X * NearPlane,
-                maxTangent.X * NearPlane,
-                minTangent.Y * NearPlane,
-                maxTangent.Y * NearPlane,
-                NearPlane,
-                FarPlane);
+                -NearPlane, NearPlane, -NearPlane, NearPlane, NearPlane, FarPlane);
 
         /// <summary>
         /// 視線からの傾き（正接）1 あたりのピクセル数を求めます。

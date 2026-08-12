@@ -107,7 +107,7 @@ namespace YMM43D.Plugin
                 ? WorldScale.CreateSizeMatrix(size, offset + size / 2f)
                 : Matrix4x4.Identity;
 
-            var draw = ConsumeCamera(description.DrawDescription, ref world);
+            ConsumeCamera(description.DrawDescription, ref world);
 
             // 他のアイテムがこの物体を遮蔽物として扱うときに参照する。
             // 実寸とカメラ変換を合わせたもので、外からは組み立て直せない。
@@ -119,8 +119,36 @@ namespace YMM43D.Plugin
                 Devices, description, GetLocalBounds(itemTime), world, Draw,
                 self: (I3DProvider?)owner ?? this);
 
-            return draw;
+            return Neutralize(description.DrawDescription);
         }
+
+        /// <summary>
+        /// YMM4 に配置させないための <see cref="DrawDescription"/> を作ります。
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// アイテムの位置・拡大率・回転・カメラは、すべて 3D のワールド行列に取り込んで
+        /// 描画済みです。YMM4 が同じものを画像にも掛けると二重になるため、ここで
+        /// 打ち消すのではなく、はじめから何もしないよう伝えます。
+        /// </para>
+        /// <para>
+        /// 打ち消す方式だと、位置・回転・拡大率をそれぞれ別の仕組み（描画先のずれ・
+        /// Direct2D の変換・射影の縮尺）で相殺することになり、互いの干渉を確かめる術が
+        /// ありません。返す値を空にしてしまえば、その計算自体が要らなくなります。
+        /// </para>
+        /// <para>
+        /// 副作用として、このエフェクトより<b>後ろ</b>に置いたエフェクトからは、アイテムの
+        /// 位置や拡大率が既定値に見えます。それらを見るエフェクトは前に置いてください。
+        /// </para>
+        /// </remarks>
+        private static DrawDescription Neutralize(DrawDescription draw) => draw with
+        {
+            Draw = Vector3.Zero,
+            CenterPoint = Vector2.Zero,
+            Zoom = Vector2.One,
+            Rotation = Vector3.Zero,
+            Camera = Matrix4x4.Identity,
+        };
 
         /// <summary>
         /// 前段のエフェクトが作った変換を 3D の形そのものに掛け、後段には渡さないようにします。
@@ -137,14 +165,12 @@ namespace YMM43D.Plugin
         /// 立体化するエフェクトは、カメラ系エフェクトより後ろに置いてください。
         /// </para>
         /// </remarks>
-        private static DrawDescription ConsumeCamera(DrawDescription draw, ref Matrix4x4 world)
+        private static void ConsumeCamera(DrawDescription draw, ref Matrix4x4 world)
         {
             if (draw.Camera == Matrix4x4.Identity)
-                return draw;
+                return;
 
             world *= WorldScale.ToYUpMatrix(draw.Camera);
-
-            return draw with { Camera = Matrix4x4.Identity };
         }
 
         /// <inheritdoc/>
