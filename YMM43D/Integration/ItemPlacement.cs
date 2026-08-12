@@ -61,7 +61,8 @@ namespace YMM43D.Integration
             return new ScreenPlacement(
                 new Vector2(item.X.GetFloat(time), item.Y.GetFloat(time)),
                 float.IsFinite(zoom) && zoom > 0f ? zoom : 1f,
-                item.Rotation.GetFloat(time));
+                item.Rotation.GetFloat(time),
+                item.Z.GetFloat(time));
         }
 
         /// <summary>
