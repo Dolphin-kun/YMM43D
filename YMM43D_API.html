@@ -471,6 +471,15 @@ public class ExtrusionEffect : VideoEffect3DBase
 3D 描画は YMM4 とは別のデバイスで行うため、入力画像をそのままテクスチャとして使うことはできません。
 <code>GetTexture(device)</code> を呼べば、基底クラスが共有テクスチャを介して変換したものを返します。
 実寸は <code>TryGetSize(out size, out offset)</code> で取れます。
+焼き込みは <code>Update</code> の中で済ませてあるので、<code>Draw</code> がプレビューのスレッドから
+呼ばれても安全です（<a href="#notes">実装上の注意</a>を参照）。
+</p>
+
+<p>
+入力画像の実寸をワールド行列に取り込ませたくない場合は、<code>ScalesToInputSize</code> を
+<code>false</code> にしてください。粒や線のように太さを持つものは、縦横で違う倍率に
+引き伸ばされると歪みます。この値はプレビュー側からも参照されるので、
+出力と大きさが食い違うことはありません。
 </p>
 
 <div class="note">
@@ -606,7 +615,7 @@ var pipeline = pipelines.Get(render.Device);</pre>
 <tr><th>型</th><th>種別</th><th>説明</th></tr>
 <tr><td><code>I3DProvider</code></td><td>interface</td><td>3D 空間に何かを描画できるオブジェクト。このライブラリの中心となる拡張点</td></tr>
 <tr><td><code>I3DTextureProvider</code></td><td>interface</td><td>自前で用意したテクスチャを 3D 描画に提供できる</td></tr>
-<tr><td><code>I3DSizeProvider</code></td><td>interface</td><td>描画される内容の実寸と原点からのずれを伝えられる</td></tr>
+<tr><td><code>I3DSizeProvider</code></td><td>interface</td><td>描画される内容の実寸と原点からのずれ、およびそれをワールド行列に取り込んでよいか（<code>ScalesToInputSize</code>）を伝えられる</td></tr>
 <tr><td><code>I3DLocalTransform</code></td><td>interface</td><td>自分が使っているワールド行列を伝えられる。アイテムをまたいだ前後関係に使う</td></tr>
 <tr><td><code>I3DVideoEffect</code></td><td>interface</td><td><code>I3DProvider</code> と <code>I3DTextureProvider</code> の両方</td></tr>
 <tr><td><code>ICameraSync</code></td><td>interface</td><td>カメラの変化を YMM4 に伝える</td></tr>
@@ -778,10 +787,31 @@ Direct2D の操作は必ず <code>lock (D2DGate.Sync)</code> で囲ってくだ�
 
 <div class="note">
 <p>
-鍵の入れ子の順序は「3D デバイス → Direct2D」で固定です。
-<code>D2DGate.Sync</code> を持ったまま <code>GraphicsDevicePool</code> のデバイスをロックしないでください。
+鍵の入れ子の順序は「Direct2D → 3D デバイス」で固定です。
+<code>GraphicsDevicePool</code> のデバイスをロックしたまま <code>D2DGate.Sync</code> を取らないでください。
 </p>
 </div>
+
+<h3>YMM4 が所有する画像に触れてよい場所</h3>
+
+<p>
+<code>SetInput</code> で渡される入力画像は <b>YMM4 のもの</b>で、寿命もあちらが決めます。
+アイテムの設定を続けざまに変えたり、画像ファイルを差し替えたりすると、YMM4 は描画元や
+エフェクト連鎖を組み直し、その過程で前の画像を破棄します。
+</p>
+
+<p>
+<b>この画像に触れてよいのは <code>Update</code> の中だけです。</b>
+3Dプレビューのスレッドから触ると、破棄の瞬間に解放済みの領域へ vtable 経由で飛び、
+<code>ExecutionEngineException</code> でプロセスごと落ちます。<code>D2DGate</code> では防げません。
+あの鍵はこのプラグインの呼び出し同士を並べるだけで、YMM4 側の破棄は止められないからです。
+</p>
+
+<p>
+<code>VideoEffect3DProcessorBase</code> は <code>Update</code> の中で入力画像をテクスチャに焼き込み、
+<code>GetTexture(device)</code> は焼いたあとのものを返すだけにしています。
+派生クラスが入力画像を直接扱う場合も、同じ切り分けにしてください。
+</p>
 
 <h3>D3D11 コンテキストの状態を戻す</h3>
 

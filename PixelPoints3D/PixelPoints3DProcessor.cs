@@ -42,7 +42,7 @@ namespace PixelPoints3D
         /// 取り込ませると、格子が縦横で違う倍率に引き伸ばされます。粒が長方形になり、
         /// 線の太さも向きによって変わってしまいます。
         /// </remarks>
-        protected override bool ScalesToInputSize => false;
+        public override bool ScalesToInputSize => false;
 
         public override void Draw(in Render3DContext render, DrawContext3D item)
         {

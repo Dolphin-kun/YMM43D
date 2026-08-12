@@ -136,18 +136,6 @@ namespace YMM43D.Integration
             }
         }
 
-        /// <summary>
-        /// 画像の描画範囲だけを調べます。テクスチャは作りません。
-        /// </summary>
-        /// <remarks>
-        /// 実寸だけが必要で、まだ 3D 描画用のデバイスが決まっていない場面で使います。
-        /// </remarks>
-        public RawRectF GetBounds(IGraphicsDevicesAndContext ymmDevices, ID2D1Image image)
-        {
-            lock (D2DGate.Sync)
-                return D2DImageBounds.Get(privateContext.For(ymmDevices), image);
-        }
-
         /// <summary>キャッシュしているテクスチャをすべて破棄します。</summary>
         public void Clear()
         {

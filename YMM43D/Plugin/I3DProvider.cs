@@ -64,6 +64,21 @@ namespace YMM43D.Plugin
         /// <param name="size">幅と高さ（ピクセル）。</param>
         /// <param name="offset">原点からのずれ（ピクセル）。</param>
         bool TryGetSize(out Vector2 size, out Vector2 offset);
+
+        /// <summary>
+        /// 実寸をワールド行列に取り込んでよいかどうか。
+        /// </summary>
+        /// <remarks>
+        /// <c>true</c>（既定）のとき、呼び出し側は 1×1 の板を実寸に広げる変換を
+        /// ワールド行列に掛けます。<c>false</c> のプロバイダーは実寸を自分で扱うので、
+        /// 掛けると二重になります。
+        /// <para>
+        /// これを見ずに <see cref="TryGetSize"/> だけで判断すると、プレビューと出力で
+        /// 大きさが食い違います。実寸を答えられること自体は、それを掛けてよいことを
+        /// 意味しません。
+        /// </para>
+        /// </remarks>
+        bool ScalesToInputSize => true;
     }
 
     /// <summary>

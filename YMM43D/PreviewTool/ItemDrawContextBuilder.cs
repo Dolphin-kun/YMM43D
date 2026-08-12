@@ -82,10 +82,15 @@ namespace YMM43D.PreviewTool
         private static Matrix4x4 BuildSizeMatrix(I3DProvider provider, RawRectF? imageBounds)
         {
             // プロバイダーが実寸を知っている場合はそちらを優先する。
-            if (provider is I3DSizeProvider sizeProvider
-                && sizeProvider.TryGetSize(out var size, out var offset))
+            if (provider is I3DSizeProvider sizeProvider)
             {
-                return WorldScale.CreateSizeMatrix(size, offset + size / 2f);
+                // 実寸を自分で扱うプロバイダーには掛けない。掛けると出力経路と
+                // 大きさが食い違う（点群3D が画像の大きさぶん余計に広がっていた）。
+                if (!sizeProvider.ScalesToInputSize)
+                    return Matrix4x4.Identity;
+
+                if (sizeProvider.TryGetSize(out var size, out var offset))
+                    return WorldScale.CreateSizeMatrix(size, offset + size / 2f);
             }
 
             if (imageBounds is { } bounds)

@@ -1,6 +1,7 @@
 using System.Numerics;
 using Vortice.Direct2D1;
 using Vortice.Direct3D11;
+using YMM43D.Graphics;
 using YMM43D.Integration;
 using YMM43D.Scene3D;
 using YukkuriMovieMaker.Commons;
@@ -39,6 +40,10 @@ namespace YMM43D.Plugin
         private Vector2 inputSize;
         private Vector2 inputOffset;
         private Matrix4x4? localMatrix;
+        private DeviceLease? lease;
+        private ID3D11ShaderResourceView? bakedTexture;
+        private nint bakedDeviceKey;
+        private bool isDisposed;
 
         /// <summary>YMM4 のグラフィックスデバイス。</summary>
         protected IGraphicsDevicesAndContext Devices { get; }
@@ -85,7 +90,7 @@ namespace YMM43D.Plugin
         /// 実寸は <see cref="TryGetSize"/> で自分で取ってください。
         /// </para>
         /// </remarks>
-        protected virtual bool ScalesToInputSize => true;
+        public virtual bool ScalesToInputSize => true;
 
         /// <summary>
         /// 3D空間に描画します。プレビューと出力の両方から呼ばれます。
@@ -107,14 +112,9 @@ namespace YMM43D.Plugin
         {
             EffectDescription = description;
 
-            // ワールド行列を組み立てるのに入力画像の実寸が要る。テクスチャ化は
-            // 描画時まで遅らせられるが、範囲だけは先に調べておく。
-            if (Input is { } input)
-            {
-                var bounds = textureBridge.GetBounds(Devices, input);
-                inputSize = new Vector2(bounds.Right - bounds.Left, bounds.Bottom - bounds.Top);
-                inputOffset = new Vector2(bounds.Left, bounds.Top);
-            }
+            // 入力画像に触れてよいのはこの中だけ。ここは YMM4 の描画スレッドで、
+            // 画像が生きていることを YMM4 が保証してくれる唯一の場所。
+            BakeInput();
 
             var itemTime = FrameContext.FromItem(description);
 
@@ -249,28 +249,61 @@ namespace YMM43D.Plugin
         }
 
         /// <summary>
-        /// 入力画像を 3D 描画用デバイスのテクスチャとして取得します。
+        /// 入力画像を 3D 描画用デバイスのテクスチャに焼き込み、実寸を控えます。
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// <b>必ず YMM4 の描画スレッドから、<see cref="Update"/> の中で呼んでください。</b>
+        /// 入力画像は YMM4 が所有していて、寿命もあちらが決めます。アイテムの設定を
+        /// 続けざまに変えると、YMM4 は描画元やエフェクト連鎖を組み直し、その過程で
+        /// 前の画像を破棄します。破棄の瞬間に別のスレッドから同じ画像を触っていると、
+        /// vtable 経由の呼び出しが解放済みの領域に飛び、<c>ExecutionEngineException</c>
+        /// としてプロセスごと落ちます。<see cref="D2DGate"/> では防げません。あの鍵は
+        /// このプラグインの呼び出し同士を並べるだけで、YMM4 側の破棄は止められないからです。
+        /// </para>
+        /// <para>
+        /// そこで焼き込みだけをここで済ませ、3Dプレビューには焼いたあとのテクスチャを
+        /// 渡します。プレビューが YMM4 の画像に直接触ることは無くなります。
+        /// </para>
+        /// </remarks>
+        private void BakeInput()
+        {
+            if (Input is not { } input)
+                return;
+
+            // 焼き込みには 3D 側のデバイスが要る。毎回借り直すと、プレビューを
+            // 閉じている間はデバイスの作り直しになるため、借りたまま持っておく。
+            var device = (lease ??= GraphicsDevicePool.Acquire()).Device;
+
+            var texture = textureBridge.GetTexture(device, Devices, input, this, out var bounds);
+
+            inputSize = new Vector2(bounds.Right - bounds.Left, bounds.Bottom - bounds.Top);
+            inputOffset = new Vector2(bounds.Left, bounds.Top);
+
+            bakedTexture = texture;
+            bakedDeviceKey = texture is null ? nint.Zero : device.NativePointer;
+        }
+
+        /// <summary>
+        /// 焼き込み済みの入力画像を、テクスチャとして取得します。
         /// </summary>
         /// <param name="device">テクスチャを使うデバイス。</param>
         /// <remarks>
-        /// 呼ばれるたびに最新の入力内容を焼き直すため、内容が古くなることはありません。
+        /// 3Dプレビューのスレッドからも呼ばれます。ここでは焼いた結果を返すだけで、
+        /// YMM4 が所有する画像には触れません。理由は <see cref="BakeInput"/> を参照。
+        /// <para>
+        /// まだ一度も <see cref="Update"/> が呼ばれていない場合は <c>null</c> を返します。
+        /// 呼び出し側はアイテムの画像を自分で用意する経路に切り替えてください。
+        /// </para>
         /// </remarks>
         public ID3D11ShaderResourceView? GetTexture(ID3D11Device device)
         {
-            // 入力の参照を掴んでから使い終えるまでの間に差し替えられないようにする。
             lock (D2DGate.Sync)
             {
-                if (Input is not { } input)
+                if (isDisposed || bakedDeviceKey == nint.Zero)
                     return null;
 
-                var texture = textureBridge.GetTexture(device, Devices, input, this, out var bounds);
-                if (texture is not null)
-                {
-                    inputSize = new Vector2(bounds.Right - bounds.Left, bounds.Bottom - bounds.Top);
-                    inputOffset = new Vector2(bounds.Left, bounds.Top);
-                }
-
-                return texture;
+                return bakedDeviceKey == device.NativePointer ? bakedTexture : null;
             }
         }
 
@@ -289,13 +322,27 @@ namespace YMM43D.Plugin
             return size.X > 0 && size.Y > 0;
         }
 
+        /// <remarks>
+        /// 破棄も鍵の中で行います。3Dプレビューのスレッドが焼き込み済みテクスチャを
+        /// 読んでいる最中に、YMM4 の描画スレッドがこのプロセッサを捨てることがあります。
+        /// </remarks>
         public virtual void Dispose()
         {
+            lock (D2DGate.Sync)
+            {
+                isDisposed = true;
+                bakedTexture = null;
+                bakedDeviceKey = nint.Zero;
+                Input = null;
+                output = null;
+            }
+
             owner?.DetachProcessor(this);
             renderer.Dispose();
             textureBridge.Dispose();
-            Input = null;
-            output = null;
+
+            lease?.Dispose();
+            lease = null;
 
             GC.SuppressFinalize(this);
         }
