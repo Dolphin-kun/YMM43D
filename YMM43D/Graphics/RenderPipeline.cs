@@ -1,4 +1,4 @@
-using Vortice.Direct3D11;
+﻿using Vortice.Direct3D11;
 using Vortice.DXGI;
 using YukkuriMovieMaker.Commons;
 
@@ -8,15 +8,11 @@ namespace YMM43D.Graphics
     /// 形状・シェーダー・入力レイアウト・定数バッファをひとまとめにした描画単位。
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// このクラスの目的は、D3D11 の描画呼び出しに必ず付いて回る一連の定型処理
-    /// （定数バッファ更新 → ステート設定 → シェーダー/バッファのバインド → Draw → 後始末）を
-    /// 1箇所に閉じ込めることです。以前はこの手順がプラグインごとに書き写されていました。
-    /// </para>
+    /// 描画呼び出しに付いて回る定型処理（定数バッファ更新 → ステート設定 → バインド →
+    /// Draw → 後始末）を1箇所に閉じ込めます。
     /// <para>
     /// <typeparamref name="TConstants"/> は HLSL 側の <c>cbuffer</c> と同じレイアウトの構造体です。
-    /// 定数バッファのサイズはこの型から決まるため、シェーダー側の宣言と食い違うと
-    /// 描画結果が壊れます。
+    /// 定数バッファのサイズはこの型から決まるため、宣言が食い違うと描画結果が壊れます。
     /// </para>
     /// </remarks>
     /// <typeparam name="TConstants">スロット 0 に転送する定数バッファの型。</typeparam>
@@ -36,7 +32,6 @@ namespace YMM43D.Graphics
         /// <summary>使用するシェーダー。このインスタンスが所有し、一緒に破棄します。</summary>
         public IMaterial Material { get; }
 
-        /// <param name="device">リソースを生成するデバイス。</param>
         /// <param name="mesh">描画する形状。所有権はこのインスタンスに移ります。</param>
         /// <param name="material">使用するシェーダー。所有権はこのインスタンスに移ります。</param>
         /// <param name="states">
@@ -79,9 +74,6 @@ namespace YMM43D.Graphics
         /// <summary>
         /// 定数バッファを更新し、形状を1回描画します。
         /// </summary>
-        /// <param name="context">描画先のデバイスコンテキスト。</param>
-        /// <param name="constants">シェーダーに渡す定数。</param>
-        /// <param name="settings">合成方法・カリングなど、この描画に固有の設定。</param>
         /// <param name="mesh">
         /// 描画する形状。省略すると <see cref="Mesh"/> を使います。
         /// 入力レイアウトが生成時のものと同じ形状に限ります。

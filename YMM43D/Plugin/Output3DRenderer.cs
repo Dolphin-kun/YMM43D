@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using Vortice.Direct2D1;
 using YMM43D.Integration;
 using YMM43D.Scene3D;
@@ -16,36 +16,23 @@ namespace YMM43D.Plugin
     /// 3D 描画の結果を、YMM4 の出力に流せる 2D 画像に変換します。
     /// </summary>
     /// <remarks>
-    /// <para>
     /// 図形アイテムも映像エフェクトも、出力経路では同じ手順を踏みます。描くものの
     /// 範囲を画面に投影して必要な描画先を決め、そこにシーンカメラの視点で描く、
-    /// という流れです。この手順をここにまとめています。
-    /// </para>
-    /// <para>
-    /// アイテムの位置・拡大率・回転は YMM4 が後から適用するため、ここで組み立てる
-    /// ワールド行列には対象自身の変換だけを入れます。
-    /// </para>
+    /// という流れです。
     /// </remarks>
     public sealed class Output3DRenderer : IDisposable
     {
         /// <summary>描画先の一辺の上限（ピクセル）。</summary>
         private const int MaxRenderSize = 4096;
 
-        /// <summary>
-        /// カメラより手前に来た点を押し戻す最小の視距離。
-        /// </summary>
-        /// <remarks>
-        /// カメラの背後や真横にある隅をそのまま投影すると発散するため、
-        /// ここで頭打ちにします。
-        /// </remarks>
+        /// <summary>カメラより手前に来た点を押し戻す最小の視距離。</summary>
+        /// <remarks>背後や真横にある隅をそのまま投影すると発散します。</remarks>
         private const float MinViewDistance = 0.01f;
 
-        /// <summary>
-        /// 描画先として認める、視線からの傾きの上限。
-        /// </summary>
+        /// <summary>描画先として認める、視線からの傾きの上限。</summary>
         /// <remarks>
-        /// 画面に写るのはせいぜい傾き1程度までです。これを大きく超えた範囲は
-        /// 見えないうえ、描画先のずれが桁外れの値になって Direct2D を壊します。
+        /// 画面に写るのはせいぜい傾き1程度まで。大きく超えた範囲は見えないうえ、
+        /// 描画先のずれが桁外れの値になって Direct2D を壊します。
         /// </remarks>
         private const float MaxTangent = 64f;
 
@@ -54,11 +41,8 @@ namespace YMM43D.Plugin
         /// <summary>
         /// 3D 描画を行い、その結果を YMM4 に渡せる画像として返します。
         /// </summary>
-        /// <param name="devices">YMM4 のグラフィックスデバイス。</param>
-        /// <param name="description">YMM4 から渡された描画要求。</param>
         /// <param name="bounds">描くものがワールド空間で占める範囲（<paramref name="world"/> を掛ける前）。</param>
         /// <param name="world">描くものに掛けるワールド行列。</param>
-        /// <param name="draw">実際の 3D 描画。</param>
         /// <param name="self">
         /// いま描こうとしているプロバイダー。同じシーンにある他の 3D 物体との前後関係を
         /// 出すために使います。<c>null</c> を渡すと、自分だけを描きます。
@@ -170,20 +154,12 @@ namespace YMM43D.Plugin
         /// 描くものが画面上で占める範囲を求め、それをちょうど収める描画先を決めます。
         /// </summary>
         /// <remarks>
-        /// <para>
-        /// 範囲の8隅をカメラから見た向き（<c>x / -z</c>）に直し、その最小・最大を取ります。
-        /// こうすると遠近が織り込まれるため、カメラに近い面が大きく映る場合でも
-        /// 端が切れません。距離だけで見積もると、厚みのあるものが手前へ張り出したときに
-        /// 溢れてしまいます。
-        /// </para>
-        /// <para>
-        /// 隅はアイテムの画像空間まで移してから比べます。描画先を決める空間と実際に
-        /// 描く空間が同じになるので、範囲が無駄に広がったり端が切れたりしません。
-        /// </para>
+        /// 範囲の8隅をカメラから見た向き（<c>x / -z</c>）に直し、アイテムの画像空間まで
+        /// 移してから最小・最大を取ります。遠近が織り込まれるので、厚みのあるものが
+        /// 手前へ張り出しても端が切れません。
         /// <para>
         /// ワールド行列は隅ごとに掛けます。<see cref="WorldBounds"/> は軸に平行な箱なので、
-        /// 先に掛けて箱に戻すと回転のたびに膨らみます。打ち消しでもう一度回すと二重に
-        /// 効き、30 度で 1.87 倍にもなります。
+        /// 先に掛けて箱に戻すと回転のたびに膨らみ、30 度で 1.87 倍にもなります。
         /// </para>
         /// </remarks>
         private static RenderArea? GetRenderArea(
@@ -208,9 +184,7 @@ namespace YMM43D.Plugin
                 var depth = MathF.Max(-viewSpace.Z, MinViewDistance);
                 var tangent = new Vector2(viewSpace.X / depth, viewSpace.Y / depth);
 
-                // カメラの真横や背後にある隅は、傾きが際限なく大きくなる。そのままだと
-                // 描画先の位置が桁外れの値になり、Direct2D に渡した時点で落ちる。
-                // 画面から遠く外れた範囲は描いても見えないので、ここで切り落とす。
+                // 真横や背後の隅は傾きが際限なく大きくなる。そのまま渡すと Direct2D が落ちる。
                 if (!IsUsable(tangent))
                     return null;
 
@@ -230,9 +204,8 @@ namespace YMM43D.Plugin
             if (width <= 0 || height <= 0)
                 return null;
 
-            // 上限に当たった場合は、その分だけ範囲を狭める（＝端が切れる）。
-            // 縮尺を変えると出力上の大きさが変わってしまうため、解像度ではなく
-            // 範囲の方を諦める。
+            // 上限に当たったら範囲の方を諦める（＝端が切れる）。縮尺を変えると
+            // 出力上の大きさが変わってしまうため。
             if (width > MaxRenderSize)
             {
                 min.X += (width - MaxRenderSize) / 2f;

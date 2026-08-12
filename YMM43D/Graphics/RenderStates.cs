@@ -1,4 +1,4 @@
-using Vortice.Direct3D11;
+﻿using Vortice.Direct3D11;
 using YukkuriMovieMaker.Commons;
 using D3DBlend = Vortice.Direct3D11.Blend;
 
@@ -120,16 +120,6 @@ namespace YMM43D.Graphics
             BlendMode.Multiply => multiply,
             BlendMode.Screen => screen,
             _ => normal,
-        };
-
-        /// <summary>
-        /// <paramref name="cullMode"/> に対応するラスタライザーステートを返します。
-        /// </summary>
-        public ID3D11RasterizerState GetRasterizer(CullMode cullMode) => cullMode switch
-        {
-            CullMode.Back => CullBack,
-            CullMode.Front => CullFront,
-            _ => CullNone,
         };
 
         private ID3D11BlendState CreateBlend(ID3D11Device device, D3DBlend source, D3DBlend destination, BlendOperation operation)

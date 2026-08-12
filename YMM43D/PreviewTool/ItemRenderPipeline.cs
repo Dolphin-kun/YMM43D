@@ -1,4 +1,4 @@
-using System.Collections.Immutable;
+﻿using System.Collections.Immutable;
 using System.Numerics;
 using Vortice.Direct2D1;
 using YMM43D.Integration;
@@ -26,25 +26,15 @@ namespace YMM43D.PreviewTool
     /// アイテムの描画元とエフェクトチェーンを、YMM4 本体と同じ手順で駆動します。
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// YMM4 の標準エフェクト（3D回転など）は <see cref="DrawDescription.Camera"/> に
-    /// 変換行列を書き込みます。3Dプレビューでもこれを反映させたいのですが、合成後の
-    /// <see cref="DrawDescription"/> を持つ <c>EffectedItemSource</c> は YMM4 の内部
-    /// クラスで、公開インターフェース経由では取り出せません。
-    /// </para>
-    /// <para>
-    /// そこで YMM4 が内部で行っているのと同じ連鎖を公開 API だけで組み立てます。
-    /// <c>SetInput</c> → <c>Update</c> → <c>Output</c> を順に繋いでいき、最後の
-    /// <see cref="DrawDescription.Camera"/> を読みます。必要な部品はすべて公開されて
-    /// いるため、リフレクションは使いません。
-    /// </para>
-    /// <para>
-    /// 副産物として、エフェクト適用後の画像が得られます。これを 3D 空間に貼ることで、
-    /// プレビューにもモザイクや色調補正といった 2D エフェクトの結果が反映されます。
-    /// </para>
+    /// YMM4 の標準エフェクト（3D回転など）は <see cref="DrawDescription.Camera"/> に変換
+    /// 行列を書き込みますが、合成後の <see cref="DrawDescription"/> を持つ
+    /// <c>EffectedItemSource</c> は内部クラスで取り出せません。そこで同じ連鎖を公開 API
+    /// だけで組み立て（<c>SetInput</c> → <c>Update</c> → <c>Output</c>）、最後の
+    /// <see cref="DrawDescription.Camera"/> を読みます。副産物として、エフェクト適用後の
+    /// 画像も得られます。
     /// <para>
     /// この連鎖は YMM4 本体が動かしているものとは別物なので、エフェクトは 1 フレームに
-    /// 2 回評価されることになります。プレビュー用途では許容範囲と判断しています。
+    /// 2 回評価されます。プレビュー用途では許容範囲と判断しています。
     /// </para>
     /// </remarks>
     internal sealed class ItemRenderPipeline : IDisposable

@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using Vortice.Direct2D1;
 using YMM43D.Scene3D;
 using YukkuriMovieMaker.Commons;
@@ -10,16 +10,10 @@ namespace YMM43D.Plugin
     /// 3D図形アイテムの描画元となる基底クラス。
     /// </summary>
     /// <remarks>
-    /// <para>
     /// このクラス1つが、3Dプレビュー（<see cref="I3DProvider"/> として直接描画される）と
-    /// 動画出力（3D描画結果を 2D 画像に変換して <see cref="Output"/> に出す）の
-    /// 両方の経路を受け持ちます。
-    /// </para>
-    /// <para>
-    /// 派生クラスが実装するのは <see cref="Draw"/> と <see cref="GetWorldExtent"/> の
-    /// 2つだけです。描画先の大きさの決定・カメラ行列の解決・コマンドリストの生成は
-    /// 基底クラスが行います。
-    /// </para>
+    /// 動画出力（3D描画結果を 2D 画像に変換して <see cref="Output"/> に出す）の両方の
+    /// 経路を受け持ちます。派生クラスが実装するのは <see cref="Draw"/> と
+    /// <see cref="GetWorldBounds"/> の2つだけです。
     /// </remarks>
     public abstract class Shape3DSourceBase : IShapeSource2, I3DProvider
     {

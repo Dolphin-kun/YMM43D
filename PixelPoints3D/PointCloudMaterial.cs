@@ -7,12 +7,8 @@ using YukkuriMovieMaker.Commons;
 namespace PixelPoints3D
 {
     /// <summary>
-    /// 点群の定数バッファ。
+    /// 点群の定数バッファ。HLSL 側の <c>cbuffer</c> 宣言と1対1で対応します。
     /// </summary>
-    /// <remarks>
-    /// レイアウトは <see cref="PointCloudMaterial"/> の HLSL 側 <c>cbuffer</c> 宣言と
-    /// 1対1で対応します。片方だけを変更すると描画結果が壊れます。
-    /// </remarks>
     [StructLayout(LayoutKind.Sequential)]
     internal struct PointCloudConstants
     {
@@ -42,13 +38,11 @@ namespace PixelPoints3D
         /// <summary>粒の一辺の半分（ワールド単位）。</summary>
         public float PointHalfSize;
 
-        /// <summary>カメラの上方向。</summary>
         public Vector3 ViewUp;
 
         /// <summary>線の太さの半分（ワールド単位）。</summary>
         public float LineHalfWidth;
 
-        /// <summary>カメラの前方向。線を画面に正対させるのに使う。</summary>
         public Vector3 ViewForward;
 
         /// <summary>0 以外なら、色の代わりに画像の色を使う。</summary>
@@ -68,7 +62,7 @@ namespace PixelPoints3D
         /// <summary>変形の軸（単位ベクトル）。</summary>
         public Vector3 DeformAxis;
 
-        /// <summary>変形の種類。<see cref="PixelPoints3D.DeformKind"/> の値をそのまま入れる。</summary>
+        /// <summary><see cref="PixelPoints3D.DeformKind"/> の値をそのまま入れる。</summary>
         public float DeformKind;
 
         /// <summary>変形の強さ。種類ごとに単位が違う。<see cref="PointDeform"/> が換算済み。</summary>
@@ -88,14 +82,8 @@ namespace PixelPoints3D
     /// 格子番号から点の位置を組み立て、画像に中身がある場所だけを残すシェーダー。
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// 頂点は座標を持たず、格子の何番目かだけを持ちます。位置・ばらつき・奥行きは
+    /// 頂点は座標を持たず、格子の何番目かだけを持ちます。位置・ばらつき・変形は
     /// すべてここで計算するので、パラメータを動かしてもバッファの作り直しが要りません。
-    /// </para>
-    /// <para>
-    /// 中身があるかどうかの判定はピクセルシェーダーで行います。頂点側で捨てようとすると、
-    /// 三角形や線の一部だけが消えて中途半端な形が残ります。
-    /// </para>
     /// </remarks>
     internal sealed class PointCloudMaterial : IMaterial
     {
@@ -148,15 +136,10 @@ namespace PixelPoints3D
                 float4 Position : SV_POSITION;
                 float2 TexCoord : TEXCOORD;
 
-                // 形の中での位置。縁を滑らかにするのに使う。詳しくは Coverage() を参照。
+                // 形の中心で 0、縁で ±1。Coverage() が縁を滑らかにするのに使う。
                 float2 Edge : EDGE;
 
-                // 形ごとに一定の乱数。補間すると1つの形の中で値が変わってしまう。
-                //   x … 格子の点ごと。面の不透明度に使う
-                //   y … 線ごと（両端の組で決まる）。引くかどうかに使う
-                //
-                // 四角形は2枚の三角形とも先頭の頂点が同じなので、どちらの三角形でも
-                // 同じ値になる。
+                // x … 格子の点ごと（面の不透明度）、y … 線ごと（引くかどうか）。
                 nointerpolation float2 Random : RANDOM;
             };
             """;
@@ -177,28 +160,20 @@ namespace PixelPoints3D
                 return GridCount > 1.5 ? cell / max(GridCount - 1.0, 1.0) : 0.5;
             }
 
-            // 点の並びを三次元的に歪ませる。
-            //
-            // 種類ごとの「強さ」の換算は PointDeform が済ませてあるので、ここでは
-            // ワールド単位・ラジアン・比率をそのまま使う。
-            //
-            // 線や面もこの結果を通るので、曲げても点と辺の対応は崩れない。
-            // 端点それぞれを歪ませてから結ぶためで、辺は折れ線として素直に追従する。
+            // 点の並びを三次元的に歪ませる。種類ごとの「強さ」の換算は PointDeform が
+            // 済ませてあるので、ここではワールド単位・ラジアン・比率をそのまま使う。
             float3 Deform(float3 p)
             {
                 if (DeformKind < 0.5)
                     return p;
 
-                // 選んだ軸に沿った位置と、その向きの格子の半分の長さ。
                 float along = dot(p, DeformAxis);
                 float halfSpan = max(dot(abs(DeformAxis), Extent) * 0.5, 1e-4);
-
-                // 軸に垂直な成分。ねじれと膨らみで使う。
                 float3 across = p - DeformAxis * along;
 
                 if (DeformKind < 1.5)
                 {
-                    // 波。選んだ軸に沿って進み、奥行き方向に押し引きする。
+                    // 波。軸に沿って進み、奥行き方向に押し引きする。
                     // 軸に奥行きを選んだときだけ、代わりに横方向へ押し引きする。
                     float3 side = abs(DeformAxis.z) > 0.5 ? float3(1, 0, 0) : float3(0, 0, 1);
 
@@ -224,9 +199,8 @@ namespace PixelPoints3D
                     return p + DeformAxis * (DeformAmount * (1.0 - ratio * ratio));
                 }
 
-                // 球に巻く。選んだ軸を極にして、平らな並びを球の面へ移す。
-                // 軸に沿った位置が緯度、軸に垂直な1方向が経度、残る1方向が半径のずれ
-                // になる。奥行きを持たせた格子は、入れ子の球殻として並ぶ。
+                // 球に巻く。軸に沿った位置が緯度、軸に垂直な1方向が経度、残る1方向が
+                // 半径のずれになる。奥行きを持たせた格子は、入れ子の球殻として並ぶ。
                 float3 east = abs(DeformAxis.x) > 0.5 ? float3(0, 0, 1) : float3(1, 0, 0);
                 float3 up = cross(DeformAxis, east);
 
@@ -242,7 +216,6 @@ namespace PixelPoints3D
                 return lerp(p, sphere, DeformAmount);
             }
 
-            // 格子番号から、ばらつきまで含めた点の位置を求める。
             float3 Place(float3 cell)
             {
                 float3 ratio = Ratio(cell);
@@ -264,18 +237,14 @@ namespace PixelPoints3D
 
                 output.TexCoord = Ratio(input.Cell).xy;
 
-                // 線ごとの乱数は両端の和から作る。ここは必ず「両端を入れ替えても同じ
-                // 値になる」式でなければならない。1本の線を作る四角形は、from 側の
-                // 2頂点と to 側の 2頂点で Cell と Other が入れ替わっているため、
-                // 偏った式にすると片側だけが刈り取られ、引き伸ばされた半端な三角形が
-                // 残る。線が別の点へ伸びたように見えるのはこれ。
+                // 線ごとの乱数は「両端を入れ替えても同じ値になる」式でなければならない。
+                // 1本の線を作る四角形は from 側と to 側で Cell と Other が入れ替わって
+                // いるため、偏った式にすると片側だけが刈り取られ、引き伸ばされた半端な
+                // 三角形が線の無いところに残る。
                 //
-                // 和にしておけば、格子の中のどの線とも値がぶつからない。Cell と Other
-                // は隣り合う格子番号なので、和は「2×格子番号＋向き」の形になり、
-                // 向きの成分は 0 か 1、格子番号の成分は必ず偶数だから区別がつく。
-                //
-                // 片方の点だけで決めるのも駄目で、その点から伸びる線が全部まとめて
-                // 消えてしまい、まばらにならない。
+                // 和なら格子の中のどの線とも値がぶつからない。Cell と Other は隣り合う
+                // 格子番号なので、和は「2×格子番号＋向き」の形になり、向きの成分は
+                // 0 か 1、格子番号の成分は必ず偶数だから区別がつく。
                 output.Random = float2(
                     Hash(input.Cell).x,
                     Hash(input.Cell + input.Other).y) * 0.5 + 0.5;
@@ -287,8 +256,8 @@ namespace PixelPoints3D
 
                 if (any(input.Other != input.Cell))
                 {
-                    // 引かないと決まった線は、ここで捨てる。ピクセルシェーダーまで
-                    // 運んでから捨てるより安い。手前より奥へ送ると刈り取られる。
+                    // 引かないと決まった線は、手前より奥へ送って刈り取らせる。
+                    // ピクセルシェーダーまで運んでから捨てるより安い。
                     if (output.Random.y < LineRandomness)
                     {
                         output.Position = float4(0, 0, -1, 1);
@@ -318,21 +287,12 @@ namespace PixelPoints3D
             Texture2D    txDiffuse : register(t0);
             SamplerState samLinear : register(s0);
 
-            // 形の縁がどれだけこの画素を覆っているかを返す。
+            // 形の縁がどれだけこの画素を覆っているかを返す。描画先はマルチサンプル
+            // ではないので、これを掛けないと粒や線の縁が階段状になる。
             //
-            // 描画先はマルチサンプルではないので、粒や線の縁がそのままだと階段状に
-            // なります。edge は形の中心で 0、縁で ±1 になる量なので、隣の画素との
-            // 差（fwidth）で割れば「縁まであと何画素か」が分かります。これを
-            // 0〜1 に丸めたものが覆っている割合です。
-            //
-            // 線が1画素より細くなると差のほうが大きくなり、割合は 1 に届きません。
-            // 太さを保ったままギザギザに描くのではなく、薄く描いて消えていきます。
-            //
-            // 面は edge が 0 のまま動かないので、差も 0 になり、割合は常に 1 です。
-            // 隣り合う三角形の継ぎ目に隙間を作らないための性質で、意図的です。
-            //
-            // 円い粒は、四角形の板の中で中心からの距離を見て縁を丸く抜きます。
-            // 頂点の数は四角形と変わりません。
+            // 1画素より細い線は、太さを保ったままギザギザに描かれるのではなく、
+            // 薄くなって消えていく。面は edge が動かないので常に 1 が返り、
+            // 隣り合う三角形の継ぎ目に隙間ができない。
             float Coverage(float2 edge)
             {
                 if (PointIsRound > 0.5)
@@ -349,19 +309,15 @@ namespace PixelPoints3D
 
             float4 main(PS_INPUT input) : SV_Target
             {
-                // 覆っている割合は捨てる前に求める。捨てたあとの画素は隣との差が
-                // 定まらなくなるため、後に回すと縁の計算が崩れる。
+                // 捨てたあとの画素は隣との差が定まらないので、割合は捨てる前に求める。
                 float coverage = Coverage(input.Edge);
 
                 float4 source = txDiffuse.SampleLevel(samLinear, input.TexCoord, 0);
 
-                // 中身が無いところは描かない。
                 if (source.a < Threshold)
                     discard;
 
                 float3 rgb = UseSourceColor > 0.5 ? source.rgb : Color.rgb;
-
-                // ばらつきは 1 倍から Random.x 倍までの間で効かせる。
                 float scatter = lerp(1.0, input.Random.x, OpacityRandomness);
 
                 return float4(rgb, Color.a * Opacity * ExtraOpacity * scatter * coverage);

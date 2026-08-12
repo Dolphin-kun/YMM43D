@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using Vortice;
 using Vortice.Direct2D1;
 using Vortice.Direct3D11;
@@ -17,8 +17,7 @@ namespace YMM43D.Integration
     /// GPU 上でコピーします。
     /// <para>
     /// 生成したテクスチャは鍵ごとにキャッシュし、このクラスが所有します。
-    /// 呼び出し側が寿命を気にする必要はありません。以前は経路によって所有権が
-    /// 変わり、呼び出し側が破棄すべきかどうかをフラグで受け取っていました。
+    /// 呼び出し側が寿命を気にする必要はありません。
     /// </para>
     /// </remarks>
     public sealed class D2DTextureBridge : IDisposable
@@ -31,8 +30,6 @@ namespace YMM43D.Integration
         /// 画像を <paramref name="targetDevice"/> 上のテクスチャに焼き込み、その参照を返します。
         /// </summary>
         /// <param name="targetDevice">テクスチャを使う側（3D描画用）のデバイス。</param>
-        /// <param name="ymmDevices">画像を保持している YMM4 のデバイス。</param>
-        /// <param name="image">変換元の画像。</param>
         /// <param name="key">キャッシュの鍵。通常はアイテムのインスタンス。</param>
         /// <param name="bounds">
         /// 画像の描画範囲。大きさだけでなく、原点からのずれを知るのにも使えます。
@@ -158,15 +155,10 @@ namespace YMM43D.Integration
         /// </summary>
         /// <remarks>
         /// 書き込むのは YMM4 のデバイス、読むのは 3D 描画用のデバイスで、両者は
-        /// 別々の命令列を GPU に流します。何も調整しないと、書き込みが終わる前に
-        /// 読み出しが走り、消去直後の透明な状態が見えてしまいます。これが
-        /// プレビューのちらつきの正体でした。
-        /// <para>
-        /// そこで鍵付きミューテックスで受け渡しします。書き込み側が鍵 0 を取って
-        /// 描き、鍵 1 で手放す。読み出し側は鍵 1 を取り、次に書き込む直前まで
-        /// 握り続けてから鍵 0 で返します。GPU 側で順序が保証されるため、
-        /// 中途半端な状態を読むことがなくなります。
-        /// </para>
+        /// 別々の命令列を GPU に流します。何も調整しないと書き込みの途中が読まれ、
+        /// プレビューがちらつきます。そこで鍵付きミューテックスで受け渡しします。
+        /// 書き込み側が鍵 0 を取って描き、鍵 1 で手放す。読み出し側は鍵 1 を取り、
+        /// 次に書き込む直前まで握り続けてから鍵 0 で返します。
         /// </remarks>
         private sealed class SharedItemTexture : IDisposable
         {

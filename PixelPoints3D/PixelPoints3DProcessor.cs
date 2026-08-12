@@ -14,13 +14,8 @@ namespace PixelPoints3D
     internal sealed class PixelPoints3DProcessor : VideoEffect3DProcessorBase
     {
         /// <summary>
-        /// 一度に描く点の数の上限。
+        /// 一度に描く点の数の上限。超えると間隔を自動で粗くします。
         /// </summary>
-        /// <remarks>
-        /// これを超えると間隔を自動で粗くします。頂点バッファの生成はフレームを
-        /// またいで使い回されますが、間隔を小刻みに動かされると作り直しが続くため、
-        /// 際限なく増えないようにしておきます。
-        /// </remarks>
         private const int MaxPoints = 300_000;
 
         private readonly PixelPoints3DEffect effect;
@@ -72,10 +67,9 @@ namespace PixelPoints3D
             var constants = BuildConstants(time, item, render, world, size, extent);
             var settings = item.ToDrawSettings(FaceCulling.None, texture);
 
-            if (effect.DrawFaces && effect.FaceSettings.Count > 0 && grid.Faces is { } faces)
+            if (effect.Face is { } face && grid.Faces is { } faces)
             {
-                var face = effect.FaceSettings[0];
-                // 面だけに掛かる不透明度とそのばらつき。他の形状には効かせない。
+                // 不透明度とそのばらつきは面だけに掛ける。
                 var faceConstants = WithColor(constants, face.Color, face.ColorSource) with
                 {
                     ExtraOpacity = Math.Clamp(face.Opacity.GetFloat(time) / 100f, 0f, 1f),
@@ -86,9 +80,8 @@ namespace PixelPoints3D
                 pipeline.Draw(render.Context, faceConstants, settings, faces);
             }
 
-            if (effect.DrawLines && effect.LineSettings.Count > 0 && grid.Lines is { } lines && constants.LineHalfWidth > 0f)
+            if (effect.Line is { } line && grid.Lines is { } lines && constants.LineHalfWidth > 0f)
             {
-                var line = effect.LineSettings[0];
                 var lineConstants = WithColor(constants, line.Color, line.ColorSource) with
                 {
                     LineRandomness = Math.Clamp(line.Randomness.GetFloat(time) / 100f, 0f, 1f),
@@ -97,9 +90,8 @@ namespace PixelPoints3D
                 pipeline.Draw(render.Context, lineConstants, settings, lines);
             }
 
-            if (effect.DrawPoints && effect.PointSettings.Count > 0 && constants.PointHalfSize > 0f)
+            if (effect.Point is { } point && constants.PointHalfSize > 0f)
             {
-                var point = effect.PointSettings[0];
                 var pointConstants = WithColor(constants, point.Color, point.ColorSource) with
                 {
                     PointIsRound = point.Shape == PointShape.Circle ? 1f : 0f,
@@ -109,7 +101,6 @@ namespace PixelPoints3D
             }
         }
 
-        /// <summary>形ごとの色を差し込みます。</summary>
         private static PointCloudConstants WithColor(
             in PointCloudConstants constants, Color color, PointColorSource source) => constants with
             {
@@ -117,6 +108,7 @@ namespace PixelPoints3D
                 UseSourceColor = source == PointColorSource.Image ? 1f : 0f,
             };
 
+        /// <remarks>色は形ごとに違うので入れません。<see cref="WithColor"/> が差し込みます。</remarks>
         private PointCloudConstants BuildConstants(
             in FrameContext time,
             DrawContext3D item,
@@ -127,7 +119,6 @@ namespace PixelPoints3D
         {
             var deform = PointDeform.Create(effect, time, extent);
 
-            // 色は形ごとに違うので、ここでは入れない。WithColor が差し込む。
             return new PointCloudConstants
             {
                 DeformAxis = deform.Axis,
@@ -149,14 +140,15 @@ namespace PixelPoints3D
                 ViewRight = GetViewAxis(render, world, Vector3.UnitX),
                 ViewUp = GetViewAxis(render, world, Vector3.UnitY),
                 ViewForward = GetViewAxis(render, world, -Vector3.UnitZ),
-                PointHalfSize = effect.PointSettings.Count > 0
-                    ? WorldScale.ToWorld(effect.PointSettings[0].Size.GetFloat(time)) / 2f : 0f,
-                LineHalfWidth = effect.LineSettings.Count > 0
-                    ? WorldScale.ToWorld(effect.LineSettings[0].Width.GetFloat(time)) / 2f : 0f,
+                PointHalfSize = GetThickness(effect.Point?.Size, time) / 2f,
+                LineHalfWidth = GetThickness(effect.Line?.Width, time) / 2f,
                 ExtraOpacity = 1f,
                 OpacityRandomness = 0f,
             };
         }
+
+        private static float GetThickness(Animation? pixels, in FrameContext time)
+            => pixels is null ? 0f : WorldScale.ToWorld(pixels.GetFloat(time));
 
         /// <summary>
         /// カメラの向きを、この形状のローカル座標系に持ち込みます。
@@ -176,7 +168,6 @@ namespace PixelPoints3D
                 return viewAxis;
             }
 
-            // 平行移動を除いた向きだけを持ち込む。
             var worldAxis = Vector3.TransformNormal(viewAxis, inverseView);
             var localAxis = Vector3.TransformNormal(worldAxis, inverseWorld);
 
@@ -204,10 +195,6 @@ namespace PixelPoints3D
         /// 入力画像の中心が、アイテムの原点からどれだけずれているか（ピクセル、Y は下が正）。
         /// 実寸をワールド行列に取り込んでいないぶん、この寄せは自分で行います。
         /// </param>
-        /// <remarks>
-        /// 大きさと回転は点群自身の中心に掛かり、そのあと画像の中心へ寄せてから
-        /// 指定された位置へ動かします。
-        /// </remarks>
         private Matrix4x4 GetLocalMatrix(in FrameContext time, Vector2 centerPixels)
             => Matrix4x4.CreateScale(effect.Scale.GetFloat(time) / 100f)
              * Rotation3D.ForObject(
@@ -226,19 +213,17 @@ namespace PixelPoints3D
 
             var extent = GetExtent(itemTime, sizePixels);
 
-            // ばらつきと、粒や線の太さのぶん、格子より一回り広がる。
             var thickness = MathF.Max(
-                effect.PointSettings.Count > 0 ? effect.PointSettings[0].Size.GetFloat(itemTime) : 0f,
-                effect.LineSettings.Count > 0 ? effect.LineSettings[0].Width.GetFloat(itemTime) : 0f);
+                GetThickness(effect.Point?.Size, itemTime),
+                GetThickness(effect.Line?.Width, itemTime));
 
-            // ばらつきは絶対値で見る。乱数は ±1 に散るので、負の値でも散らばる量は
-            // 同じ。符号のまま足すと範囲が縮み、行き過ぎると上下が入れ替わって
-            // 描画先の大きさが壊れる。
+            // ばらつきは絶対値で見る。乱数は ±1 に散るので負でも散らばる量は同じ。
+            // 符号のまま足すと範囲が縮み、行き過ぎると上下が入れ替わって壊れる。
             var margin = Vector3.Abs(new Vector3(
                 WorldScale.ToWorld(effect.ScatterX.GetFloat(itemTime)),
                 WorldScale.ToWorld(effect.ScatterY.GetFloat(itemTime)),
                 WorldScale.ToWorld(effect.ScatterZ.GetFloat(itemTime))))
-                + new Vector3(WorldScale.ToWorld(thickness) / 2f);
+                + new Vector3(thickness / 2f);
 
             // 変形は格子の位置に掛かるので、ばらつきや太さより先に広げる。
             // 描画先の大きさはここで決まるため、見落とすと絵の端が切れる。
@@ -262,8 +247,7 @@ namespace PixelPoints3D
             private PointGrid? grid;
 
             /// <remarks>
-            /// 形状は都度渡します。粒・線・面で頂点の並びは同じなので、
-            /// シェーダーと入力レイアウトは1組で足ります。
+            /// 粒・線・面で頂点の並びは同じなので、シェーダーと入力レイアウトは1組で足ります。
             /// </remarks>
             public RenderPipeline<PointCloudConstants> Pipeline { get; } = new(
                 device, GridVertex.InputElements, new PointCloudMaterial(device));

@@ -11,16 +11,10 @@ namespace YMM43D.Integration
     /// シーン内にある、自分以外の 3D 物体を集めます。
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// YMM4 はアイテムごとに平らな画像を作り、レイヤー順に重ねます。深度を渡す口が
-    /// ないため、そのままではアイテムをまたいだ前後関係を表現できません。
-    /// </para>
-    /// <para>
-    /// そこで、自分を描く前に他のアイテムの形を深度バッファにだけ埋めます。すると
-    /// 自分の画像には「自分が最前面である画素」しか残らず、どの順に重ねても正しい絵に
-    /// なります。1枚にまとめる必要がないので、レイヤーも不透明度も合成モードも
-    /// アイテムごとに従来どおり効きます。
-    /// </para>
+    /// YMM4 はアイテムごとに平らな画像を作って重ねるだけで、深度を渡す口がありません。
+    /// そこで自分を描く前に他のアイテムの形を深度バッファにだけ埋めます。すると自分の
+    /// 画像には「自分が最前面である画素」しか残らず、どの順に重ねても正しい絵になります。
+    /// 1枚にまとめないので、レイヤーも不透明度も合成モードも従来どおり効きます。
     /// </remarks>
     public static class SceneDepthCollector
     {
@@ -60,17 +54,11 @@ namespace YMM43D.Integration
         /// <summary>
         /// <paramref name="self"/> 以外の 3D 物体を集めます。
         /// </summary>
-        /// <param name="description">YMM4 から渡された描画要求。</param>
         /// <param name="self">
         /// いま描こうとしているプロバイダー。<c>null</c> を渡すと何も集めません。
         /// どのアイテムに属するかは <see cref="TimelineItemSourceDescription.Layer"/> で
         /// 判定するため、この値の同一性には頼っていません。
         /// </param>
-        /// <remarks>
-        /// すべてワールド座標のまま返します。自分の位置は呼び出し側が
-        /// <see cref="SceneView.OwnerPlacement"/> から知り、YMM4 が後から画像に掛ける
-        /// 2D 配置を打ち消すのに使います。
-        /// </remarks>
         public static SceneView Collect(
             TimelineItemSourceDescription description,
             I3DProvider? self)
@@ -90,20 +78,18 @@ namespace YMM43D.Integration
                 .Select(item => (Item: item, Time: new FrameContext(frame - item.Frame, item.Length, fps)))
                 .ToArray();
 
-            // 自分がどのアイテムに属しているかは、描画要求のレイヤー番号で分かる。
-            // 同じレイヤーに同じ時刻の複数アイテムは置けないので、これで一意に決まる。
+            // 自分がどのアイテムに属するかはレイヤー番号で決まる。同じレイヤーの同じ
+            // 時刻に複数アイテムは置けないので一意。
             //
             // プロバイダーの参照一致で探してはいけない。YMM4 は同じアイテムに対して
-            // 描画元を複数作ることがあり（プレビュー用と出力用など）、レジストリに
-            // 残るのは最後に作られた1つだけになる。描画している当人と登録されている
-            // ものが食い違うと自分を見失い、位置を単位行列のまま原点に置いてしまう。
+            // 描画元を複数作ることがあり、レジストリに残るのは最後の1つだけになる。
+            // 食い違うと自分を見失い、原点に置いてしまう。
             var owner = alive.FirstOrDefault(x => x.Item.Layer == description.Layer);
             if (owner.Item is null)
                 return SceneView.None;
 
             // 深度判定は YMM4 が画像を拡大する前に済んでしまうので、自分も他人も
-            // 同じワールド空間に置かないと前後関係が食い違う。拡大率はすべて
-            // ここで反映し、YMM4 が後から掛ける分は描画側で縮尺を調整して相殺する。
+            // 同じワールド空間に置かないと前後関係が食い違う。
             var ownerPlacement = ItemPlacement.GetWorldMatrix(owner.Item, owner.Time, Matrix4x4.Identity);
             var ownerScreen = ItemPlacement.GetScreenPlacement(owner.Item, owner.Time);
 

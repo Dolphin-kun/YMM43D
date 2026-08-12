@@ -1,4 +1,4 @@
-using System.Runtime.CompilerServices;
+﻿using System.Runtime.CompilerServices;
 
 namespace YMM43D.Plugin
 {
@@ -24,13 +24,10 @@ namespace YMM43D.Plugin
         /// この場を抜けるまで、<see cref="Register"/> の呼び出しを無視します。
         /// </summary>
         /// <remarks>
-        /// 3Dプレビューは、アイテムの変換行列や画像を得るために YMM4 の描画元を
-        /// もう一組作ることがあります。その過程で生まれるプロバイダーは一時的なもので、
-        /// 本来のプロバイダーを置き換えてしまってはいけません。
-        /// <para>
-        /// 置き換わると、登録が差し替わる一瞬だけ <see cref="Find"/> が <c>null</c> を
-        /// 返し、アイテムが既定の描画方法（板にテクスチャを貼る）で表示されてしまいます。
-        /// </para>
+        /// 3Dプレビューは、アイテムの変換行列や画像を得るために描画元をもう一組作ります。
+        /// その過程で生まれる一時的なプロバイダーが本来のものを置き換えると、差し替わる
+        /// 一瞬だけ <see cref="Find"/> が <c>null</c> を返し、アイテムが既定の描画方法
+        /// （板にテクスチャを貼る）で表示されてしまいます。
         /// </remarks>
         public static IDisposable SuppressRegistration() => new Suppression();
 
@@ -65,14 +62,6 @@ namespace YMM43D.Plugin
             }
         }
 
-        /// <summary>登録を解除します。</summary>
-        public static void Unregister(object? parameter)
-        {
-            if (parameter is not null)
-                registry.Remove(parameter);
-        }
-
-        /// <summary>
         /// パラメータに対応するプロバイダーを取得します。未登録なら <c>null</c>。
         /// </summary>
         public static I3DProvider? Find(object? parameter)

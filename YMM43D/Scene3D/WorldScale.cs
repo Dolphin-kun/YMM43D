@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 
 namespace YMM43D.Scene3D
 {
@@ -26,8 +26,7 @@ namespace YMM43D.Scene3D
         /// </param>
         /// <remarks>
         /// 中心がアイテムの原点と一致するとは限りません。テキストの文字揃えや、
-        /// トリミングされた画像では、描画範囲が原点から偏ります。大きさだけを見て
-        /// 中心を無視すると、揃え方を変えても同じ場所に表示されてしまいます。
+        /// トリミングされた画像では描画範囲が原点から偏ります。
         /// </remarks>
         public static Matrix4x4 CreateSizeMatrix(Vector2 sizeInPixels, Vector2 centerInPixels)
         {

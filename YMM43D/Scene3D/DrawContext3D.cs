@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using Vortice.Direct3D11;
 using YMM43D.Graphics;
 
@@ -29,8 +29,7 @@ namespace YMM43D.Scene3D
         /// <c>true</c> のとき、色を書かずに深度だけを書き込みます。
         /// </summary>
         /// <remarks>
-        /// アイテムをまたいだ前後関係を出すために、呼び出し側が他のアイテムの
-        /// 形だけを深度バッファに埋めるときに立てます。プロバイダーは
+        /// 呼び出し側が他のアイテムの形を深度バッファに埋めるときに立てます。
         /// <see cref="ToDrawSettings"/> を使っていれば意識する必要はありません。
         /// </remarks>
         public bool DepthOnly { get; init; }

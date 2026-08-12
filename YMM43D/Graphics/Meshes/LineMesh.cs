@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using Vortice.Direct3D;
 using Vortice.Direct3D11;
 using Vortice.Mathematics;
@@ -23,7 +23,6 @@ namespace YMM43D.Graphics.Meshes
         /// <param name="points">
         /// 線分の端点。2個で1本の線分になるため、要素数は偶数である必要があります。
         /// </param>
-        /// <param name="color">全頂点に設定する色。</param>
         public LineMesh(ID3D11Device device, ReadOnlySpan<Vector3> points, Color4 color)
         {
             if (points.Length == 0 || points.Length % 2 != 0)

@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using YukkuriMovieMaker.Commons;
 
 namespace YMM43D.Scene3D
@@ -13,12 +13,7 @@ namespace YMM43D.Scene3D
     /// </remarks>
     public sealed class SceneCamera : Bindable
     {
-        /// <summary>
-        /// 画面の大きさが分からない場合に使う垂直画角（ラジアン）。
-        /// </summary>
-        /// <remarks>
-        /// 通常の画角は <see cref="GetFieldOfView"/> が画面の高さから決めます。
-        /// </remarks>
+        /// <summary>画面の大きさが分からない場合に使う垂直画角（ラジアン）。</summary>
         public const float DefaultFieldOfView = MathF.PI / 4f;
 
         private const float NearPlane = 0.1f;
@@ -98,10 +93,6 @@ namespace YMM43D.Scene3D
 
         /// <summary>指定時点のビュー行列。</summary>
         public Matrix4x4 GetViewMatrix(in FrameContext time) => GetPose(time).ViewMatrix;
-
-        /// <summary>指定時点のカメラ位置。</summary>
-        public Vector3 GetPosition(in FrameContext time) => GetPose(time).Position;
-
         /// <summary>
         /// 射影行列。クリップ面はシーン全体で共通のため静的メソッドです。
         /// </summary>
@@ -116,13 +107,9 @@ namespace YMM43D.Scene3D
         /// 視線からの傾き（<c>x / -z</c>）をそのまま出す射影行列を返します。
         /// </summary>
         /// <remarks>
-        /// <para>
         /// 除算後の x・y が傾きそのものになります。ここから先は <see cref="ImageProjection"/> が
         /// 2D のアフィン変換として画面ピクセル・アイテムの画像・NDC へ順に移します。
-        /// </para>
-        /// <para>
         /// クリップ面はここで決まるので、どのアイテムを描くときも深度の目盛りは共通です。
-        /// </para>
         /// </remarks>
         public static Matrix4x4 GetTangentProjection()
             => Matrix4x4.CreatePerspectiveOffCenter(
@@ -132,13 +119,9 @@ namespace YMM43D.Scene3D
         /// 視線からの傾き（正接）1 あたりのピクセル数を求めます。
         /// </summary>
         /// <remarks>
-        /// カメラから見た方向を <c>x / -z</c> の形で表したとき、それに掛ければ
-        /// 画面上のピクセル位置になります。遠近を含めて位置を求めるときに使います。
-        /// <para>
         /// 注視点の面（Z=0）にあるワールド1単位は、傾きにすると <c>1/距離</c> です。
-        /// これに掛けた結果が <see cref="WorldScale.PixelsPerUnit"/> になるよう
-        /// 定めているので、Z=0 のアイテムは YMM4 が 2D で描く大きさと一致します。
-        /// </para>
+        /// これに掛けた結果が <see cref="WorldScale.PixelsPerUnit"/> になるよう定めて
+        /// いるので、Z=0 のアイテムは YMM4 が 2D で描く大きさと一致します。
         /// </remarks>
         public static float GetPixelsPerTangent(float distance)
             => WorldScale.PixelsPerUnit * MathF.Max(distance, MinDistance);
@@ -147,16 +130,12 @@ namespace YMM43D.Scene3D
         /// 垂直画角（ラジアン）を求めます。
         /// </summary>
         /// <remarks>
-        /// <para>
-        /// 画角は固定値ではなく、注視点の面が画面とちょうど1対1で対応するように
-        /// 決めます。こうしないと、3D で描いたアイテムが YMM4 の 2D 配置とずれます。
-        /// 既定値の 45°・距離 10 では画面の高さ 1080px に対して 828px 分しか写らず、
+        /// 画角は固定値ではなく、注視点の面が画面とちょうど1対1で対応するように決めます。
+        /// 固定の 45°・距離 10 では画面の高さ 1080px に対して 828px 分しか写らず、
         /// 1.30 倍に引き伸ばされていました。
-        /// </para>
         /// <para>
-        /// この決め方だと、<see cref="Distance"/> は「寄り引き」ではなく
-        /// 「遠近の強さ」を決めるつまみになります。近づけるほど画角が広がり、
-        /// 手前と奥の差が強く出ます。
+        /// この決め方だと、<see cref="Distance"/> は「寄り引き」ではなく「遠近の強さ」を
+        /// 決めるつまみになります。近づけるほど画角が広がり、手前と奥の差が強く出ます。
         /// </para>
         /// </remarks>
         public static float GetFieldOfView(float screenHeight, float distance)

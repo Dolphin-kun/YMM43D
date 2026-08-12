@@ -19,13 +19,10 @@ namespace YMM43D.Integration
     /// </remarks>
     public sealed class Renderer3DTo2D : IDisposable
     {
-        /// <summary>
-        /// 手元に残しておくコマンドリストの数。
-        /// </summary>
+        /// <summary>手元に残しておくコマンドリストの数。</summary>
         /// <remarks>
-        /// YMM4 がいつ再生し終えるかは分かりません。次のフレームを作るそばから
-        /// 前回の分を破棄すると、まだ参照されている資源を消してしまい、native 側で
-        /// アクセス違反になります。数フレーム分を持ち回して使い捨てます。
+        /// YMM4 がいつ再生し終えるかは分かりません。次のフレームを作るそばから前回の分を
+        /// 破棄すると、まだ参照されている資源を消してアクセス違反になります。
         /// </remarks>
         private const int CommandListRetention = 3;
 
@@ -34,26 +31,15 @@ namespace YMM43D.Integration
         private readonly ID2D1CommandList?[] commandLists = new ID2D1CommandList?[CommandListRetention];
         private int commandListIndex;
 
-        /// <summary>
-        /// 何も描かれていない画像を返します。
-        /// </summary>
-        /// <remarks>
-        /// 描画するものが無い場合に使います。<c>null</c> を返してしまうと、
-        /// YMM4 が結果を受け取る際に例外になります。
-        /// </remarks>
+        /// <summary>何も描かれていない画像を返します。</summary>
+        /// <remarks><c>null</c> を返すと、YMM4 が結果を受け取る際に例外になります。</remarks>
         public ID2D1Image RenderEmpty(IGraphicsDevicesAndContext ymmDevices)
             => BuildCommandList(ymmDevices, null, Vector2.Zero);
 
         /// <summary>
         /// 3Dシーンを描画し、その結果を含むコマンドリストを返します。
         /// </summary>
-        /// <param name="ymmDevices">YMM4 のグラフィックスデバイス。</param>
-        /// <param name="width">描画する幅（ピクセル）。</param>
-        /// <param name="height">描画する高さ（ピクセル）。</param>
-        /// <param name="view">ビュー行列。</param>
-        /// <param name="projection">射影行列。</param>
         /// <param name="offset">結果を配置する、アイテムの画像の中での左上。</param>
-        /// <param name="draw">実際の 3D 描画を行うコールバック。</param>
         /// <returns>
         /// 描画結果のコマンドリスト。数回 <see cref="Render"/> を呼ぶか
         /// このオブジェクトを破棄するまで有効です。

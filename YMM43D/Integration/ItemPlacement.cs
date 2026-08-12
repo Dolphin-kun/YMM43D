@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using YMM43D.Scene3D;
 using YukkuriMovieMaker.Project.Items;
 
@@ -21,9 +21,8 @@ namespace YMM43D.Integration
         /// 無ければ単位行列を渡してください。
         /// </param>
         /// <remarks>
-        /// 拡大率も含めます。出力経路では YMM4 が出来上がった画像にも拡大を掛けますが、
-        /// 二重にならないよう描画側が縮尺で相殺します。ここで外してしまうと、
-        /// 深度判定だけが拡大前の空間で行われ、アイテムをまたいだ前後関係が狂います。
+        /// 拡大率も含めます。ここで外すと深度判定だけが拡大前の空間で行われ、
+        /// アイテムをまたいだ前後関係が狂います。二重に掛かる分は描画側が相殺します。
         /// </remarks>
         public static Matrix4x4 GetWorldMatrix(
             IVideoItem item,

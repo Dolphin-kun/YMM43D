@@ -1,4 +1,4 @@
-using System.Collections.Immutable;
+﻿using System.Collections.Immutable;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Windows.Media;
@@ -16,15 +16,9 @@ namespace PixelPoints3D
     /// アイテムの画像を格子状の点の集まりに置き換えるエフェクト。
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// 画像の不透明な部分に一定間隔で点を打ち、隣り合う点を線や面でつなぎます。
-    /// 奥行き方向にも層を重ねられるので、平らな絵から立体的な点群を作れます。
-    /// </para>
-    /// <para>
     /// 画像を CPU に読み戻して走査するのではなく、格子は最初から全面に張り、
     /// 中身があるかどうかはシェーダーが判定して捨てます。こうすると画像が
     /// 動いても作り直しが要らず、点の数が増えても費用が変わりません。
-    /// </para>
     /// </remarks>
     [VideoEffect("点群3D", ["3D"], [])]
     public class PixelPoints3DEffect : VideoEffect3DBase
@@ -57,7 +51,6 @@ namespace PixelPoints3D
         [AnimationSlider("F0", "%", 0, 100)]
         public Animation Threshold { get; } = new(50, 0, 100);
 
-        // 形
         [Display(GroupName = Shape, Name = "点を描く", Description = "格子の各点に四角い粒を描きます")]
         [ToggleSlider]
         public bool DrawPoints { get => drawPoints; set => Set(ref drawPoints, value); }
@@ -73,7 +66,8 @@ namespace PixelPoints3D
         public bool DrawFaces { get => drawFaces; set => Set(ref drawFaces, value); }
         private bool drawFaces;
 
-        // 点・線・面のパラメータ（AutoGenerateField で表示制御）
+        // 中身は常に0個か1個。一覧にしてあるのは、切り替えに応じて組ごと
+        // 表示を消せるようにするため。出し入れは EndEditAsync が行う。
         [Display(AutoGenerateField = true)]
         public ImmutableList<PointParams> PointSettings { get => pointSettings; set => Set(ref pointSettings, value); }
         private ImmutableList<PointParams> pointSettings = [new PointParams()];
@@ -86,7 +80,15 @@ namespace PixelPoints3D
         public ImmutableList<FaceParams> FaceSettings { get => faceSettings; set => Set(ref faceSettings, value); }
         private ImmutableList<FaceParams> faceSettings = [];
 
-        // 変形
+        /// <summary>いま描くべき点の設定。描かないなら <c>null</c>。</summary>
+        internal PointParams? Point => DrawPoints ? PointSettings.FirstOrDefault() : null;
+
+        /// <summary>いま描くべき線の設定。描かないなら <c>null</c>。</summary>
+        internal LineParams? Line => DrawLines ? LineSettings.FirstOrDefault() : null;
+
+        /// <summary>いま描くべき面の設定。描かないなら <c>null</c>。</summary>
+        internal FaceParams? Face => DrawFaces ? FaceSettings.FirstOrDefault() : null;
+
         [Display(GroupName = Deform, Name = "種類", Description = "点の並びをどう歪ませるか")]
         [EnumComboBox]
         public DeformKind DeformKind
@@ -130,7 +132,6 @@ namespace PixelPoints3D
         [ShowPropertyEditorWhen(nameof(IsDeformed), true)]
         public Animation DeformPhase { get; } = new(0, -360000, 360000);
 
-        // ばらつき
         [Display(GroupName = Scatter, Name = "位置X", Description = "横方向へ点をばらつかせる量")]
         [AnimationSlider("F1", "px", -500, 500)]
         public Animation ScatterX { get; } = new(0, -100000, 100000);
@@ -147,7 +148,6 @@ namespace PixelPoints3D
         [AnimationSlider("F0", "", 0, 100)]
         public Animation Seed { get; } = new(0, 0, 10000);
 
-        // 配置
         [Display(GroupName = Place, Name = "位置X")]
         [AnimationSlider("F1", "px", -500, 500)]
         public Animation PositionX { get; } = new(0, -100000, 100000);
@@ -187,21 +187,14 @@ namespace PixelPoints3D
         {
             await base.EndEditAsync();
 
-            if (DrawPoints && PointSettings.IsEmpty)
-                PointSettings = [new PointParams()];
-            else if (!DrawPoints && !PointSettings.IsEmpty)
-                PointSettings = [];
-
-            if (DrawLines && LineSettings.IsEmpty)
-                LineSettings = [new LineParams()];
-            else if (!DrawLines && !LineSettings.IsEmpty)
-                LineSettings = [];
-
-            if (DrawFaces && FaceSettings.IsEmpty)
-                FaceSettings = [new FaceParams()];
-            else if (!DrawFaces && !FaceSettings.IsEmpty)
-                FaceSettings = [];
+            PointSettings = Sync(DrawPoints, PointSettings);
+            LineSettings = Sync(DrawLines, LineSettings);
+            FaceSettings = Sync(DrawFaces, FaceSettings);
         }
+
+        /// <summary>切り替えの状態に合わせて、設定を1つ置くか空にします。</summary>
+        private static ImmutableList<T> Sync<T>(bool enabled, ImmutableList<T> current) where T : new()
+            => enabled != current.IsEmpty ? current : enabled ? [new T()] : [];
 
         public override IVideoEffectProcessor CreateVideoEffect(IGraphicsDevicesAndContext devices)
             => AttachProcessor(new PixelPoints3DProcessor(this, devices));
@@ -300,11 +293,7 @@ namespace PixelPoints3D
     /// <summary>点の並びをどう歪ませるか。</summary>
     /// <remarks>
     /// 並び方そのものは平らな格子のままで、位置だけをあとから曲げます。
-    /// 元の絵の形は保たれたまま歪むので、文字や立ち絵の輪郭が分かる状態で
-    /// 立体的に動かせます。
-    /// <para>
-    /// 値はシェーダーへそのまま渡ります。並び順を変えると見た目が変わります。
-    /// </para>
+    /// 値はシェーダーへそのまま渡るので、並び順を変えると見た目が変わります。
     /// </remarks>
     public enum DeformKind
     {
@@ -354,11 +343,9 @@ namespace PixelPoints3D
     /// <summary>点・線・面の色をどこから取るか。</summary>
     public enum PointColorSource
     {
-        /// <summary>指定した色で塗ります。</summary>
         [Display(Name = "単色", Description = "指定した色で塗ります")]
         Solid,
 
-        /// <summary>その位置の画像の色を使います。</summary>
         [Display(Name = "画像", Description = "その位置の画像の色を使います")]
         Image,
     }

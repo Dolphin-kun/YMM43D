@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using Vortice.Direct3D11;
 using YMM43D.Scene3D;
 
@@ -26,8 +26,6 @@ namespace YMM43D.Plugin
         /// <summary>
         /// 3D空間にこのオブジェクトを描画します。
         /// </summary>
-        /// <param name="render">描画先とカメラ行列。</param>
-        /// <param name="item">描画するアイテムの変換・不透明度・時間位置など。</param>
         void Draw(in Render3DContext render, DrawContext3D item);
     }
 
@@ -71,12 +69,8 @@ namespace YMM43D.Plugin
         /// <remarks>
         /// <c>true</c>（既定）のとき、呼び出し側は 1×1 の板を実寸に広げる変換を
         /// ワールド行列に掛けます。<c>false</c> のプロバイダーは実寸を自分で扱うので、
-        /// 掛けると二重になります。
-        /// <para>
-        /// これを見ずに <see cref="TryGetSize"/> だけで判断すると、プレビューと出力で
-        /// 大きさが食い違います。実寸を答えられること自体は、それを掛けてよいことを
-        /// 意味しません。
-        /// </para>
+        /// 掛けると二重になります。<see cref="TryGetSize"/> だけで判断しないでください。
+        /// 実寸を答えられること自体は、それを掛けてよいことを意味しません。
         /// </remarks>
         bool ScalesToInputSize => true;
     }

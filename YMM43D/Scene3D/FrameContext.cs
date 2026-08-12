@@ -1,4 +1,4 @@
-using YukkuriMovieMaker.Commons;
+﻿using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Player.Video;
 
 namespace YMM43D.Scene3D
@@ -7,8 +7,8 @@ namespace YMM43D.Scene3D
     /// <see cref="Animation"/> の値を取り出すのに必要な時間情報の組。
     /// </summary>
     /// <remarks>
-    /// YMM4 の <c>Animation.GetValue(frame, length, fps)</c> は3つの引数を常に
-    /// セットで要求します。この3つ組をあちこちで引き回していたため、1つの型にまとめました。
+    /// YMM4 の <c>Animation.GetValue(frame, length, fps)</c> は3つの引数を常にセットで
+    /// 要求するため、1つの型にまとめてあります。
     /// </remarks>
     /// <param name="Frame">現在のフレーム位置。</param>
     /// <param name="Length">全体の長さ（フレーム数）。</param>
@@ -26,9 +26,8 @@ namespace YMM43D.Scene3D
         /// カメラのように、アイテムではなくシーン全体に属するアニメーションの評価に使います。
         /// </summary>
         /// <remarks>
-        /// 呼び出し経路によってはタイムラインの長さが得られないことがあります。
-        /// その場合はアイテム内の位置で代用します。長さを 1 として扱ってしまうと
-        /// アニメーション全体が 1 フレームに圧縮されて見えるためです。
+        /// タイムラインの長さが得られない経路ではアイテム内の位置で代用します。
+        /// 長さを 1 にするとアニメーション全体が 1 フレームに圧縮されて見えるためです。
         /// </remarks>
         public static FrameContext FromTimeline(TimelineItemSourceDescription description)
         {

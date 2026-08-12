@@ -1,4 +1,4 @@
-using Vortice.Direct2D1;
+﻿using Vortice.Direct2D1;
 using Vortice.Direct3D11;
 using Vortice.DXGI;
 using YMM43D.Graphics;
@@ -11,17 +11,10 @@ namespace YMM43D.Integration
     /// YMM4 側のデバイスから <see cref="ID2D1Bitmap1"/> として参照できるようにします。
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// 3D描画は <see cref="GraphicsDevicePool"/> の独立デバイスで行い、YMM4 の描画は
-    /// 本体のデバイスで行われます。異なるデバイス間で結果を受け渡すため、
-    /// 共有リソースとして作成したテクスチャを本体側で開き直しています。
-    /// </para>
-    /// <para>
-    /// 2つのデバイスは別々の命令列を GPU に流すので、書き込みの途中を読まれないよう
-    /// 鍵付きミューテックスで受け渡します。<see cref="BeginWrite"/> と
-    /// <see cref="EndWrite"/> で描画を挟んでください。読み出し側の鍵は、YMM4 が
-    /// コマンドリストを再生し終える時期が分からないため、次に書き込むまで握り続けます。
-    /// </para>
+    /// 3D描画は独立デバイスで行うため、共有リソースとして作ったテクスチャを本体側で
+    /// 開き直しています。書き込みの途中を読まれないよう鍵付きミューテックスで受け渡すので、
+    /// <see cref="BeginWrite"/> と <see cref="EndWrite"/> で描画を挟んでください。
+    /// 読み出し側の鍵は、YMM4 が再生し終える時期が分からないため次に書き込むまで握ります。
     /// </remarks>
     public sealed class RenderSurface3D : IDisposable
     {
@@ -34,21 +27,17 @@ namespace YMM43D.Integration
         /// <summary>相手が鍵を返すのを待つ上限（ミリ秒）。</summary>
         private const int SyncTimeoutMs = 500;
 
-        /// <summary>
-        /// 確保する大きさの刻み（ピクセル）。
-        /// </summary>
+        /// <summary>確保する大きさの刻み（ピクセル）。</summary>
         /// <remarks>
-        /// 要求どおりの大きさで確保すると、ホイールで拡大縮小している間は毎フレーム
-        /// 作り直しになります。刻みで切り上げて確保し、要求が収まっている限り使い回します。
+        /// 要求どおりに確保すると、拡大縮小の最中は毎フレーム作り直しになります。
+        /// 刻みで切り上げ、要求が収まっている限り使い回します。
         /// </remarks>
         private const int SizeGranularity = 128;
 
-        /// <summary>
-        /// 作り直したあと、古い資源を手元に残しておく世代数。
-        /// </summary>
+        /// <summary>作り直したあと、古い資源を手元に残しておく世代数。</summary>
         /// <remarks>
-        /// YMM4 がいつコマンドリストを再生し終えるか分かりません。作り直した直後に
-        /// 前の資源を解放すると、まだ参照されているビットマップを消してしまいます。
+        /// 作り直した直後に前の資源を解放すると、まだ参照されているビットマップを
+        /// 消してしまいます。
         /// </remarks>
         private const int RetiredGenerations = 2;
 

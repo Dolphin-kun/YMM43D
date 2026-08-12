@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 
 namespace YMM43D.Scene3D
 {
@@ -20,13 +20,6 @@ namespace YMM43D.Scene3D
         public static WorldBounds FromCube(float edgeLength)
         {
             var half = new Vector3(edgeLength / 2f);
-            return new WorldBounds(-half, half);
-        }
-
-        /// <summary>原点を中心とする直方体。</summary>
-        public static WorldBounds FromSize(Vector3 size)
-        {
-            var half = size / 2f;
             return new WorldBounds(-half, half);
         }
 

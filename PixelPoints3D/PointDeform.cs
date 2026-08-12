@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using YMM43D.Scene3D;
 using YukkuriMovieMaker.Commons;
 
@@ -8,22 +8,15 @@ namespace PixelPoints3D
     /// 点の並びを三次元的に歪ませる設定を、シェーダーが使える形に直したもの。
     /// </summary>
     /// <remarks>
-    /// <para>
     /// 「強さ」は種類ごとに意味が違います（波なら振幅、ねじれなら端での角度、
     /// 球に巻くなら移し具合）。換算はここで済ませてしまい、シェーダー側は
     /// ワールド単位・ラジアン・比率という素直な値だけを見ます。
-    /// </para>
-    /// <para>
-    /// 変形は格子の位置にだけ掛かります。ばらつきはそのあとに足すので、
-    /// 曲げても散らばり方は変わりません。
-    /// </para>
     /// </remarks>
     internal readonly record struct PointDeform(
         DeformKind Kind, Vector3 Axis, float Amount, float Period, float Phase)
     {
         public static PointDeform None => new(DeformKind.None, Vector3.UnitY, 0f, 1f, 0f);
 
-        /// <param name="extent">格子が占める大きさ（ワールド単位）。</param>
         public static PointDeform Create(
             PixelPoints3DEffect effect, in FrameContext time, Vector3 extent)
         {

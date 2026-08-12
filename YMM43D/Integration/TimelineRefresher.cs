@@ -1,4 +1,4 @@
-using YMM43D.Plugin;
+﻿using YMM43D.Plugin;
 using YMM43D.Scene3D;
 using YukkuriMovieMaker.Project;
 using YukkuriMovieMaker.Project.Items;
@@ -9,20 +9,14 @@ namespace YMM43D.Integration
     /// カメラが動いたときに、YMM4 の標準プレビューを描き直させます。
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// YMM4 はアイテムのパラメータが変わらない限り描画結果を使い回すため、
-    /// カメラだけを動かしても標準プレビューは更新されません。そこで
+    /// YMM4 はアイテムのパラメータが変わらない限り描画結果を使い回すため、カメラだけを
+    /// 動かしても標準プレビューは更新されません。そこで
     /// <list type="number">
     /// <item>カメラ連動アイテムのダミーパラメータを更新して結果を無効化し、</item>
     /// <item>現在フレームを一度ずらして戻すことで再描画を促す</item>
     /// </list>
-    /// という2段階の手当てをしています。どちらも YMM4 側に再描画を依頼する
-    /// 公式な手段が無いための回避策です。
-    /// </para>
-    /// <para>
-    /// 以前はこの処理が 3Dプレビューと 3Dプレビュー設定の2つの ViewModel に
-    /// そのまま複製されていました。
-    /// </para>
+    /// という2段階の手当てをしています。どちらも再描画を依頼する公式な手段が
+    /// 無いための回避策です。
     /// </remarks>
     public sealed class TimelineRefresher
     {

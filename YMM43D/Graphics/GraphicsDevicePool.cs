@@ -1,4 +1,4 @@
-using Vortice.Direct3D;
+﻿using Vortice.Direct3D;
 using Vortice.Direct3D11;
 
 namespace YMM43D.Graphics
@@ -27,12 +27,6 @@ namespace YMM43D.Graphics
         /// <summary>
         /// デバイスを1つ借り受けます。返された <see cref="DeviceLease"/> を破棄すると解放されます。
         /// </summary>
-        /// <example>
-        /// <code>
-        /// using var lease = GraphicsDevicePool.Acquire();
-        /// lease.Context.Draw(...);
-        /// </code>
-        /// </example>
         public static DeviceLease Acquire()
         {
             lock (gate)

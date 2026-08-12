@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using System.Runtime.InteropServices;
 using Vortice.Direct3D;
 using Vortice.Direct3D11;
@@ -12,13 +12,8 @@ namespace PixelPoints3D
     /// 格子の何番目の点かを表す頂点。
     /// </summary>
     /// <remarks>
-    /// <para>
     /// 座標は持ちません。実際の位置は頂点シェーダーが格子番号から組み立てます。
-    /// 間隔・ばらつき・奥行きを変えても、格子の数が同じならバッファを作り直さずに済みます。
-    /// </para>
-    /// <para>
     /// <see cref="Corner"/> と <see cref="Other"/> の使い方は形状ごとに違います。
-    /// </para>
     /// <list type="table">
     /// <item><term>粒</term><description>四隅を <c>Corner</c> の ±1 で表す。<c>Other</c> は自分自身</description></item>
     /// <item><term>線</term><description><c>Other</c> がもう一方の端。<c>Corner.x</c> の ±1 で太さの左右に開く</description></item>
@@ -33,8 +28,6 @@ namespace PixelPoints3D
 
         /// <summary>線のもう一方の端。線以外では自分自身と同じ値。</summary>
         public Vector3 Other = other;
-
-        public GridVertex(Vector3 cell) : this(cell, Vector2.Zero, cell) { }
 
         public GridVertex(Vector3 cell, Vector2 corner) : this(cell, corner, cell) { }
 
@@ -55,12 +48,10 @@ namespace PixelPoints3D
         public int PointCount => X * Y * Z;
 
         /// <summary>
-        /// 大きさと間隔から分割数を求めます。
+        /// 大きさと間隔から分割数を求めます。上限を超える場合は間隔を粗くして収めます。
         /// </summary>
         /// <remarks>
-        /// 点が多すぎると描画が止まってしまうため、上限を超える場合は間隔を
-        /// 粗くして収めます。切り捨てるのではなく粗くするのは、絵の範囲が
-        /// 変わらないほうが操作していて分かりやすいからです。
+        /// 切り捨てるのではなく粗くするのは、絵の範囲が変わらないほうが分かりやすいからです。
         /// </remarks>
         public static GridSize Create(Vector3 sizePixels, Vector3 spacingPixels, int maxPoints)
         {
@@ -98,8 +89,7 @@ namespace PixelPoints3D
     /// 格子1つ分の、粒・線・面それぞれの形状。
     /// </summary>
     /// <remarks>
-    /// 3つとも同じ格子番号を参照するので、間隔やばらつきを変えても作り直しは要りません。
-    /// 分割数が変わったときだけ作り直します。
+    /// 3つとも同じ格子番号を参照するので、作り直すのは分割数が変わったときだけです。
     /// </remarks>
     internal sealed class PointGrid : IDisposable
     {
@@ -161,11 +151,8 @@ namespace PixelPoints3D
         }
 
         /// <remarks>
-        /// <para>
         /// 線は <c>LineList</c> ではなく細長い四角形で作ります。D3D11 の線は太さを
-        /// 持てず、常に 1 ピクセルになってしまうためです。四角形なら太さを指定でき、
-        /// 面や粒と同じシェーダーで描けます。
-        /// </para>
+        /// 持てず、常に 1 ピクセルになってしまうためです。
         /// <para>
         /// 右・下・奥に加えて、区画の対角線も引きます。面は四角形を三角形2枚に割って
         /// 張るので、対角線が無いと線と面で形が食い違います。

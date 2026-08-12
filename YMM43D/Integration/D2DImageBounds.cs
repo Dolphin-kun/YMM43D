@@ -1,4 +1,4 @@
-using Vortice;
+﻿using Vortice;
 using Vortice.Direct2D1;
 
 namespace YMM43D.Integration
@@ -8,19 +8,18 @@ namespace YMM43D.Integration
     /// </summary>
     public static class D2DImageBounds
     {
-        /// <summary>
-        /// 画像の描画範囲を取得します。
-        /// </summary>
-        /// <remarks>
-        /// ビットマップは自分でサイズを持っていますが、エフェクトの出力などは
-        /// デバイスコンテキストに問い合わせないと範囲が分かりません。
-        /// どちらでも失敗した場合は 1×1 を返します。
-        /// </remarks>
         /// <summary>テクスチャの一辺の上限（ピクセル）。D3D11 の仕様上の最大値。</summary>
         public const int MaxTextureSize = 16384;
 
         private static readonly RawRectF Unknown = new(0, 0, 1, 1);
 
+        /// <summary>
+        /// 画像の描画範囲を取得します。分からない場合は 1×1 を返します。
+        /// </summary>
+        /// <remarks>
+        /// ビットマップは自分でサイズを持っていますが、エフェクトの出力などは
+        /// デバイスコンテキストに問い合わせないと範囲が分かりません。
+        /// </remarks>
         public static RawRectF Get(ID2D1DeviceContext? deviceContext, ID2D1Image image)
         {
             if (image is ID2D1Bitmap bitmap)
@@ -56,13 +55,10 @@ namespace YMM43D.Integration
             return Unknown;
         }
 
-        /// <summary>
-        /// 描画範囲として意味のある値かどうかを調べます。
-        /// </summary>
+        /// <summary>描画範囲として意味のある値かどうかを調べます。</summary>
         /// <remarks>
-        /// 範囲が確定できない画像に対しては、無限大や NaN が返ることがあります。
-        /// そのまま計算に使うと、テクスチャの大きさが負や桁外れの値になり、
-        /// 確保の時点で落ちます。
+        /// 範囲が確定できない画像には無限大や NaN が返ることがあります。そのまま使うと
+        /// テクスチャの大きさが負や桁外れの値になり、確保の時点で落ちます。
         /// </remarks>
         private static bool IsUsable(in RawRectF bounds)
             => float.IsFinite(bounds.Left) && float.IsFinite(bounds.Top)

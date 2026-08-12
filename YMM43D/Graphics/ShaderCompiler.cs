@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using Vortice.D3DCompiler;
 
 namespace YMM43D.Graphics
@@ -11,8 +11,6 @@ namespace YMM43D.Graphics
         /// <summary>
         /// HLSL ソースをコンパイルしてバイトコードを返します。
         /// </summary>
-        /// <param name="source">HLSL ソースコード。</param>
-        /// <param name="entryPoint">エントリポイント関数名。</param>
         /// <param name="profile">シェーダープロファイル（例: <c>vs_5_0</c>）。</param>
         /// <param name="sourceName">エラーメッセージに表示される名前。</param>
         /// <exception cref="InvalidOperationException">コンパイルに失敗した場合。</exception>
