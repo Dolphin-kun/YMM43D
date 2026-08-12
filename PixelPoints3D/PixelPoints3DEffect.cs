@@ -254,6 +254,10 @@ namespace PixelPoints3D
         [AnimationSlider("F1", "px", 0, 20)]
         public Animation Width { get; } = new(2, 0, 500);
 
+        [Display(GroupName = "線", Name = "ランダム", Description = "線を引かない割合。上げるほど、つながり方がまばらになります")]
+        [AnimationSlider("F0", "%", 0, 100)]
+        public Animation Randomness { get; } = new(0, 0, 100);
+
         [Display(GroupName = "線", Name = "色の種類", Description = "単色で塗るか、その位置の画像の色を使うか")]
         [EnumComboBox]
         public PointColorSource ColorSource { get => colorSource; set => Set(ref colorSource, value); }
@@ -265,7 +269,7 @@ namespace PixelPoints3D
         public Color Color { get => color; set => Set(ref color, value); }
         private Color color = Colors.White;
 
-        protected override IEnumerable<IAnimatable> GetAnimatables() => [Width];
+        protected override IEnumerable<IAnimatable> GetAnimatables() => [Width, Randomness];
     }
 
     /// <summary>面のパラメータ。</summary>

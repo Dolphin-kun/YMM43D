@@ -89,11 +89,12 @@ namespace PixelPoints3D
             if (effect.DrawLines && effect.LineSettings.Count > 0 && grid.Lines is { } lines && constants.LineHalfWidth > 0f)
             {
                 var line = effect.LineSettings[0];
-                pipeline.Draw(
-                    render.Context,
-                    WithColor(constants, line.Color, line.ColorSource),
-                    settings,
-                    lines);
+                var lineConstants = WithColor(constants, line.Color, line.ColorSource) with
+                {
+                    LineRandomness = Math.Clamp(line.Randomness.GetFloat(time) / 100f, 0f, 1f),
+                };
+
+                pipeline.Draw(render.Context, lineConstants, settings, lines);
             }
 
             if (effect.DrawPoints && effect.PointSettings.Count > 0 && constants.PointHalfSize > 0f)
@@ -230,10 +231,13 @@ namespace PixelPoints3D
                 effect.PointSettings.Count > 0 ? effect.PointSettings[0].Size.GetFloat(itemTime) : 0f,
                 effect.LineSettings.Count > 0 ? effect.LineSettings[0].Width.GetFloat(itemTime) : 0f);
 
-            var margin = new Vector3(
+            // ばらつきは絶対値で見る。乱数は ±1 に散るので、負の値でも散らばる量は
+            // 同じ。符号のまま足すと範囲が縮み、行き過ぎると上下が入れ替わって
+            // 描画先の大きさが壊れる。
+            var margin = Vector3.Abs(new Vector3(
                 WorldScale.ToWorld(effect.ScatterX.GetFloat(itemTime)),
                 WorldScale.ToWorld(effect.ScatterY.GetFloat(itemTime)),
-                WorldScale.ToWorld(effect.ScatterZ.GetFloat(itemTime)))
+                WorldScale.ToWorld(effect.ScatterZ.GetFloat(itemTime))))
                 + new Vector3(WorldScale.ToWorld(thickness) / 2f);
 
             // 変形は格子の位置に掛かるので、ばらつきや太さより先に広げる。

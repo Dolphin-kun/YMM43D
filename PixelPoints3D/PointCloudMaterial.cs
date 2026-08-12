@@ -80,7 +80,8 @@ namespace PixelPoints3D
         /// <summary>波やねじれのずれ（ラジアン）。</summary>
         public float DeformPhase;
 
-        private float padding2;
+        /// <summary>線を引かない割合（0〜1）。線を描くときだけ入れる。</summary>
+        public float LineRandomness;
     }
 
     /// <summary>
@@ -130,7 +131,7 @@ namespace PixelPoints3D
                 float  DeformAmount;
                 float  DeformPeriod;
                 float  DeformPhase;
-                float  Padding2;
+                float  LineRandomness;
             };
 
             static const float Pi = 3.14159265;
@@ -150,8 +151,13 @@ namespace PixelPoints3D
                 // 形の中での位置。縁を滑らかにするのに使う。詳しくは Coverage() を参照。
                 float2 Edge : EDGE;
 
-                // 面ごとに一定の乱数。補間すると三角形の中で濃さが変わってしまう。
-                nointerpolation float Random : RANDOM;
+                // 形ごとに一定の乱数。補間すると1つの形の中で値が変わってしまう。
+                //   x … 格子の点ごと。面の不透明度に使う
+                //   y … 線ごと（両端の組で決まる）。引くかどうかに使う
+                //
+                // 四角形は2枚の三角形とも先頭の頂点が同じなので、どちらの三角形でも
+                // 同じ値になる。
+                nointerpolation float2 Random : RANDOM;
             };
             """;
 
@@ -257,7 +263,12 @@ namespace PixelPoints3D
                 PS_INPUT output;
 
                 output.TexCoord = Ratio(input.Cell).xy;
-                output.Random = Hash(input.Cell).x * 0.5 + 0.5;
+
+                // 線ごとの乱数は両端の組から作る。片方の点だけで決めると、その点から
+                // 伸びる線が全部まとめて消えてしまい、まばらにならない。
+                output.Random = float2(
+                    Hash(input.Cell).x,
+                    Hash(input.Cell + input.Other * 3.7 + 1.3).y) * 0.5 + 0.5;
 
                 // 粒は縦横、線は幅方向だけが ±1 に開く。面はどちらも 0 のまま。
                 output.Edge = input.Corner;
@@ -266,6 +277,14 @@ namespace PixelPoints3D
 
                 if (any(input.Other != input.Cell))
                 {
+                    // 引かないと決まった線は、ここで捨てる。ピクセルシェーダーまで
+                    // 運んでから捨てるより安い。手前より奥へ送ると刈り取られる。
+                    if (output.Random.y < LineRandomness)
+                    {
+                        output.Position = float4(0, 0, -1, 1);
+                        return output;
+                    }
+
                     // 線。相手へ向かう向きと視線から、画面に正対する幅の向きを作る。
                     float3 along = Place(input.Other) - local;
                     float3 side = cross(along, ViewForward);
@@ -332,8 +351,8 @@ namespace PixelPoints3D
 
                 float3 rgb = UseSourceColor > 0.5 ? source.rgb : Color.rgb;
 
-                // ばらつきは 1 倍から Random 倍までの間で効かせる。
-                float scatter = lerp(1.0, input.Random, OpacityRandomness);
+                // ばらつきは 1 倍から Random.x 倍までの間で効かせる。
+                float scatter = lerp(1.0, input.Random.x, OpacityRandomness);
 
                 return float4(rgb, Color.a * Opacity * ExtraOpacity * scatter * coverage);
             }
