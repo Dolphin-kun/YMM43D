@@ -136,8 +136,15 @@ YMM43D.PreviewTool   3Dプレビューのツールウィンドウ。</pre>
 </table>
 
 <p>
-どちらも同じ <code>Draw</code> を通ります。違いは <code>DrawContext3D.World</code> に何が入っているかだけです。
-出力経路では単位行列（位置や回転は YMM4 が後から適用する）、プレビュー経路ではアイテムの位置・拡大率・回転を反映した行列が渡されます。
+どちらも同じ <code>Draw</code> を通り、<code>DrawContext3D.World</code> には
+<strong>どちらの経路でもアイテムの位置・拡大率・回転を反映した行列</strong>が入ります。
+全アイテムが同じワールド空間に並ぶので、深度がどの絵の中でも共通になり、
+アイテムをまたいだ前後関係が成り立ちます。
+</p>
+
+<p>
+出力経路では YMM4 が出来上がった画像にも配置を掛けますが、二重にならないよう
+<code>Output3DRenderer</code> が相殺します。プロバイダー側で意識することはありません。
 </p>
 
 <h3>プロバイダーの見つけ方</h3>
@@ -166,6 +173,15 @@ YMM43D.PreviewTool   3Dプレビューのツールウィンドウ。</pre>
 
 <h2 id="setup">2. 導入</h2>
 
+<p>同梱のプラグインが、そのまま実装例になります。</p>
+
+<table>
+<tr><th>プロジェクト</th><th>表示名</th><th>種別</th><th>実装例として</th></tr>
+<tr><td><code>Shape3D</code></td><td>3Dアイテム</td><td>図形</td><td><code>Shape3DSourceBase</code> の最小構成</td></tr>
+<tr><td><code>Extrusion3D</code></td><td>立体化3D</td><td>映像エフェクト</td><td>入力画像をテクスチャに使う。レイマーチングと <code>SV_Depth</code></td></tr>
+<tr><td><code>PixelPoints3D</code></td><td>点群3D</td><td>映像エフェクト</td><td>頂点シェーダーで形を組み立てる。複数の形状を 1 つのシェーダーで描き分ける</td></tr>
+</table>
+
 <p>プラグインのプロジェクトから YMM43D.dll を参照します。YMM4 本体の DLL 群と同じ場所に配置してください。</p>
 
 <div class="wide">
@@ -192,9 +208,26 @@ YMM43D.PreviewTool   3Dプレビューのツールウィンドウ。</pre>
 </p>
 
 <p>
-カメラは注視点を中心とした軌道カメラで、既定の垂直画角は 45 度（<code>SceneCamera.DefaultFieldOfView</code>）です。
-角度と距離は <code>Animation</code> なのでキーフレームを打てます。
+カメラは注視点を中心とした軌道カメラです。角度と距離は <code>Animation</code> なのでキーフレームを打てます。
 </p>
+
+<p>
+画角は固定値ではなく、<b>注視点の面（Z = 0）が画面とちょうど 1 対 1 で対応するように</b>
+<code>SceneCamera.GetFieldOfView(screenHeight, distance)</code> が決めます。1080px・距離 10 なら 56.7 度です。
+このため、Z = 0 に置いたアイテムは YMM4 が 2D で描く位置・大きさと一致します。
+</p>
+
+<p>
+その結果、<b>カメラ距離は「寄り引き」ではなく「遠近の強さ」を決めるつまみ</b>になります。
+近づけるほど画角が広がり、手前と奥の差が強く出ます。Z = 0 のものの大きさは距離によりません。
+</p>
+
+<table>
+<tr><th>式</th><th>意味</th></tr>
+<tr><td><code>WorldScale.PixelsPerUnit</code></td><td>100。ワールド 1 単位 = 100 ピクセル</td></tr>
+<tr><td><code>SceneCamera.GetPixelsPerTangent(distance)</code></td><td>視線からの傾き 1 あたりのピクセル数。<code>PixelsPerUnit × distance</code></td></tr>
+<tr><td><code>SceneCamera.GetTangentProjection()</code></td><td>除算後の x・y が傾きそのものになる射影。2D 側の変換を後から掛けるための土台</td></tr>
+</table>
 
 <h2 id="shape">4. 3D図形アイテムを作る</h2>
 
@@ -372,70 +405,80 @@ public class ExtrusionEffect : VideoEffect3DBase
 }</pre>
 </div>
 
-<h3>入力画像をテクスチャとして使う</h3>
+<h3>プロセッサ</h3>
 
 <p>
-エフェクトの入力画像を 3D 描画に貼りたい場合は、プロセッサに <code>I3DTextureProvider</code> を実装し、
-<code>D2DTextureBridge</code> で変換します。3D 描画は YMM4 とは別のデバイスで行われるため、
-画像をそのままテクスチャとして使うことはできません。
+プロセッサは <code>VideoEffect3DProcessorBase</code> を継承します。実装するのは 2 つだけです。
+入力画像のテクスチャ化・描画先の大きさの決定・カメラ行列の解決・アイテム配置の処理は基底クラスが行います。
 </p>
 
+<table>
+<tr><th>メンバー</th><th>役割</th></tr>
+<tr><td><code>Draw(in Render3DContext, DrawContext3D)</code></td><td>3D 空間への描画。プレビューと出力の両方から呼ばれる</td></tr>
+<tr><td><code>GetLocalBounds(in FrameContext)</code></td><td>描くものが占める範囲。<code>Update</code> が組み立てるワールド行列を掛ける前の座標系で答える</td></tr>
+</table>
+
 <div class="wide">
-<pre>internal sealed class ExtrusionProcessor : IVideoEffectProcessor, I3DVideoEffect, I3DSizeProvider
+<pre>internal sealed class ExtrusionProcessor : VideoEffect3DProcessorBase
 {
     private readonly ExtrusionEffect effect;
-    private readonly IGraphicsDevicesAndContext devices;
-    private readonly D2DTextureBridge textureBridge = new();
-    private ID2D1Image? input;
-    private Vector2 inputSize;
-    private Vector2 inputOffset;
+    private readonly DeviceResourceCache&lt;RenderPipeline&lt;ExtrusionConstants&gt;&gt; pipelines;
 
-    // 2D 出力は変えず、3D 描画だけを担当する
-    public ID2D1Image Output =&gt; input ?? throw new InvalidOperationException();
-    public bool RequiresMappedTexture =&gt; false;
-
-    public void SetInput(ID2D1Image? input) =&gt; this.input = input;
-    public void ClearInput() =&gt; input = null;
-
-    public DrawDescription Update(EffectDescription description)
-        =&gt; description.DrawDescription;
-
-    public ID3D11ShaderResourceView? GetTexture(ID3D11Device device)
+    public ExtrusionProcessor(ExtrusionEffect effect, IGraphicsDevicesAndContext devices)
+        : base(effect, devices)
     {
-        if (input is null)
-            return null;
-
-        var texture = textureBridge.GetTexture(device, devices, input, this, out var bounds);
-        if (texture is not null)
-        {
-            inputSize = new Vector2(bounds.Right - bounds.Left, bounds.Bottom - bounds.Top);
-            inputOffset = new Vector2(bounds.Left, bounds.Top);
-        }
-        return texture;
+        this.effect = effect;
+        pipelines = new DeviceResourceCache&lt;RenderPipeline&lt;ExtrusionConstants&gt;&gt;(
+            device =&gt; new RenderPipeline&lt;ExtrusionConstants&gt;(
+                device, BoxMesh.CreateExtrusionBox(device), new ExtrusionMaterial(device)));
     }
 
-    // 板の大きさと中心のずれを呼び出し側に伝える
-    public bool TryGetSize(out Vector2 size, out Vector2 offset)
+    public override void Draw(in Render3DContext render, DrawContext3D item)
     {
-        size = inputSize;
-        offset = inputOffset;
-        return size.X &gt; 0 &amp;&amp; size.Y &gt; 0;
+        // 入力画像は基底クラスがテクスチャ化してくれる
+        var texture = item.Texture ?? GetTexture(render.Device);
+        if (texture is null)
+            return;
+
+        var thickness = effect.Thickness.GetFloat(item.Time) / 100f;
+        var world = Matrix4x4.CreateScale(1f, 1f, thickness) * item.World;
+        var constants = /* ... */;
+
+        pipelines.Get(render.Device).Draw(
+            render.Context, constants, item.ToDrawSettings(FaceCulling.Front, texture));
     }
 
-    public void Draw(in Render3DContext render, DrawContext3D item) { /* ... */ }
-
-    public void Dispose()
+    protected override WorldBounds GetLocalBounds(in FrameContext itemTime)
     {
-        effect.DetachProcessor(this);
-        textureBridge.Dispose();
+        var thickness = effect.Thickness.GetFloat(itemTime) / 100f;
+
+        // ワールド行列が入力画像の実寸を掛けてくれるので、1×1 の板として答える
+        return new WorldBounds(
+            new Vector3(-0.5f, -0.5f, 0f), new Vector3(0.5f, 0.5f, thickness));
+    }
+
+    public override void Dispose()
+    {
+        pipelines.Dispose();
+        base.Dispose();   // DetachProcessor もここで行われる
     }
 }</pre>
 </div>
 
+<h3>入力画像をテクスチャとして使う</h3>
+
+<p>
+3D 描画は YMM4 とは別のデバイスで行うため、入力画像をそのままテクスチャとして使うことはできません。
+<code>GetTexture(device)</code> を呼べば、基底クラスが共有テクスチャを介して変換したものを返します。
+実寸は <code>TryGetSize(out size, out offset)</code> で取れます。
+</p>
+
 <div class="note">
 <p>
-プロセッサの <code>Dispose</code> では、必ず <code>DetachProcessor(this)</code> を呼んでください。
-呼ばないと、破棄済みのプロセッサにプレビューが描画を要求し続けます。
+<b><code>DrawDescription</code> は基底クラスが空にして返します。</b>
+アイテムの位置・拡大率・回転・カメラはすべて 3D のワールド行列に取り込んで描画済みなので、
+YMM4 に二重に掛けさせないためです。副作用として、<b>このエフェクトより後ろに置いたエフェクトからは、
+アイテムの位置や拡大率が既定値に見えます。</b>それらを参照するエフェクトは前に置いてください。
 </p>
 </div>
 
@@ -570,6 +613,8 @@ var pipeline = pipelines.Get(render.Device);</pre>
 <tr><td><code>Shape3DSourceBase</code></td><td>abstract class</td><td>3D 図形アイテムの描画元。プレビューと出力の両経路を受け持つ</td></tr>
 <tr><td><code>ShapeParameter3DBase</code></td><td>abstract class</td><td>3D 図形アイテムの設定値</td></tr>
 <tr><td><code>VideoEffect3DBase</code></td><td>abstract class</td><td>3D 描画を行う映像エフェクト</td></tr>
+<tr><td><code>VideoEffect3DProcessorBase</code></td><td>abstract class</td><td>その描画処理側。テクスチャ化・描画先の決定・配置の打ち消しを受け持つ</td></tr>
+<tr><td><code>Output3DRenderer</code></td><td>class</td><td>3D 描画の結果を YMM4 の出力に流せる画像にする。図形もエフェクトもこれを通る</td></tr>
 <tr><td><code>Render3DContext</code></td><td>struct</td><td>描画先のデバイス・コンテキストとカメラ行列</td></tr>
 <tr><td><code>Provider3DRegistry</code></td><td>static class</td><td>パラメータとプロバイダーの対応表</td></tr>
 <tr><td><code>CameraSync</code></td><td>class</td><td><code>ICameraSync</code> の既定実装</td></tr>
@@ -607,6 +652,8 @@ var pipeline = pipelines.Get(render.Device);</pre>
 <tr><td><code>CameraPose</code></td><td>struct</td><td>ある時点でのカメラの位置・注視点・上方向</td></tr>
 <tr><td><code>WorldBounds</code></td><td>struct</td><td>描くものがワールド空間で占める範囲。出力画像の大きさを決めるのに使う</td></tr>
 <tr><td><code>WorldScale</code></td><td>static class</td><td>ピクセルとワールド単位の換算（1 単位 = 100px）</td></tr>
+<tr><td><code>ScreenPlacement</code></td><td>struct</td><td>YMM4 が画像に掛ける 2D 配置（位置・拡大率・回転・Z の遠近）と、その逆変換</td></tr>
+<tr><td><code>ImageProjection</code></td><td>static class</td><td>ワールドから 1 つのアイテムの出力画像までの射影を組み立てる</td></tr>
 <tr><td><code>DrawContext3D</code></td><td>class</td><td>1 つのアイテムを描画するための情報</td></tr>
 <tr><td><code>FrameContext</code></td><td>struct</td><td>フレーム位置・長さ・FPS の組</td></tr>
 <tr><td><code>AnimationExtensions</code></td><td>static class</td><td><code>Animation</code> を <code>FrameContext</code> で評価する</td></tr>
@@ -650,7 +697,7 @@ double raw = parameter.Size.GetValue(item.Time);</pre>
 <tr><td><code>RenderPipeline&lt;T&gt;</code></td><td>class</td><td>形状・シェーダー・定数バッファをまとめた描画単位</td></tr>
 <tr><td><code>DrawSettings</code></td><td>struct</td><td>1 回の描画ごとに変わる設定</td></tr>
 <tr><td><code>RenderStates</code></td><td>class</td><td>デバイス上で共有される描画ステート一式</td></tr>
-<tr><td><code>IMesh</code> / <code>IMaterial</code></td><td>interface</td><td>形状とシェーダー</td></tr>
+<tr><td><code>IMesh</code> / <code>IMaterial</code></td><td>interface</td><td>形状とシェーダー。頂点が 65536 個を超える形状は <code>IndexFormat</code> に <code>R32_UInt</code> を返す</td></tr>
 <tr><td><code>Vertex</code></td><td>struct</td><td>位置・色・UV を持つ標準頂点</td></tr>
 <tr><td><code>TransformConstants</code></td><td>struct</td><td>変換行列と不透明度を持つ標準定数バッファ</td></tr>
 <tr><td><code>ShaderCompiler</code></td><td>static class</td><td>HLSL の実行時コンパイル</td></tr>
@@ -670,10 +717,42 @@ double raw = parameter.Size.GetValue(item.Time);</pre>
 <tr><td><code>Renderer3DTo2D</code></td><td>3D 描画の結果を YMM4 が扱える <code>ID2D1Image</code> に変換する</td></tr>
 <tr><td><code>RenderSurface3D</code></td><td>3D 描画用のレンダーターゲットと、それを YMM4 側から見たビットマップ</td></tr>
 <tr><td><code>PrivateD2DContext</code></td><td>プラグイン専用の Direct2D デバイスコンテキストを貸し出す</td></tr>
+<tr><td><code>D2DGate</code></td><td>Direct2D の操作をプラグイン全体で 1 本に直列化する鍵</td></tr>
 <tr><td><code>D2DImageBounds</code></td><td>画像の描画範囲を調べる</td></tr>
+<tr><td><code>ItemPlacement</code></td><td>アイテムの設定から 3D の配置行列と <code>ScreenPlacement</code> を作る</td></tr>
+<tr><td><code>SceneDepthCollector</code></td><td>シーン内の他の 3D 物体を集める。アイテムをまたいだ前後関係に使う</td></tr>
 <tr><td><code>SceneCameraRegistry</code></td><td>シーンごとのカメラを保持する</td></tr>
 <tr><td><code>TimelineRefresher</code></td><td>カメラが動いたときに標準プレビューの再描画を促す</td></tr>
 </table>
+
+<h4>出力画像はどう置かれるか</h4>
+
+<p>
+3D 空間には全アイテムが真のワールド座標で置かれます。深度がどの絵の中でも共通になり、
+アイテムをまたいだ前後関係が成り立つのはこのためです。そこから 1 つのアイテムの画像を切り出す経路は次のとおりです。
+</p>
+
+<div class="wide">
+<pre>ワールド → 視線からの傾き → 画面ピクセル → アイテムの画像 → NDC
+                            └──── すべて 2D アフィン。射影行列に畳み込む ────┘</pre>
+</div>
+
+<p>
+畳み込んでいるので Direct2D 側には変換が残らず、コマンドリストは「ビットマップをオフセットに置くだけ」です。
+また、畳み込む変換はクリップ座標の x と y しか触らないため、<b>切り出す範囲が違っても深度は変わりません</b>。
+</p>
+
+<table>
+<tr><th>対象</th><th>YMM4 の配置</th><th>やること</th></tr>
+<tr><td>映像エフェクト</td><td>させない</td><td><code>DrawDescription</code> を空にして返す。打ち消し計算が要らない</td></tr>
+<tr><td>図形アイテム</td><td>される</td><td><code>ScreenPlacement</code> の逆変換を射影に畳み込む</td></tr>
+</table>
+
+<p>
+図形アイテムに <code>DrawDescription</code> を返す口が無いため、こちらだけは YMM4 の配置を模した式が要ります。
+順序は「拡大率 → 回転 → 位置 → Z の遠近」で、Z の遠近は基準距離 1000px の
+<code>1000 / (1000 - Z)</code> です（実測値。<code>ScreenPlacement.HostPerspectiveDistance</code>）。
+</p>
 
 <h2 id="notes">8. 実装上の注意</h2>
 
@@ -689,6 +768,20 @@ YMM4 の <code>IGraphicsDevicesAndContext.DeviceContext</code> は本体の描�
 Direct2D で自分の描画を行う場合は <code>PrivateD2DContext</code> を使ってください。
 同じ Direct2D デバイスから作った別のコンテキストなので、画像やコマンドリストは本体とそのまま受け渡しできます。
 </p>
+
+<p>
+コンテキストを分けるだけでは足りません。<code>ID2D1DeviceContext</code> はスレッド安全ではなく、
+3Dプレビューは本体とは別のスレッドで回るため、同じコンテキストを 2 方向から使う場面が生まれます。
+Direct2D の操作は必ず <code>lock (D2DGate.Sync)</code> で囲ってください。囲わないと内部状態が壊れ、
+運が悪いと vtable 経由の呼び出しがアクセス違反を起こして <code>ExecutionEngineException</code> で落ちます。
+</p>
+
+<div class="note">
+<p>
+鍵の入れ子の順序は「3D デバイス → Direct2D」で固定です。
+<code>D2DGate.Sync</code> を持ったまま <code>GraphicsDevicePool</code> のデバイスをロックしないでください。
+</p>
+</div>
 
 <h3>D3D11 コンテキストの状態を戻す</h3>
 
@@ -715,6 +808,32 @@ Direct2D で自分の描画を行う場合は <code>PrivateD2DContext</code> を
 <code>CameraSyncAnimation</code> を <code>GetAnimatables()</code> に含めておくと、
 ライブラリ側がこのダミーの値を動かして再描画を促します。
 </p>
+
+<h3>アイテムをまたいだ前後関係</h3>
+
+<p>
+YMM4 はアイテムごとに平らな画像を作り、レイヤー順に重ねます。深度を渡す口が無いため、
+そのままではアイテムをまたいだ前後関係を表現できません。
+</p>
+
+<p>
+そこで、自分を描く前に他のアイテムの形を<strong>深度バッファにだけ</strong>埋めます
+（<code>SceneDepthCollector</code>／<code>DrawContext3D.DepthOnly</code>）。
+すると自分の画像には「自分が最前面である画素」しか残らず、どの順に重ねても正しい絵になります。
+1 枚にまとめないので、レイヤーも不透明度も合成モードもアイテムごとに従来どおり効きます。
+</p>
+
+<p>
+プロバイダー側で意識することはありません。<code>DrawContext3D.ToDrawSettings</code> を使っていれば、
+色を書かない設定が自動で伝わります。
+</p>
+
+<table>
+<tr><th>制約</th><th>内容</th></tr>
+<tr><td>費用</td><td>3D アイテムの数の 2 乗に比例する</td></tr>
+<tr><td>カメラ系エフェクト</td><td>他アイテムに掛かっている分は追えない。<code>I3DLocalTransform</code> で本人に答えてもらう</td></tr>
+<tr><td>厚みのあるもの</td><td>YMM4 の拡大は平らな画像への操作なので、奥行き方向の見え方は厳密には一致しない</td></tr>
+</table>
 
 <h3>3Dプレビューに反映されないもの</h3>
 
