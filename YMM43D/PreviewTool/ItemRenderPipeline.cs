@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Numerics;
 using Vortice.Direct2D1;
+using YMM43D.Integration;
 using YMM43D.Plugin;
 using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Player.Video;
@@ -94,6 +95,23 @@ namespace YMM43D.PreviewTool
             // 画像も要らず、変換を生むエフェクトも無いなら、描画元を作る必要はない。
             if (!needsImage && effects.IsEmpty)
                 return ItemRenderResult.None;
+
+            // ここから先は YMM4 本体の描画を回す。本体の描画スレッドと同じ
+            // Direct2D デバイスを使うため、鍵の中で行う。
+            // （このメソッドは 3Dプレビューのスレッドから呼ばれる）
+            lock (D2DGate.Sync)
+                return RenderCore(item, time, environment, needsImage, effects);
+        }
+
+        private ItemRenderResult RenderCore(
+            IVideoItem item,
+            in FrameContext time,
+            PreviewEnvironment environment,
+            bool needsImage,
+            ImmutableList<IVideoEffect> effects)
+        {
+            var scene = environment.Scene!;
+            var sourceDescription = environment.SourceDescription!;
 
             var description = new TimelineItemSourceDescription(
                 sourceDescription, time.Frame, time.Length, item.Layer);
@@ -212,14 +230,21 @@ namespace YMM43D.PreviewTool
         /// </summary>
         public void RetainOnly(IReadOnlySet<IVideoItem> aliveItems)
         {
+            // 破棄はこの鍵の外で行う。描画元の Dispose は Direct2D の鍵を取ることが
+            // あり、鍵を握ったまま呼ぶと取得順序が逆になって詰まる余地ができる。
+            var retired = new List<ISource>();
+
             lock (gate)
             {
                 foreach (var item in sources.Keys.Where(k => !aliveItems.Contains(k)).ToArray())
                 {
                     if (sources.Remove(item, out var source))
-                        source.Dispose();
+                        retired.Add(source);
                 }
             }
+
+            foreach (var source in retired)
+                source.Dispose();
 
             foreach (var item in chains.Keys.Where(k => !aliveItems.Contains(k)).ToArray())
                 ReleaseChain(item);

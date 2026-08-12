@@ -4,6 +4,7 @@ using System.Windows.Interop;
 using Vortice.Direct3D11;
 using Vortice.DXGI;
 using YMM43D.Graphics;
+using YMM43D.Integration;
 using YukkuriMovieMaker.Commons;
 
 namespace YMM43D.PreviewTool.Views
@@ -49,6 +50,10 @@ namespace YMM43D.PreviewTool.Views
         public void RenderFrame()
         {
             if (device == null || deviceContext == null || swapChain == null) return;
+
+            // このフレームの途中で YMM4 本体の描画を回すため、Direct2D の鍵も取る。
+            // 順序は「Direct2D の鍵 → 3D デバイス」で固定。
+            lock (D2DGate.Sync)
             lock (device)
             {
                 Render?.Invoke(device, deviceContext, (int)ActualWidth, (int)ActualHeight);
