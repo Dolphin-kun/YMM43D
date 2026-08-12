@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.ComponentModel.DataAnnotations;
 using System.Numerics;
 
@@ -30,6 +31,12 @@ namespace Shape3D
     /// </remarks>
     internal sealed record Polyhedron(Vector3[] Vertices, int[][] Faces)
     {
+        // 形は種類ごとに1つあれば足りる。毎フレーム組み直さないよう取っておく。
+        // 取り出したものは読むだけにすること。
+        private static readonly ConcurrentDictionary<SolidKind, Polyhedron> cache = new();
+
+        public static Polyhedron Get(SolidKind kind) => cache.GetOrAdd(kind, Create);
+
         public static int FaceCountOf(SolidKind kind) => kind switch
         {
             SolidKind.Tetrahedron => 4,

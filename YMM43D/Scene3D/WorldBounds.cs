@@ -23,6 +23,31 @@ namespace YMM43D.Scene3D
             return new WorldBounds(-half, half);
         }
 
+        /// <summary>与えた点をすべて含む、いちばん小さい範囲を返します。</summary>
+        /// <param name="points">含めたい点（<paramref name="transform"/> を掛ける前）。</param>
+        /// <param name="transform">点に掛ける変換。</param>
+        /// <remarks>
+        /// 立方体でない形は、外接立方体で囲むと隅が大きく余ります。頂点が分かって
+        /// いるなら、こちらを使ってください。回転させても余りが増えません。
+        /// </remarks>
+        public static WorldBounds FromPoints(ReadOnlySpan<Vector3> points, in Matrix4x4 transform)
+        {
+            if (points.IsEmpty)
+                return Empty;
+
+            var min = new Vector3(float.MaxValue);
+            var max = new Vector3(float.MinValue);
+
+            foreach (var point in points)
+            {
+                var moved = Vector3.Transform(point, transform);
+                min = Vector3.Min(min, moved);
+                max = Vector3.Max(max, moved);
+            }
+
+            return new WorldBounds(min, max);
+        }
+
         /// <summary>大きさが無く、描くものが存在しないかどうか。</summary>
         public bool IsEmpty => Max.X <= Min.X || Max.Y <= Min.Y;
 

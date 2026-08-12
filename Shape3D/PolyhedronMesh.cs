@@ -33,7 +33,7 @@ namespace Shape3D
         {
             Kind = kind;
 
-            var solid = Polyhedron.Create(kind);
+            var solid = Polyhedron.Get(kind);
             var vertices = new List<Vertex>();
 
             for (var face = 0; face < solid.Faces.Length; face++)

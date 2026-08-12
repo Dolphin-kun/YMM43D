@@ -44,11 +44,11 @@ namespace Shape3D
                    parameter.RotationY.GetFloat(itemTime),
                    parameter.RotationZ.GetFloat(itemTime));
 
-        // 回転角は分かっているので、実際に回した範囲を返す。どの向きにも対応できる
-        // 外接立方体を返すと、辺の長さが最大で √3 ≒ 1.73 倍になり、そのぶん
-        // 出力画像が無駄に大きくなる。
+        // 頂点そのものを回して範囲を出す。外接立方体を回してから囲み直すと、
+        // 立方体の隅につられて最大で √3 ≒ 1.73 倍まで膨らみ、アイテムの枠が
+        // 見た目より大きくなる。立方体以外の形では隅がまるごと余る。
         protected override WorldBounds GetWorldBounds(in FrameContext itemTime)
-            => WorldBounds.FromCube(1f).Transform(GetLocalMatrix(itemTime));
+            => WorldBounds.FromPoints(Polyhedron.Get(parameter.Solid).Vertices, GetLocalMatrix(itemTime));
 
         public override void Dispose()
         {
