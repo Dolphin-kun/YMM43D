@@ -31,6 +31,9 @@ namespace PixelPoints3D
 
         private const string Grid = "点群3D";
         private const string Shape = "点群3D／形";
+        private const string Point = "点群3D／点";
+        private const string Line = "点群3D／線";
+        private const string Face = "点群3D／面";
         private const string Scatter = "点群3D／ばらつき";
         private const string Place = "点群3D／配置";
 
@@ -54,6 +57,9 @@ namespace PixelPoints3D
         [AnimationSlider("F0", "%", 0, 100)]
         public Animation Threshold { get; } = new(50, 0, 100);
 
+        // 「形」には切り替えだけを置く。中身は形ごとの組に分ける。
+        // 使わない形の設定が並んでいると、どれがどれに効くのか分からなくなる。
+
         [Display(GroupName = Shape, Name = "点を描く", Description = "格子の各点に四角い粒を描きます")]
         [ToggleSlider]
         public bool DrawPoints
@@ -62,11 +68,6 @@ namespace PixelPoints3D
             set => Set(ref drawPoints, value);
         }
         private bool drawPoints = true;
-
-        [Display(GroupName = Shape, Name = "点の大きさ", Description = "粒の一辺の長さ")]
-        [AnimationSlider("F1", "px", 0, 50)]
-        [ShowPropertyEditorWhen(nameof(DrawPoints), true)]
-        public Animation PointSize { get; } = new(4, 0, 500);
 
         [Display(GroupName = Shape, Name = "線を描く", Description = "隣り合う点どうしを線でつなぎます")]
         [ToggleSlider]
@@ -77,11 +78,6 @@ namespace PixelPoints3D
         }
         private bool drawLines;
 
-        [Display(GroupName = Shape, Name = "線の太さ", Description = "つなぐ線の太さ")]
-        [AnimationSlider("F1", "px", 0, 20)]
-        [ShowPropertyEditorWhen(nameof(DrawLines), true)]
-        public Animation LineWidth { get; } = new(2, 0, 500);
-
         [Display(GroupName = Shape, Name = "面を描く", Description = "隣り合う4点を三角形2枚で埋めます")]
         [ToggleSlider]
         public bool DrawFaces
@@ -91,45 +87,97 @@ namespace PixelPoints3D
         }
         private bool drawFaces;
 
-        [Display(GroupName = Shape, Name = "面の不透明度", Description = "面だけに掛かる不透明度")]
+        [Display(GroupName = Point, Name = "大きさ", Description = "粒の一辺の長さ")]
+        [AnimationSlider("F1", "px", 0, 50)]
+        [ShowPropertyEditorWhen(nameof(DrawPoints), true)]
+        public Animation PointSize { get; } = new(4, 0, 500);
+
+        [Display(GroupName = Point, Name = "色の種類", Description = "単色で塗るか、その位置の画像の色を使うか")]
+        [EnumComboBox]
+        [ShowPropertyEditorWhen(nameof(DrawPoints), true)]
+        public PointColorSource PointColorSource
+        {
+            get => pointColorSource;
+            set => Set(ref pointColorSource, value);
+        }
+        private PointColorSource pointColorSource = PointColorSource.Solid;
+
+        [Display(GroupName = Point, Name = "色", Description = "粒の色")]
+        [ColorPicker]
+        [ShowPropertyEditorWhen(nameof(DrawPoints), true)]
+        public Color PointColor
+        {
+            get => pointColor;
+            set => Set(ref pointColor, value);
+        }
+        private Color pointColor = Colors.White;
+
+        [Display(GroupName = Line, Name = "太さ", Description = "つなぐ線の太さ")]
+        [AnimationSlider("F1", "px", 0, 20)]
+        [ShowPropertyEditorWhen(nameof(DrawLines), true)]
+        public Animation LineWidth { get; } = new(2, 0, 500);
+
+        [Display(GroupName = Line, Name = "色の種類", Description = "単色で塗るか、その位置の画像の色を使うか")]
+        [EnumComboBox]
+        [ShowPropertyEditorWhen(nameof(DrawLines), true)]
+        public PointColorSource LineColorSource
+        {
+            get => lineColorSource;
+            set => Set(ref lineColorSource, value);
+        }
+        private PointColorSource lineColorSource = PointColorSource.Solid;
+
+        [Display(GroupName = Line, Name = "色", Description = "線の色")]
+        [ColorPicker]
+        [ShowPropertyEditorWhen(nameof(DrawLines), true)]
+        public Color LineColor
+        {
+            get => lineColor;
+            set => Set(ref lineColor, value);
+        }
+        private Color lineColor = Colors.White;
+
+        [Display(GroupName = Face, Name = "不透明度", Description = "面だけに掛かる不透明度")]
         [AnimationSlider("F0", "%", 0, 100)]
         [ShowPropertyEditorWhen(nameof(DrawFaces), true)]
         public Animation FaceOpacity { get; } = new(100, 0, 100);
 
-        [Display(GroupName = Shape, Name = "不透明度のばらつき", Description = "面ごとに不透明度をランダムに散らす量")]
+        [Display(GroupName = Face, Name = "不透明度のばらつき", Description = "面ごとに不透明度をランダムに散らす量")]
         [AnimationSlider("F0", "%", 0, 100)]
         [ShowPropertyEditorWhen(nameof(DrawFaces), true)]
         public Animation FaceOpacityRandomness { get; } = new(0, 0, 100);
 
-        [Display(GroupName = Shape, Name = "色", Description = "点・線・面の色")]
-        [ColorPicker]
-        public Color Color
+        [Display(GroupName = Face, Name = "色の種類", Description = "単色で塗るか、その位置の画像の色を使うか")]
+        [EnumComboBox]
+        [ShowPropertyEditorWhen(nameof(DrawFaces), true)]
+        public PointColorSource FaceColorSource
         {
-            get => color;
-            set => Set(ref color, value);
+            get => faceColorSource;
+            set => Set(ref faceColorSource, value);
         }
-        private Color color = Colors.White;
+        private PointColorSource faceColorSource = PointColorSource.Image;
 
-        [Display(GroupName = Shape, Name = "元の色を使う", Description = "色の代わりに、その位置の画像の色を使います")]
-        [ToggleSlider]
-        public bool UseSourceColor
+        [Display(GroupName = Face, Name = "色", Description = "面の色")]
+        [ColorPicker]
+        [ShowPropertyEditorWhen(nameof(DrawFaces), true)]
+        public Color FaceColor
         {
-            get => useSourceColor;
-            set => Set(ref useSourceColor, value);
+            get => faceColor;
+            set => Set(ref faceColor, value);
         }
-        private bool useSourceColor;
+        private Color faceColor = Colors.White;
 
         [Display(GroupName = Scatter, Name = "位置X", Description = "横方向へ点をばらつかせる量")]
-        [AnimationSlider("F0", "px", 0, 100)]
-        public Animation ScatterX { get; } = new(0, 0, 2000);
+        [AnimationSlider("F0", "px", -500, 500)]
+        public Animation ScatterX { get; } = new(0, -100000, 100000);
 
         [Display(GroupName = Scatter, Name = "位置Y", Description = "縦方向へ点をばらつかせる量")]
-        [AnimationSlider("F0", "px", 0, 100)]
-        public Animation ScatterY { get; } = new(0, 0, 2000);
+        [AnimationSlider("F0", "px", -500, 500)]
+        public Animation ScatterY { get; } = new(0, -100000, 100000);
 
         [Display(GroupName = Scatter, Name = "位置Z", Description = "奥行き方向へ点をばらつかせる量")]
-        [AnimationSlider("F0", "px", 0, 100)]
-        public Animation ScatterZ { get; } = new(0, 0, 2000);
+        [AnimationSlider("F0", "px", -500, 500)]
+        public Animation ScatterZ { get; } = new(0, -100000, 100000);
 
         [Display(GroupName = Scatter, Name = "シード", Description = "ばらつき方を変えます")]
         [AnimationSlider("F0", "", 0, 100)]
@@ -178,5 +226,17 @@ namespace PixelPoints3D
 
         public override IEnumerable<string> CreateExoVideoFilters(
             int keyFrameIndex, ExoOutputDescription exoOutputDescription) => [];
+    }
+
+    /// <summary>点・線・面の色をどこから取るか。</summary>
+    public enum PointColorSource
+    {
+        /// <summary>指定した色で塗ります。</summary>
+        [Display(Name = "単色", Description = "指定した色で塗ります")]
+        Solid,
+
+        /// <summary>その位置の画像の色を使います。</summary>
+        [Display(Name = "画像", Description = "その位置の画像の色を使います")]
+        Image,
     }
 }

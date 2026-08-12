@@ -118,6 +118,9 @@ namespace PixelPoints3D
                 float4 Position : SV_POSITION;
                 float2 TexCoord : TEXCOORD;
 
+                // 形の中での位置。縁を滑らかにするのに使う。詳しくは Coverage() を参照。
+                float2 Edge : EDGE;
+
                 // 面ごとに一定の乱数。補間すると三角形の中で濃さが変わってしまう。
                 nointerpolation float Random : RANDOM;
             };
@@ -160,6 +163,9 @@ namespace PixelPoints3D
                 output.TexCoord = Ratio(input.Cell).xy;
                 output.Random = Hash(input.Cell).x * 0.5 + 0.5;
 
+                // 粒は縦横、線は幅方向だけが ±1 に開く。面はどちらも 0 のまま。
+                output.Edge = input.Corner;
+
                 float3 local = Place(input.Cell);
 
                 if (any(input.Other != input.Cell))
@@ -187,6 +193,26 @@ namespace PixelPoints3D
             Texture2D    txDiffuse : register(t0);
             SamplerState samLinear : register(s0);
 
+            // 形の縁がどれだけこの画素を覆っているかを返す。
+            //
+            // 描画先はマルチサンプルではないので、粒や線の縁がそのままだと階段状に
+            // なります。edge は形の中心で 0、縁で ±1 になる量なので、隣の画素との
+            // 差（fwidth）で割れば「縁まであと何画素か」が分かります。これを
+            // 0〜1 に丸めたものが覆っている割合です。
+            //
+            // 線が1画素より細くなると差のほうが大きくなり、割合は 1 に届きません。
+            // 太さを保ったままギザギザに描くのではなく、薄く描いて消えていきます。
+            //
+            // 面は edge が 0 のまま動かないので、差も 0 になり、割合は常に 1 です。
+            // 隣り合う三角形の継ぎ目に隙間を作らないための性質で、意図的です。
+            float Coverage(float2 edge)
+            {
+                float2 width = fwidth(edge);
+                float2 coverage = saturate((1.0 - abs(edge)) / max(width, 1e-6));
+
+                return min(coverage.x, coverage.y);
+            }
+
             float4 main(PS_INPUT input) : SV_Target
             {
                 float4 source = txDiffuse.SampleLevel(samLinear, input.TexCoord, 0);
@@ -200,7 +226,9 @@ namespace PixelPoints3D
                 // ばらつきは 1 倍から Random 倍までの間で効かせる。
                 float scatter = lerp(1.0, input.Random, OpacityRandomness);
 
-                return float4(rgb, Color.a * Opacity * ExtraOpacity * scatter);
+                float alpha = Color.a * Opacity * ExtraOpacity * scatter * Coverage(input.Edge);
+
+                return float4(rgb, alpha);
             }
             """;
 

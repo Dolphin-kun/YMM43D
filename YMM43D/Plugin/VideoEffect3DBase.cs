@@ -97,5 +97,14 @@ namespace YMM43D.Plugin
             offset = default;
             return false;
         }
+
+        /// <inheritdoc/>
+        /// <remarks>
+        /// 3Dプレビューがアイテムから辿り着くのはプロセッサではなくこちらなので、
+        /// 転送し忘れると既定値の <c>true</c> が返り、実寸を自分で扱うエフェクトでは
+        /// プレビューだけ大きさが二重に掛かります。
+        /// </remarks>
+        public virtual bool ScalesToInputSize
+            => Processor is not I3DSizeProvider provider || provider.ScalesToInputSize;
     }
 }

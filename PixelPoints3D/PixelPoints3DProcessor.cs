@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Windows.Media;
 using Vortice.Direct3D11;
 using YMM43D.Graphics;
 using YMM43D.Plugin;
@@ -74,7 +75,7 @@ namespace PixelPoints3D
             if (effect.DrawFaces && grid.Faces is { } faces)
             {
                 // 面だけに掛かる不透明度とそのばらつき。他の形状には効かせない。
-                var faceConstants = constants with
+                var faceConstants = WithColor(constants, effect.FaceColor, effect.FaceColorSource) with
                 {
                     ExtraOpacity = Math.Clamp(effect.FaceOpacity.GetFloat(time) / 100f, 0f, 1f),
                     OpacityRandomness = Math.Clamp(
@@ -85,11 +86,31 @@ namespace PixelPoints3D
             }
 
             if (effect.DrawLines && grid.Lines is { } lines && constants.LineHalfWidth > 0f)
-                pipeline.Draw(render.Context, constants, settings, lines);
+            {
+                pipeline.Draw(
+                    render.Context,
+                    WithColor(constants, effect.LineColor, effect.LineColorSource),
+                    settings,
+                    lines);
+            }
 
             if (effect.DrawPoints && constants.PointHalfSize > 0f)
-                pipeline.Draw(render.Context, constants, settings, grid.Points);
+            {
+                pipeline.Draw(
+                    render.Context,
+                    WithColor(constants, effect.PointColor, effect.PointColorSource),
+                    settings,
+                    grid.Points);
+            }
         }
+
+        /// <summary>形ごとの色を差し込みます。</summary>
+        private static PointCloudConstants WithColor(
+            in PointCloudConstants constants, Color color, PointColorSource source) => constants with
+            {
+                Color = new Vector4(color.R, color.G, color.B, color.A) / 255f,
+                UseSourceColor = source == PointColorSource.Image ? 1f : 0f,
+            };
 
         private PointCloudConstants BuildConstants(
             in FrameContext time,
@@ -99,12 +120,10 @@ namespace PixelPoints3D
             GridSize size,
             Vector3 extent)
         {
-            var color = effect.Color;
-
+            // 色は形ごとに違うので、ここでは入れない。WithColor が差し込む。
             return new PointCloudConstants
             {
                 WorldViewProjection = Matrix4x4.Transpose(render.GetWorldViewProjection(world)),
-                Color = new Vector4(color.R, color.G, color.B, color.A) / 255f,
                 GridCount = new Vector3(size.X, size.Y, size.Z),
                 Threshold = Math.Clamp(effect.Threshold.GetFloat(time) / 100f, 0f, 1f),
                 Extent = extent,
@@ -114,7 +133,6 @@ namespace PixelPoints3D
                     WorldScale.ToWorld(effect.ScatterY.GetFloat(time)),
                     WorldScale.ToWorld(effect.ScatterZ.GetFloat(time))),
                 Seed = effect.Seed.GetFloat(time),
-                UseSourceColor = effect.UseSourceColor ? 1f : 0f,
                 ViewRight = GetViewAxis(render, world, Vector3.UnitX),
                 ViewUp = GetViewAxis(render, world, Vector3.UnitY),
                 ViewForward = GetViewAxis(render, world, -Vector3.UnitZ),
