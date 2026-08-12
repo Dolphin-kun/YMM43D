@@ -1,5 +1,6 @@
 using Vortice.Direct3D;
 using Vortice.Direct3D11;
+using Vortice.DXGI;
 
 namespace YMM43D.Graphics
 {
@@ -32,5 +33,14 @@ namespace YMM43D.Graphics
 
         /// <summary>プリミティブの種類。</summary>
         PrimitiveTopology Topology { get; }
+
+        /// <summary>
+        /// インデックスの型。
+        /// </summary>
+        /// <remarks>
+        /// 既定は 16 ビットです。頂点が 65536 個を超える形状は
+        /// <see cref="Format.R32_UInt"/> を返してください。
+        /// </remarks>
+        Format IndexFormat => Format.R16_UInt;
     }
 }

@@ -1,0 +1,166 @@
+using System.ComponentModel.DataAnnotations;
+using System.Windows.Media;
+using YMM43D.Plugin;
+using YukkuriMovieMaker.Commons;
+using YukkuriMovieMaker.Controls;
+using YukkuriMovieMaker.Exo;
+using YukkuriMovieMaker.ItemEditor.CustomVisibilityAttributes;
+using YukkuriMovieMaker.Player.Video;
+using YukkuriMovieMaker.Plugin.Effects;
+
+namespace PixelPoints3D
+{
+    /// <summary>
+    /// アイテムの画像を格子状の点の集まりに置き換えるエフェクト。
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// 画像の不透明な部分に一定間隔で点を打ち、隣り合う点を線や面でつなぎます。
+    /// 奥行き方向にも層を重ねられるので、平らな絵から立体的な点群を作れます。
+    /// </para>
+    /// <para>
+    /// 画像を CPU に読み戻して走査するのではなく、格子は最初から全面に張り、
+    /// 中身があるかどうかはシェーダーが判定して捨てます。こうすると画像が
+    /// 動いても作り直しが要らず、点の数が増えても費用が変わりません。
+    /// </para>
+    /// </remarks>
+    [VideoEffect("点群3D", ["3D"], [])]
+    public class PixelPoints3DEffect : VideoEffect3DBase
+    {
+        public override string Label => "点群3D";
+
+        private const string Grid = "点群3D";
+        private const string Shape = "点群3D／形";
+        private const string Scatter = "点群3D／ばらつき";
+        private const string Place = "点群3D／配置";
+
+        [Display(GroupName = Grid, Name = "距離X", Description = "横方向の点と点の間隔")]
+        [AnimationSlider("F0", "px", 1, 200)]
+        public Animation SpacingX { get; } = new(20, 1, 2000);
+
+        [Display(GroupName = Grid, Name = "距離Y", Description = "縦方向の点と点の間隔")]
+        [AnimationSlider("F0", "px", 1, 200)]
+        public Animation SpacingY { get; } = new(20, 1, 2000);
+
+        [Display(GroupName = Grid, Name = "距離Z", Description = "奥行き方向の点と点の間隔")]
+        [AnimationSlider("F0", "px", 1, 200)]
+        public Animation SpacingZ { get; } = new(20, 1, 2000);
+
+        [Display(GroupName = Grid, Name = "奥行き", Description = "点を重ねる奥行きの厚み。0 なら1枚だけ")]
+        [AnimationSlider("F0", "px", 0, 500)]
+        public Animation Depth { get; } = new(0, 0, 5000);
+
+        [Display(GroupName = Grid, Name = "しきい値", Description = "この不透明度より薄いところには点を打ちません")]
+        [AnimationSlider("F0", "%", 0, 100)]
+        public Animation Threshold { get; } = new(50, 0, 100);
+
+        [Display(GroupName = Shape, Name = "点を描く", Description = "格子の各点に四角い粒を描きます")]
+        [ToggleSlider]
+        public bool DrawPoints
+        {
+            get => drawPoints;
+            set => Set(ref drawPoints, value);
+        }
+        private bool drawPoints = true;
+
+        [Display(GroupName = Shape, Name = "点の大きさ", Description = "粒の一辺の長さ")]
+        [AnimationSlider("F1", "px", 0, 50)]
+        [ShowPropertyEditorWhen(nameof(DrawPoints), true)]
+        public Animation PointSize { get; } = new(4, 0, 500);
+
+        [Display(GroupName = Shape, Name = "線を描く", Description = "隣り合う点どうしを線でつなぎます")]
+        [ToggleSlider]
+        public bool DrawLines
+        {
+            get => drawLines;
+            set => Set(ref drawLines, value);
+        }
+        private bool drawLines;
+
+        [Display(GroupName = Shape, Name = "面を描く", Description = "隣り合う4点を三角形2枚で埋めます")]
+        [ToggleSlider]
+        public bool DrawFaces
+        {
+            get => drawFaces;
+            set => Set(ref drawFaces, value);
+        }
+        private bool drawFaces;
+
+        [Display(GroupName = Shape, Name = "色", Description = "点・線・面の色")]
+        [ColorPicker]
+        public Color Color
+        {
+            get => color;
+            set => Set(ref color, value);
+        }
+        private Color color = Colors.White;
+
+        [Display(GroupName = Shape, Name = "元の色を使う", Description = "色の代わりに、その位置の画像の色を使います")]
+        [ToggleSlider]
+        public bool UseSourceColor
+        {
+            get => useSourceColor;
+            set => Set(ref useSourceColor, value);
+        }
+        private bool useSourceColor;
+
+        [Display(GroupName = Scatter, Name = "位置X", Description = "横方向へ点をばらつかせる量")]
+        [AnimationSlider("F0", "px", 0, 100)]
+        public Animation ScatterX { get; } = new(0, 0, 2000);
+
+        [Display(GroupName = Scatter, Name = "位置Y", Description = "縦方向へ点をばらつかせる量")]
+        [AnimationSlider("F0", "px", 0, 100)]
+        public Animation ScatterY { get; } = new(0, 0, 2000);
+
+        [Display(GroupName = Scatter, Name = "位置Z", Description = "奥行き方向へ点をばらつかせる量")]
+        [AnimationSlider("F0", "px", 0, 100)]
+        public Animation ScatterZ { get; } = new(0, 0, 2000);
+
+        [Display(GroupName = Scatter, Name = "種", Description = "ばらつき方を変えます")]
+        [AnimationSlider("F0", "", 0, 100)]
+        public Animation Seed { get; } = new(0, 0, 10000);
+
+        [Display(GroupName = Place, Name = "位置X")]
+        [AnimationSlider("F0", "px", -500, 500)]
+        public Animation PositionX { get; } = new(0, -100000, 100000);
+
+        [Display(GroupName = Place, Name = "位置Y")]
+        [AnimationSlider("F0", "px", -500, 500)]
+        public Animation PositionY { get; } = new(0, -100000, 100000);
+
+        [Display(GroupName = Place, Name = "位置Z")]
+        [AnimationSlider("F0", "px", -500, 500)]
+        public Animation PositionZ { get; } = new(0, -100000, 100000);
+
+        [Display(GroupName = Place, Name = "大きさ")]
+        [AnimationSlider("F1", "%", 0, 400)]
+        public Animation Scale { get; } = new(100, 0, 10000);
+
+        [Display(GroupName = Place, Name = "回転X")]
+        [AnimationSlider("F1", "°", -180, 180)]
+        public Animation RotationX { get; } = new(0, -36000, 36000);
+
+        [Display(GroupName = Place, Name = "回転Y")]
+        [AnimationSlider("F1", "°", -180, 180)]
+        public Animation RotationY { get; } = new(0, -36000, 36000);
+
+        [Display(GroupName = Place, Name = "回転Z")]
+        [AnimationSlider("F1", "°", -180, 180)]
+        public Animation RotationZ { get; } = new(0, -36000, 36000);
+
+        public override IVideoEffectProcessor CreateVideoEffect(IGraphicsDevicesAndContext devices)
+            => AttachProcessor(new PixelPoints3DProcessor(this, devices));
+
+        protected override IEnumerable<IAnimatable> GetAnimatables() =>
+        [
+            SpacingX, SpacingY, SpacingZ, Depth, Threshold, PointSize,
+            ScatterX, ScatterY, ScatterZ, Seed,
+            PositionX, PositionY, PositionZ, Scale,
+            RotationX, RotationY, RotationZ,
+            CameraSyncAnimation,
+        ];
+
+        public override IEnumerable<string> CreateExoVideoFilters(
+            int keyFrameIndex, ExoOutputDescription exoOutputDescription) => [];
+    }
+}

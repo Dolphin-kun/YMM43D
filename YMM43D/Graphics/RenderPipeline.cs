@@ -27,8 +27,11 @@ namespace YMM43D.Graphics
         private readonly ID3D11Buffer constantBuffer;
         private readonly RenderStates states;
 
-        /// <summary>描画する形状。このインスタンスが所有し、一緒に破棄します。</summary>
-        public IMesh Mesh { get; }
+        /// <summary>
+        /// 既定で描画する形状。このインスタンスが所有し、一緒に破棄します。
+        /// 形状を都度渡す使い方では <c>null</c> です。
+        /// </summary>
+        public IMesh? Mesh { get; }
 
         /// <summary>使用するシェーダー。このインスタンスが所有し、一緒に破棄します。</summary>
         public IMaterial Material { get; }
@@ -41,14 +44,33 @@ namespace YMM43D.Graphics
         /// いずれの場合も所有権は移らず、このインスタンスは破棄しません。
         /// </param>
         public RenderPipeline(ID3D11Device device, IMesh mesh, IMaterial material, RenderStates? states = null)
+            : this(device, mesh.InputElements, material, states)
         {
             Mesh = mesh;
             disposer.Collect(mesh);
+        }
+
+        /// <summary>
+        /// 形状を固定せず、描画のたびに渡す形で作ります。
+        /// </summary>
+        /// <remarks>
+        /// 同じシェーダーで頂点の並びだけが違う形状を描き分けるときに使います。
+        /// 入力レイアウトはここで固定されるので、渡す形状の
+        /// <see cref="IMesh.InputElements"/> はすべて <paramref name="inputElements"/> と
+        /// 同じである必要があります。形状の寿命は呼び出し側が持ちます。
+        /// </remarks>
+        /// <param name="inputElements">描画する形状に共通の入力レイアウト。</param>
+        public RenderPipeline(
+            ID3D11Device device,
+            InputElementDescription[] inputElements,
+            IMaterial material,
+            RenderStates? states = null)
+        {
             Material = material;
             disposer.Collect(material);
             this.states = states ?? RenderStates.For(device);
 
-            inputLayout = device.CreateInputLayout(mesh.InputElements, material.VertexShaderBytecode);
+            inputLayout = device.CreateInputLayout(inputElements, material.VertexShaderBytecode);
             disposer.Collect(inputLayout);
             constantBuffer = D3D11Buffers.CreateConstantBuffer<TConstants>(device);
             disposer.Collect(constantBuffer);
@@ -60,8 +82,19 @@ namespace YMM43D.Graphics
         /// <param name="context">描画先のデバイスコンテキスト。</param>
         /// <param name="constants">シェーダーに渡す定数。</param>
         /// <param name="settings">合成方法・カリングなど、この描画に固有の設定。</param>
-        public void Draw(ID3D11DeviceContext context, in TConstants constants, in DrawSettings settings)
+        /// <param name="mesh">
+        /// 描画する形状。省略すると <see cref="Mesh"/> を使います。
+        /// 入力レイアウトが生成時のものと同じ形状に限ります。
+        /// </param>
+        public void Draw(
+            ID3D11DeviceContext context,
+            in TConstants constants,
+            in DrawSettings settings,
+            IMesh? mesh = null)
         {
+            mesh ??= Mesh ?? throw new InvalidOperationException(
+                "形状を持たないパイプラインです。描画する形状を渡してください。");
+
             context.UpdateSubresource(in constants, constantBuffer);
 
             context.OMSetBlendState(
@@ -84,8 +117,8 @@ namespace YMM43D.Graphics
             context.PSSetConstantBuffer(0, constantBuffer);
 
             context.IASetInputLayout(inputLayout);
-            context.IASetVertexBuffer(0, Mesh.VertexBuffer, Mesh.VertexStride, 0);
-            context.IASetPrimitiveTopology(Mesh.Topology);
+            context.IASetVertexBuffer(0, mesh.VertexBuffer, mesh.VertexStride, 0);
+            context.IASetPrimitiveTopology(mesh.Topology);
 
             if (settings.Texture is not null)
             {
@@ -93,14 +126,14 @@ namespace YMM43D.Graphics
                 context.PSSetSampler(0, settings.Sampler ?? states.LinearSampler);
             }
 
-            if (Mesh.IndexBuffer is not null)
+            if (mesh.IndexBuffer is not null)
             {
-                context.IASetIndexBuffer(Mesh.IndexBuffer, Format.R16_UInt, 0);
-                context.DrawIndexed(Mesh.DrawCount, 0, 0);
+                context.IASetIndexBuffer(mesh.IndexBuffer, mesh.IndexFormat, 0);
+                context.DrawIndexed(mesh.DrawCount, 0, 0);
             }
             else
             {
-                context.Draw(Mesh.DrawCount, 0);
+                context.Draw(mesh.DrawCount, 0);
             }
 
             ResetState(context, settings);
