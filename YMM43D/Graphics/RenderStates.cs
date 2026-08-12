@@ -8,8 +8,6 @@ namespace YMM43D.Graphics
     /// 1つのデバイス上で共有される描画ステート一式。
     /// </summary>
     /// <remarks>
-    /// 以前は BlendStates / DepthStencilStates / RasterizerStates / SamplerStates の
-    /// 4クラスに分かれ、利用側がそれぞれ個別に生成・キャッシュしていました。
     /// ステートはデバイス単位で使い回せる不変オブジェクトなので、
     /// <see cref="DeviceResourceCache{T}"/> と組み合わせて1箇所で持ちます。
     /// </remarks>

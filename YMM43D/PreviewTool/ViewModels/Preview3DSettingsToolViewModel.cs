@@ -13,8 +13,7 @@ namespace YMM43D.PreviewTool.ViewModels
     {
         private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(50);
 
-        private readonly TimelineRefresher refresher = new();
-
+        private TimelineRefresher? refresher;
         private Timeline? timeline;
         private DispatcherTimer? pollTimer;
         private SceneCamera camera = new();
@@ -42,22 +41,20 @@ namespace YMM43D.PreviewTool.ViewModels
                 return;
 
             Camera = SceneCameraRegistry.Get(timeline.ID);
+            refresher = TimelineRefresher.For(timeline);
 
-            timeline.PropertyChanged += OnTimelinePropertyChanged;
-
+            // タイムラインの変更通知は購読しない。描き直しを促す手が現在フレームを
+            // 揺らすので、購読すると自分が起こした通知で呼び戻される。カメラの
+            // 変化はこの間隔で拾えば足りる。
             pollTimer = new DispatcherTimer(DispatcherPriority.Background) { Interval = PollInterval };
             pollTimer.Tick += OnPollTick;
             pollTimer.Start();
         }
 
-        private void OnTimelinePropertyChanged(object? sender, PropertyChangedEventArgs e) => RefreshIfChanged();
-
-        private void OnPollTick(object? sender, EventArgs e) => RefreshIfChanged();
-
-        private void RefreshIfChanged()
+        private void OnPollTick(object? sender, EventArgs e)
         {
             if (timeline is not null)
-                refresher.RefreshIfCameraChanged(timeline, Camera);
+                refresher?.RefreshIfCameraChanged(timeline, Camera);
         }
 
         private void Detach()
@@ -69,11 +66,8 @@ namespace YMM43D.PreviewTool.ViewModels
                 pollTimer = null;
             }
 
-            if (timeline is not null)
-            {
-                timeline.PropertyChanged -= OnTimelinePropertyChanged;
-                timeline = null;
-            }
+            timeline = null;
+            refresher = null;
         }
 
         public void Dispose()

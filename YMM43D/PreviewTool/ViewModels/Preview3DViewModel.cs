@@ -21,8 +21,8 @@ namespace YMM43D.PreviewTool.ViewModels
         private readonly DisposeCollector disposer = new();
         private readonly Preview3DRenderer renderer = new();
         private readonly FreeCameraController freeCamera = new();
-        private readonly TimelineRefresher refresher = new();
 
+        private TimelineRefresher? refresher;
         private Timeline? timeline;
         private TimelineToolInfo? toolInfo;
         private SceneCamera sceneCamera = new();
@@ -81,6 +81,7 @@ namespace YMM43D.PreviewTool.ViewModels
 
             scene = info.Scenes?.AllScenes.FirstOrDefault(s => s.Timeline == timeline);
             SceneCamera = SceneCameraRegistry.Get(timeline.ID);
+            refresher = TimelineRefresher.For(timeline);
             UpdateSourceDescription();
 
             if (scene is not null)
@@ -151,7 +152,7 @@ namespace YMM43D.PreviewTool.ViewModels
             if (sceneCamera.IsControlledByPreviewDrag)
                 freeCamera.Invalidate();
 
-            refresher.RefreshIfCameraChanged(timeline, sceneCamera);
+            refresher?.RefreshIfCameraChanged(timeline, sceneCamera);
 
             UpdatePreviewItems();
             d3dHost.RenderFrame();
@@ -196,7 +197,7 @@ namespace YMM43D.PreviewTool.ViewModels
                 return;
 
             freeCamera.ApplyTo(sceneCamera);
-            refresher.ForceRefresh(timeline, sceneCamera);
+            refresher?.ForceRefresh(timeline, sceneCamera);
         }
 
         private void UpdateSourceDescription()

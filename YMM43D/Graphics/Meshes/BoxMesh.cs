@@ -10,9 +10,14 @@ namespace YMM43D.Graphics.Meshes
     /// XY 平面上の 1×1 の矩形を Z 方向に押し出した直方体。
     /// </summary>
     /// <remarks>
-    /// 3D図形アイテムの立方体と、立体化エフェクトの押し出しボックスは
-    /// Z の範囲と頂点カラーが違うだけで、頂点の並びも面の巻き方向も同一だったため
-    /// このクラスに統合しています。
+    /// 頂点カラーは白一色で、色はシェーダーが決めます。三角形2枚で1面、
+    /// 前・後・左・右・上・下の順に並ぶので、面ごとに塗り分けたい場合は
+    /// ピクセルシェーダーで <c>SV_PrimitiveID</c> を 2 で割ってください。
+    /// <para>
+    /// 面ごとに違う<b>画像</b>を貼りたい場合は、この形状ではなく
+    /// <see cref="PlaneMesh"/> を面の数だけ描いてください。テクスチャは
+    /// 描画1回につき1枚しか渡せません。
+    /// </para>
     /// </remarks>
     public sealed class BoxMesh : IMesh
     {
@@ -25,39 +30,28 @@ namespace YMM43D.Graphics.Meshes
         public InputElementDescription[] InputElements => Vertex.InputElements;
         public PrimitiveTopology Topology => PrimitiveTopology.TriangleList;
 
-        /// <summary>
-        /// 原点を中心とする 1×1×1 の立方体。面ごとの向きが分かるよう、
-        /// 各頂点に異なる色が付きます。
-        /// </summary>
-        public static BoxMesh CreateUnitCube(ID3D11Device device) => new(device, -0.5f, 0.5f,
-        [
-            new(1f, 0f, 0f, 1f), new(0f, 1f, 0f, 1f), new(0f, 0f, 1f, 1f), new(1f, 1f, 0f, 1f),
-            new(1f, 0f, 1f, 1f), new(0f, 1f, 1f, 1f), new(1f, 1f, 1f, 1f), new(0f, 0f, 0f, 1f),
-        ]);
+        /// <summary>原点を中心とする 1×1×1 の立方体。</summary>
+        public static BoxMesh CreateUnitCube(ID3D11Device device) => new(device, -0.5f, 0.5f);
 
-        /// <summary>
-        /// 前面が Z=0（元の2D平面の位置）、背面が Z=1 の押し出しボックス。
-        /// 頂点カラーは白一色で、色はテクスチャとシェーダーが決めます。
-        /// </summary>
-        public static BoxMesh CreateExtrusionBox(ID3D11Device device) => new(device, 0f, 1f, null);
+        /// <summary>前面が Z=0（元の2D平面の位置）、背面が Z=1 の押し出しボックス。</summary>
+        public static BoxMesh CreateExtrusionBox(ID3D11Device device) => new(device, 0f, 1f);
 
-        private BoxMesh(ID3D11Device device, float zNear, float zFar, Color4[]? cornerColors)
+        private BoxMesh(ID3D11Device device, float zNear, float zFar)
         {
             var white = new Color4(1f, 1f, 1f, 1f);
-            Color4 ColorAt(int i) => cornerColors is null ? white : cornerColors[i];
 
             // 手前の面（zNear）が 0-3、奥の面（zFar）が 4-7。
             // 左上・右上・左下・右下の順に並ぶ。
             var vertices = new[]
             {
-                new Vertex(new Vector3(-0.5f,  0.5f, zNear), ColorAt(0), new Vector2(0f, 0f)),
-                new Vertex(new Vector3( 0.5f,  0.5f, zNear), ColorAt(1), new Vector2(1f, 0f)),
-                new Vertex(new Vector3(-0.5f, -0.5f, zNear), ColorAt(2), new Vector2(0f, 1f)),
-                new Vertex(new Vector3( 0.5f, -0.5f, zNear), ColorAt(3), new Vector2(1f, 1f)),
-                new Vertex(new Vector3(-0.5f,  0.5f, zFar),  ColorAt(4), new Vector2(0f, 0f)),
-                new Vertex(new Vector3( 0.5f,  0.5f, zFar),  ColorAt(5), new Vector2(1f, 0f)),
-                new Vertex(new Vector3(-0.5f, -0.5f, zFar),  ColorAt(6), new Vector2(0f, 1f)),
-                new Vertex(new Vector3( 0.5f, -0.5f, zFar),  ColorAt(7), new Vector2(1f, 1f)),
+                new Vertex(new Vector3(-0.5f,  0.5f, zNear), white, new Vector2(0f, 0f)),
+                new Vertex(new Vector3( 0.5f,  0.5f, zNear), white, new Vector2(1f, 0f)),
+                new Vertex(new Vector3(-0.5f, -0.5f, zNear), white, new Vector2(0f, 1f)),
+                new Vertex(new Vector3( 0.5f, -0.5f, zNear), white, new Vector2(1f, 1f)),
+                new Vertex(new Vector3(-0.5f,  0.5f, zFar),  white, new Vector2(0f, 0f)),
+                new Vertex(new Vector3( 0.5f,  0.5f, zFar),  white, new Vector2(1f, 0f)),
+                new Vertex(new Vector3(-0.5f, -0.5f, zFar),  white, new Vector2(0f, 1f)),
+                new Vertex(new Vector3( 0.5f, -0.5f, zFar),  white, new Vector2(1f, 1f)),
             };
 
             // 全ての面が外側を向くよう、一貫した時計回り (CW) で定義する。
