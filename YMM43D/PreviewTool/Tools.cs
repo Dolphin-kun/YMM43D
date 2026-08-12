@@ -4,9 +4,6 @@ using YukkuriMovieMaker.Plugin;
 
 namespace YMM43D.PreviewTool
 {
-    /// <summary>
-    /// シーンを 3D 空間で確認するためのタイムラインツール。
-    /// </summary>
     public class Preview3DTool : IToolPlugin
     {
         public string Name => "3Dプレビュー";
@@ -15,9 +12,6 @@ namespace YMM43D.PreviewTool
         public bool AllowMultipleInstances => true;
     }
 
-    /// <summary>
-    /// 出力に使われるシーンカメラを編集するタイムラインツール。
-    /// </summary>
     public class Preview3DSettingsTool : IToolPlugin
     {
         public string Name => "3Dプレビュー設定";

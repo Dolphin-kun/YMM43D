@@ -58,9 +58,6 @@ namespace YMM43D.Integration
             NudgeCurrentFrame(timeline);
         }
 
-        /// <summary>
-        /// カメラ連動を宣言しているアイテム・エフェクトに、カメラが変わったことを伝えます。
-        /// </summary>
         private static void NotifyCameraSync(Timeline timeline)
         {
             if (timeline.Items is null)
@@ -82,9 +79,6 @@ namespace YMM43D.Integration
             }
         }
 
-        /// <summary>
-        /// 現在フレームを隣に動かしてすぐ戻すことで、YMM4 に再描画させます。
-        /// </summary>
         private static void NudgeCurrentFrame(Timeline timeline)
         {
             var current = timeline.CurrentFrame;

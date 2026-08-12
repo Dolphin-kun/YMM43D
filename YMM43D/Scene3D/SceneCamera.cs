@@ -19,7 +19,6 @@ namespace YMM43D.Scene3D
         private const float NearPlane = 0.1f;
         private const float FarPlane = 1000f;
 
-        /// <summary>距離として認める最小値。<see cref="Distance"/> の下限に合わせます。</summary>
         private const float MinDistance = 0.1f;
 
         private Vector3 target = Vector3.Zero;

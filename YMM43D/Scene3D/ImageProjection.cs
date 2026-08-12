@@ -51,13 +51,6 @@ namespace YMM43D.Scene3D
             return SceneCamera.GetTangentProjection() * Lift(tangentToImage * toNdc);
         }
 
-        /// <summary>
-        /// 2D のアフィン変換を、クリップ座標に掛けられる形に持ち上げます。
-        /// </summary>
-        /// <remarks>
-        /// クリップ座標の x と y だけを動かし、z と w には触れません。除算前の w を
-        /// 平行移動の係数に使うので、遠近を保ったまま画面上の 2D 変換として働きます。
-        /// </remarks>
         private static Matrix4x4 Lift(in Matrix3x2 affine) => new(
             affine.M11, affine.M12, 0f, 0f,
             affine.M21, affine.M22, 0f, 0f,

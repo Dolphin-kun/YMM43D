@@ -1,4 +1,6 @@
 using System.Windows.Controls;
+using System.Windows.Input;
+using YMM43D.PreviewTool.ViewModels;
 
 namespace YMM43D.PreviewTool.Views
 {
@@ -7,20 +9,19 @@ namespace YMM43D.PreviewTool.Views
         public Preview3DView()
         {
             InitializeComponent();
-            
-            // マウスクリック時にフォーカスを取得する
+
             MouseDown += (s, e) => Focus();
         }
 
-        private void UserControl_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        private void UserControl_PreviewKeyDown(object sender, KeyEventArgs e)
         {
-            if (e.Key == System.Windows.Input.Key.R && (System.Windows.Input.Keyboard.Modifiers & System.Windows.Input.ModifierKeys.Control) == System.Windows.Input.ModifierKeys.Control)
+            if (e.Key != Key.R || (Keyboard.Modifiers & ModifierKeys.Control) != ModifierKeys.Control)
+                return;
+
+            if (DataContext is Preview3DViewModel viewModel)
             {
-                if (DataContext is ViewModels.Preview3DViewModel vm)
-                {
-                    vm.ResetToSceneCamera();
-                    e.Handled = true;
-                }
+                viewModel.ResetToSceneCamera();
+                e.Handled = true;
             }
         }
     }

@@ -22,18 +22,10 @@ namespace YMM43D.Plugin
     /// </remarks>
     public sealed class Output3DRenderer : IDisposable
     {
-        /// <summary>描画先の一辺の上限（ピクセル）。</summary>
         private const int MaxRenderSize = 4096;
 
-        /// <summary>カメラより手前に来た点を押し戻す最小の視距離。</summary>
-        /// <remarks>背後や真横にある隅をそのまま投影すると発散します。</remarks>
         private const float MinViewDistance = 0.01f;
 
-        /// <summary>描画先として認める、視線からの傾きの上限。</summary>
-        /// <remarks>
-        /// 画面に写るのはせいぜい傾き1程度まで。大きく超えた範囲は見えないうえ、
-        /// 描画先のずれが桁外れの値になって Direct2D を壊します。
-        /// </remarks>
         private const float MaxTangent = 64f;
 
         private readonly Renderer3DTo2D renderer = new();
@@ -117,13 +109,6 @@ namespace YMM43D.Plugin
                 });
         }
 
-        /// <summary>
-        /// 他のアイテムの形を、色を書かずに深度バッファへ埋めます。
-        /// </summary>
-        /// <remarks>
-        /// 描画そのものは各プロバイダーに任せます。<see cref="DrawContext3D.DepthOnly"/> が
-        /// <see cref="DrawSettings"/> まで伝わるため、プロバイダー側の実装は変えずに済みます。
-        /// </remarks>
         private static void DrawOccluders(
             in Render3DContext render,
             IReadOnlyList<SceneDepthCollector.Occluder> occluders)
@@ -150,18 +135,6 @@ namespace YMM43D.Plugin
             }
         }
 
-        /// <summary>
-        /// 描くものが画面上で占める範囲を求め、それをちょうど収める描画先を決めます。
-        /// </summary>
-        /// <remarks>
-        /// 範囲の8隅をカメラから見た向き（<c>x / -z</c>）に直し、アイテムの画像空間まで
-        /// 移してから最小・最大を取ります。遠近が織り込まれるので、厚みのあるものが
-        /// 手前へ張り出しても端が切れません。
-        /// <para>
-        /// ワールド行列は隅ごとに掛けます。<see cref="WorldBounds"/> は軸に平行な箱なので、
-        /// 先に掛けて箱に戻すと回転のたびに膨らみ、30 度で 1.87 倍にもなります。
-        /// </para>
-        /// </remarks>
         private static RenderArea? GetRenderArea(
             in WorldBounds bounds,
             in Matrix4x4 world,
@@ -221,13 +194,11 @@ namespace YMM43D.Plugin
             return new RenderArea(width, height, min);
         }
 
-        /// <summary>座標として計算に使える値かどうかを調べます。</summary>
         private static bool IsUsable(in Vector2 value)
             => float.IsFinite(value.X) && float.IsFinite(value.Y);
 
         public void Dispose() => renderer.Dispose();
 
-        /// <summary>描画先の大きさと、アイテムの画像の中でのその左上。</summary>
         private readonly record struct RenderArea(int Width, int Height, Vector2 Origin);
     }
 }

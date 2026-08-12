@@ -12,14 +12,6 @@ using YukkuriMovieMaker.Plugin.Effects;
 
 namespace PixelPoints3D
 {
-    /// <summary>
-    /// アイテムの画像を格子状の点の集まりに置き換えるエフェクト。
-    /// </summary>
-    /// <remarks>
-    /// 画像を CPU に読み戻して走査するのではなく、格子は最初から全面に張り、
-    /// 中身があるかどうかはシェーダーが判定して捨てます。こうすると画像が
-    /// 動いても作り直しが要らず、点の数が増えても費用が変わりません。
-    /// </remarks>
     [VideoEffect("点群3D", ["3D"], [])]
     public class PixelPoints3DEffect : VideoEffect3DBase
     {
@@ -66,8 +58,6 @@ namespace PixelPoints3D
         public bool DrawFaces { get => drawFaces; set => Set(ref drawFaces, value); }
         private bool drawFaces;
 
-        // 中身は常に0個か1個。一覧にしてあるのは、切り替えに応じて組ごと
-        // 表示を消せるようにするため。出し入れは EndEditAsync が行う。
         [Display(AutoGenerateField = true)]
         public ImmutableList<PointParams> PointSettings { get => pointSettings; set => Set(ref pointSettings, value); }
         private ImmutableList<PointParams> pointSettings = [new PointParams()];
@@ -80,13 +70,10 @@ namespace PixelPoints3D
         public ImmutableList<FaceParams> FaceSettings { get => faceSettings; set => Set(ref faceSettings, value); }
         private ImmutableList<FaceParams> faceSettings = [];
 
-        /// <summary>いま描くべき点の設定。描かないなら <c>null</c>。</summary>
         internal PointParams? Point => DrawPoints ? PointSettings.FirstOrDefault() : null;
 
-        /// <summary>いま描くべき線の設定。描かないなら <c>null</c>。</summary>
         internal LineParams? Line => DrawLines ? LineSettings.FirstOrDefault() : null;
 
-        /// <summary>いま描くべき面の設定。描かないなら <c>null</c>。</summary>
         internal FaceParams? Face => DrawFaces ? FaceSettings.FirstOrDefault() : null;
 
         [Display(GroupName = Deform, Name = "種類", Description = "点の並びをどう歪ませるか")]
@@ -102,11 +89,6 @@ namespace PixelPoints3D
         }
         private DeformKind deformKind = DeformKind.None;
 
-        /// <summary>変形の設定を表示してよいか。</summary>
-        /// <remarks>
-        /// <c>ShowPropertyEditorWhen</c> は「この値のとき」しか書けないため、
-        /// 「なし以外のとき」を表せません。判定をこちらに寄せて、真偽で答えます。
-        /// </remarks>
         [Browsable(false)]
         [EditorBrowsable(EditorBrowsableState.Never)]
         public bool IsDeformed => DeformKind != DeformKind.None;
@@ -192,7 +174,6 @@ namespace PixelPoints3D
             FaceSettings = Sync(DrawFaces, FaceSettings);
         }
 
-        /// <summary>切り替えの状態に合わせて、設定を1つ置くか空にします。</summary>
         private static ImmutableList<T> Sync<T>(bool enabled, ImmutableList<T> current) where T : new()
             => enabled != current.IsEmpty ? current : enabled ? [new T()] : [];
 
@@ -214,17 +195,16 @@ namespace PixelPoints3D
             int keyFrameIndex, ExoOutputDescription exoOutputDescription) => [];
     }
 
-    /// <summary>点のパラメータ。</summary>
     public class PointParams : Animatable
     {
+        [Display(GroupName = "点", Name = "大きさ", Description = "四角形なら一辺、円なら直径の長さ")]
+        [AnimationSlider("F1", "px", 0, 50)]
+        public Animation Size { get; } = new(4, 0, 500);
+
         [Display(GroupName = "点", Name = "形", Description = "粒の形")]
         [EnumComboBox]
         public PointShape Shape { get => shape; set => Set(ref shape, value); }
         private PointShape shape = PointShape.Square;
-
-        [Display(GroupName = "点", Name = "大きさ", Description = "四角形なら一辺、円なら直径の長さ")]
-        [AnimationSlider("F1", "px", 0, 50)]
-        public Animation Size { get; } = new(4, 0, 500);
 
         [Display(GroupName = "点", Name = "色の種類", Description = "単色で塗るか、その位置の画像の色を使うか")]
         [EnumComboBox]
@@ -240,7 +220,6 @@ namespace PixelPoints3D
         protected override IEnumerable<IAnimatable> GetAnimatables() => [Size];
     }
 
-    /// <summary>線のパラメータ。</summary>
     public class LineParams : Animatable
     {
         [Display(GroupName = "線", Name = "太さ", Description = "つなぐ線の太さ")]
@@ -265,7 +244,6 @@ namespace PixelPoints3D
         protected override IEnumerable<IAnimatable> GetAnimatables() => [Width, Randomness];
     }
 
-    /// <summary>面のパラメータ。</summary>
     public class FaceParams : Animatable
     {
         [Display(GroupName = "面", Name = "不透明度", Description = "面だけに掛かる不透明度")]
@@ -290,11 +268,6 @@ namespace PixelPoints3D
         protected override IEnumerable<IAnimatable> GetAnimatables() => [Opacity, OpacityRandomness];
     }
 
-    /// <summary>点の並びをどう歪ませるか。</summary>
-    /// <remarks>
-    /// 並び方そのものは平らな格子のままで、位置だけをあとから曲げます。
-    /// 値はシェーダーへそのまま渡るので、並び順を変えると見た目が変わります。
-    /// </remarks>
     public enum DeformKind
     {
         [Display(Name = "なし", Description = "歪ませません")]
@@ -313,7 +286,6 @@ namespace PixelPoints3D
         Sphere,
     }
 
-    /// <summary>変形の軸。</summary>
     public enum DeformAxis
     {
         [Display(Name = "X軸", Description = "横")]
@@ -326,11 +298,6 @@ namespace PixelPoints3D
         Z,
     }
 
-    /// <summary>粒の形。</summary>
-    /// <remarks>
-    /// どちらも同じ四角形の板を描き、円は縁を丸く抜きます。板の数も頂点の数も
-    /// 変わらないので、切り替えても形状の作り直しは起きません。
-    /// </remarks>
     public enum PointShape
     {
         [Display(Name = "四角形", Description = "四角い粒を描きます")]
@@ -340,7 +307,6 @@ namespace PixelPoints3D
         Circle,
     }
 
-    /// <summary>点・線・面の色をどこから取るか。</summary>
     public enum PointColorSource
     {
         [Display(Name = "単色", Description = "指定した色で塗ります")]

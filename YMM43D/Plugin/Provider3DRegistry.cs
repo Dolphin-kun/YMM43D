@@ -62,6 +62,7 @@ namespace YMM43D.Plugin
             }
         }
 
+        /// <summary>
         /// パラメータに対応するプロバイダーを取得します。未登録なら <c>null</c>。
         /// </summary>
         public static I3DProvider? Find(object? parameter)

@@ -113,14 +113,6 @@ namespace YMM43D.Integration
             return new SceneView(owner.Item, owner.Time, ownerPlacement, ownerScreen, occluders);
         }
 
-        /// <summary>
-        /// 描画要求から、いま描かれているシーンのタイムラインを探します。
-        /// </summary>
-        /// <remarks>
-        /// <see cref="TimelineSourceDescription.Scenes"/> の要素は <c>ISceneInfo</c> として
-        /// 渡されますが、実体は <see cref="Scene"/> でタイムラインを持っています。
-        /// 型が違えば何も返しません。
-        /// </remarks>
         private static Timeline? FindTimeline(TimelineSourceDescription description)
         {
             foreach (var info in description.Scenes ?? [])
@@ -132,13 +124,6 @@ namespace YMM43D.Integration
             return null;
         }
 
-        /// <summary>
-        /// アイテムを 3D 描画できるプロバイダーを集めます。
-        /// </summary>
-        /// <remarks>
-        /// 3Dプレビューと同じ規則です。アイテム自身が 3D 描画を持つ場合は、
-        /// エフェクト側の 3D 描画は使いません。
-        /// </remarks>
         private static IEnumerable<I3DProvider> FindProviders(IVideoItem item)
         {
             var providers = new List<I3DProvider>();
@@ -161,20 +146,15 @@ namespace YMM43D.Integration
             return providers.Distinct();
         }
 
-        /// <summary>
-        /// アイテムの配置を除いた、プロバイダー自身の変換を求めます。
-        /// </summary>
-        /// <remarks>
-        /// エフェクトは <c>DrawDescription.Camera</c> を取り込んでいることがあり、
-        /// その値は実寸からは組み立て直せません。連鎖を辿り直すのは高くつくので、
-        /// 使った変換を本人に答えてもらいます。答えられない場合だけ実寸から作ります。
-        /// </remarks>
         private static Matrix4x4 GetLocalMatrix(I3DProvider provider)
         {
             if (provider is I3DLocalTransform transform && transform.TryGetLocalMatrix(out var matrix))
                 return matrix;
 
+            // 実寸を自分で扱うプロバイダーには掛けない。掛けると遮蔽物としての形が
+            // 本人の描く形より大きくなり、隠れなくてよいところまで隠れる。
             if (provider is I3DSizeProvider sizeProvider
+                && sizeProvider.ScalesToInputSize
                 && sizeProvider.TryGetSize(out var size, out var offset))
             {
                 return WorldScale.CreateSizeMatrix(size, offset + size / 2f);

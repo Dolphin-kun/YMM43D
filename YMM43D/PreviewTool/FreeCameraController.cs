@@ -6,14 +6,6 @@ using YukkuriMovieMaker.Commons;
 
 namespace YMM43D.PreviewTool
 {
-    /// <summary>
-    /// マウス操作で動かす、3Dプレビュー専用の視点。
-    /// </summary>
-    /// <remarks>
-    /// ドラッグ中は毎フレーム <see cref="Animation"/> を書き換えたくないため、
-    /// 素の数値として姿勢を保持し、必要になったときだけ
-    /// <see cref="SceneCamera"/> に反映します。
-    /// </remarks>
     internal sealed class FreeCameraController
     {
         private const float RotateSpeed = 0.5f;
@@ -34,9 +26,6 @@ namespace YMM43D.PreviewTool
         private DragMode drag;
         private Point lastMousePosition;
 
-        /// <summary>
-        /// 初回だけ、指定カメラの値を取り込みます。
-        /// </summary>
         public void EnsureInitialized(SceneCamera camera, in FrameContext time)
         {
             if (initialized)
@@ -50,12 +39,8 @@ namespace YMM43D.PreviewTool
             initialized = true;
         }
 
-        /// <summary>
-        /// 次の <see cref="EnsureInitialized"/> でカメラの値を取り込み直させます。
-        /// </summary>
         public void Invalidate() => initialized = false;
 
-        /// <summary>現在の視点の姿勢。</summary>
         public CameraPose GetPose()
         {
             var rotation = Rotation3D.ForCamera(yaw, pitch, roll);
@@ -64,7 +49,6 @@ namespace YMM43D.PreviewTool
             return new CameraPose(target - forward * distance, target, up, rotation);
         }
 
-        /// <summary>現在の姿勢をカメラに書き込みます。</summary>
         public void ApplyTo(SceneCamera camera)
         {
             if (!initialized)
@@ -77,10 +61,6 @@ namespace YMM43D.PreviewTool
             camera.Target = target;
         }
 
-        /// <summary>
-        /// マウス操作を処理します。
-        /// </summary>
-        /// <returns>視点が変化した場合は <c>true</c>。</returns>
         public bool HandleMouse(Point position, D3D11Host.MouseEventKind kind, int delta)
         {
             switch (kind)

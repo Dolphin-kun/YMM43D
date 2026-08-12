@@ -9,13 +9,6 @@ using YMM43D.Scene3D;
 
 namespace YMM43D.PreviewTool.Rendering
 {
-    /// <summary>
-    /// シーンカメラの位置と向きを示すワイヤーフレームのガイド。
-    /// </summary>
-    /// <remarks>
-    /// 以前は専用の頂点／ピクセルシェーダーを持っていましたが、単色の線を引くだけなので
-    /// 頂点カラーをそのまま出す <see cref="VertexColorMaterial"/> で足ります。
-    /// </remarks>
     internal sealed class CameraGizmoRenderer : IDisposable
     {
         private static readonly Color4 GizmoColor = new(1f, 0.6f, 0f, 1f);
@@ -37,10 +30,6 @@ namespace YMM43D.PreviewTool.Rendering
             pipelines.Get(render.Device).Draw(render.Context, constants, new DrawSettings());
         }
 
-        /// <summary>
-        /// カメラ形状（本体の直方体＋前方に開くレンズ）の稜線を線分の列として作ります。
-        /// カメラは -Z 方向を向いています。
-        /// </summary>
         private static Vector3[] BuildOutline()
         {
             var bodyMin = new Vector3(-0.4f, -0.3f, 0.0f);

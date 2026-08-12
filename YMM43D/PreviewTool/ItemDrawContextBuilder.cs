@@ -11,13 +11,6 @@ using YukkuriMovieMaker.Project.Items;
 
 namespace YMM43D.PreviewTool
 {
-    /// <summary>
-    /// 3Dプレビューで1つのアイテムを描画するための情報を組み立てます。
-    /// </summary>
-    /// <remarks>
-    /// アイテムの位置・拡大率・回転・不透明度からワールド行列を作り、
-    /// 必要なら 2D 描画結果をテクスチャ化します。
-    /// </remarks>
     internal sealed class ItemDrawContextBuilder : IDisposable
     {
         private readonly ItemRenderPipeline pipeline = new();
@@ -60,10 +53,14 @@ namespace YMM43D.PreviewTool
             };
         }
 
-        /// <summary>
-        /// 表示対象でなくなったアイテムの資源を解放します。
-        /// </summary>
-        public void RetainOnly(IReadOnlySet<IVideoItem> aliveItems) => pipeline.RetainOnly(aliveItems);
+        public void RetainOnly(IReadOnlySet<IVideoItem> aliveItems)
+        {
+            pipeline.RetainOnly(aliveItems);
+
+            // テクスチャの鍵もアイテム。手放さないと、消したアイテムのぶんが
+            // 画像1枚ぶんずつ残り続ける。
+            textureBridge.RetainOnly(aliveItems.Cast<object>().ToHashSet());
+        }
 
         public void Dispose()
         {
@@ -71,14 +68,6 @@ namespace YMM43D.PreviewTool
             textureBridge.Dispose();
         }
 
-        /// <summary>
-        /// 描画対象の実寸を、3D空間での大きさと中心のずれに変換します。
-        /// </summary>
-        /// <param name="imageBounds">
-        /// テクスチャ化したアイテム画像の描画範囲。プロバイダーが実寸を答えられない
-        /// 場合に、板をこの範囲に合わせます。これが無いとすべてのアイテムが
-        /// 1単位（100px）四方で描かれてしまいます。
-        /// </param>
         private static Matrix4x4 BuildSizeMatrix(I3DProvider provider, RawRectF? imageBounds)
         {
             // プロバイダーが実寸を知っている場合はそちらを優先する。
@@ -113,9 +102,6 @@ namespace YMM43D.PreviewTool
         };
     }
 
-    /// <summary>
-    /// 3Dプレビューが 1 フレーム描くのに必要な、シーンとデバイスの情報。
-    /// </summary>
     internal readonly record struct PreviewEnvironment(
         ID3D11Device Device,
         IGraphicsDevicesAndContext Devices,

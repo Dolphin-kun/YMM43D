@@ -12,65 +12,23 @@ using YMM43D.Scene3D;
 
 namespace YMM43D.PreviewTool
 {
-    /// <summary>
-    /// アイテムの 2D 描画結果と、エフェクトが生み出す 3D 変換行列。
-    /// </summary>
-    /// <param name="Image">エフェクト適用後の画像。取得できなかった場合は <c>null</c>。</param>
-    /// <param name="CameraMatrix">エフェクトが設定した変換行列。無ければ単位行列。</param>
     internal readonly record struct ItemRenderResult(ID2D1Image? Image, Matrix4x4 CameraMatrix)
     {
         public static ItemRenderResult None => new(null, Matrix4x4.Identity);
     }
 
-    /// <summary>
-    /// アイテムの描画元とエフェクトチェーンを、YMM4 本体と同じ手順で駆動します。
-    /// </summary>
-    /// <remarks>
-    /// YMM4 の標準エフェクト（3D回転など）は <see cref="DrawDescription.Camera"/> に変換
-    /// 行列を書き込みますが、合成後の <see cref="DrawDescription"/> を持つ
-    /// <c>EffectedItemSource</c> は内部クラスで取り出せません。そこで同じ連鎖を公開 API
-    /// だけで組み立て（<c>SetInput</c> → <c>Update</c> → <c>Output</c>）、最後の
-    /// <see cref="DrawDescription.Camera"/> を読みます。副産物として、エフェクト適用後の
-    /// 画像も得られます。
-    /// <para>
-    /// この連鎖は YMM4 本体が動かしているものとは別物なので、エフェクトは 1 フレームに
-    /// 2 回評価されます。プレビュー用途では許容範囲と判断しています。
-    /// </para>
-    /// </remarks>
     internal sealed class ItemRenderPipeline : IDisposable
     {
         private readonly Lock gate = new();
         private readonly Dictionary<IVideoItem, ISource> sources = [];
         private readonly Dictionary<IVideoItem, EffectChain> chains = [];
 
-        /// <summary>
-        /// エフェクト連鎖の駆動に失敗したアイテム。毎フレーム作り直しては失敗するのを
-        /// 避けるため、一度失敗したら以降はエフェクトを通さない。
-        /// </summary>
         private readonly HashSet<IVideoItem> effectsUnsupported = [];
 
-        /// <summary>
-        /// 描画元の更新に失敗したアイテムと、次に試してよい時刻。
-        /// </summary>
         private readonly Dictionary<IVideoItem, long> sourceRetryAt = [];
 
-        /// <summary>
-        /// 描画元の更新に失敗してから、次に試すまでの待ち時間（ミリ秒）。
-        /// </summary>
-        /// <remarks>
-        /// 図形のサイズを 0 にするなど、アイテムが一時的に描画できない状態になることがある。
-        /// 設定を戻せば復帰してほしいので恒久的にあきらめるわけにはいかないが、
-        /// 毎フレーム試すと例外が出続けるため間隔を空ける。
-        /// </remarks>
         private const long SourceRetryDelayMs = 500;
 
-        /// <summary>
-        /// アイテムを描画し、画像と変換行列を返します。
-        /// </summary>
-        /// <param name="needsImage">
-        /// <c>false</c> の場合、画像を必要としないプロバイダー向けに、変換行列だけを
-        /// 求めます。エフェクトが無ければ何も行いません。
-        /// </param>
         public ItemRenderResult Render(
             IVideoItem item,
             in FrameContext time,
@@ -116,9 +74,6 @@ namespace YMM43D.PreviewTool
             return ApplyEffects(item, effects, environment, description, image);
         }
 
-        /// <summary>
-        /// アイテム本来の（エフェクトを通す前の）画像を得ます。
-        /// </summary>
         private ID2D1Image? RenderSource(
             IVideoItem item,
             Scene scene,
@@ -197,16 +152,6 @@ namespace YMM43D.PreviewTool
             }
         }
 
-        /// <summary>
-        /// 連鎖に通すエフェクトを選びます。
-        /// </summary>
-        /// <remarks>
-        /// このライブラリ自身の 3D エフェクトは対象外にします。それらのプロセッサは
-        /// エフェクト本体と結び付いており（<see cref="VideoEffect3DBase"/>）、ここで
-        /// 作り直すと本物のプロセッサがこの場限りのコピーに差し替わってしまいます。
-        /// これらの描画は <see cref="I3DProvider"/> として直接行われるため、
-        /// 連鎖に通す必要もありません。
-        /// </remarks>
         private static ImmutableList<IVideoEffect> CollectEffects(IVideoItem item)
         {
             if (item.VideoEffects is null)
@@ -215,9 +160,6 @@ namespace YMM43D.PreviewTool
             return [.. item.VideoEffects.Where(e => e.IsEnabled && e is not I3DProvider)];
         }
 
-        /// <summary>
-        /// 表示対象でなくなったアイテムの資源を解放します。
-        /// </summary>
         public void RetainOnly(IReadOnlySet<IVideoItem> aliveItems)
         {
             // 破棄はこの鍵の外で行う。描画元の Dispose は Direct2D の鍵を取ることが
@@ -267,9 +209,6 @@ namespace YMM43D.PreviewTool
             sourceRetryAt.Clear();
         }
 
-        /// <summary>
-        /// 1つのアイテムに対応する、エフェクトプロセッサの並び。
-        /// </summary>
         private sealed class EffectChain : IDisposable
         {
             private readonly ImmutableList<IVideoEffect> effects;
@@ -282,16 +221,10 @@ namespace YMM43D.PreviewTool
                     processors.Add(effect.CreateVideoEffect(devices));
             }
 
-            /// <summary>
-            /// エフェクトの構成が変わっていないかを調べます。
-            /// </summary>
             public bool Matches(ImmutableList<IVideoEffect> current)
                 => effects.Count == current.Count
                 && !effects.Where((effect, i) => !ReferenceEquals(effect, current[i])).Any();
 
-            /// <summary>
-            /// 入力画像にエフェクトを順に適用します。
-            /// </summary>
             public ItemRenderResult Apply(ID2D1Image input, TimelineItemSourceDescription description)
             {
                 var draw = CreateInitialDrawDescription();
@@ -313,9 +246,6 @@ namespace YMM43D.PreviewTool
                 return new ItemRenderResult(image, draw.Camera);
             }
 
-            /// <summary>
-            /// 変換が何も掛かっていない状態の <see cref="DrawDescription"/>。
-            /// </summary>
             private static DrawDescription CreateInitialDrawDescription() => new(
                 Draw: Vector3.Zero,
                 CenterPoint: Vector2.Zero,

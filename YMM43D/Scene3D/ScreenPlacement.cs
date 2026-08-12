@@ -36,7 +36,6 @@ namespace YMM43D.Scene3D
         /// </remarks>
         public const float HostPerspectiveDistance = 1000f;
 
-        /// <summary>遠近の倍率として認める上限。カメラ位置に近づくと発散するため。</summary>
         private const float MaxPerspectiveScale = 100f;
 
         /// <summary>YMM4 が何もしないことを表す値。</summary>

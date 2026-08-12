@@ -10,13 +10,6 @@ using YukkuriMovieMaker.Project;
 
 namespace Shape3D
 {
-    /// <summary>
-    /// 3D図形アイテムの設定値。
-    /// </summary>
-    /// <remarks>
-    /// 描画は <see cref="Shape3DSource"/> が行います。このクラスは値の保持と
-    /// エディタ表示だけを受け持ち、GPU リソースは持ちません。
-    /// </remarks>
     internal sealed class Shape3DParameter : ShapeParameter3DBase
     {
         [Display(GroupName = "", Name = "サイズ")]
@@ -72,10 +65,12 @@ namespace Shape3D
 
         private sealed class SharedData
         {
-            public Animation Size { get; } = new(100, 0, 1000);
-            public Animation RotationX { get; } = new(0, -360, 360);
-            public Animation RotationY { get; } = new(0, -360, 360);
-            public Animation RotationZ { get; } = new(0, -360, 360);
+            // 範囲は本体のプロパティと必ず同じにする。狭いと、引き継ぐときに
+            // 値が範囲の端まで丸められて戻ってくる。
+            public Animation Size { get; } = new(100, 0, 100000);
+            public Animation RotationX { get; } = new(0, -100000, 100000);
+            public Animation RotationY { get; } = new(0, -100000, 100000);
+            public Animation RotationZ { get; } = new(0, -100000, 100000);
             public ProjectionType Projection { get; set; }
 
             public SharedData(Shape3DParameter parameter)

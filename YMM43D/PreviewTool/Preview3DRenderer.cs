@@ -7,9 +7,6 @@ using YMM43D.Scene3D;
 
 namespace YMM43D.PreviewTool
 {
-    /// <summary>
-    /// 3Dプレビューの 1 フレームを描画します。
-    /// </summary>
     internal sealed class Preview3DRenderer : IDisposable
     {
         private static readonly Color4 BackgroundColor = new(0.15f, 0.15f, 0.15f, 1f);
@@ -19,9 +16,6 @@ namespace YMM43D.PreviewTool
         private readonly FlatItemProvider flatItemProvider = new();
         private readonly ItemDrawContextBuilder contextBuilder = new();
 
-        /// <summary>
-        /// 独自の 3D 描画を持たないアイテムに使う既定のプロバイダー。
-        /// </summary>
         public I3DProvider DefaultProvider => flatItemProvider;
 
         public void Draw(
@@ -82,32 +76,18 @@ namespace YMM43D.PreviewTool
         }
     }
 
-    /// <summary>
-    /// 1 フレーム分の描画に必要な、シーンの状態一式。
-    /// </summary>
     internal sealed class PreviewScene
     {
-        /// <summary>プレビューを見ている視点。</summary>
         public required CameraPose ViewPose { get; init; }
 
-        /// <summary>ガイド表示するシーンカメラの姿勢。</summary>
         public required CameraPose SceneCameraPose { get; init; }
 
-        /// <summary>
-        /// シーンカメラから注視点までの距離。画角を決めるのに使います。
-        /// </summary>
-        /// <remarks>
-        /// プレビュー用の視点ではなくシーンカメラの距離を使います。視点を動かしても
-        /// 出力と縮尺が変わらないようにするためです。
-        /// </remarks>
         public float SceneCameraDistance
             => Vector3.Distance(SceneCameraPose.Position, SceneCameraPose.Target);
 
-        /// <summary>動画の画面の高さ（ピクセル）。</summary>
         public float ScreenHeight
             => Environment.SourceDescription?.ScreenSize.Height ?? 0f;
 
-        /// <summary>タイムライン上の現在位置。</summary>
         public required FrameContext Time { get; init; }
 
         public required PreviewEnvironment Environment { get; init; }

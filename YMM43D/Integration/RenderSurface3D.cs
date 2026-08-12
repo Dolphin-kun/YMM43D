@@ -18,27 +18,14 @@ namespace YMM43D.Integration
     /// </remarks>
     public sealed class RenderSurface3D : IDisposable
     {
-        /// <summary>3D描画側が取得する鍵。</summary>
         private const ulong WriteKey = 0;
 
-        /// <summary>YMM4 側が取得する鍵。</summary>
         private const ulong ReadKey = 1;
 
-        /// <summary>相手が鍵を返すのを待つ上限（ミリ秒）。</summary>
         private const int SyncTimeoutMs = 500;
 
-        /// <summary>確保する大きさの刻み（ピクセル）。</summary>
-        /// <remarks>
-        /// 要求どおりに確保すると、拡大縮小の最中は毎フレーム作り直しになります。
-        /// 刻みで切り上げ、要求が収まっている限り使い回します。
-        /// </remarks>
         private const int SizeGranularity = 128;
 
-        /// <summary>作り直したあと、古い資源を手元に残しておく世代数。</summary>
-        /// <remarks>
-        /// 作り直した直後に前の資源を解放すると、まだ参照されているビットマップを
-        /// 消してしまいます。
-        /// </remarks>
         private const int RetiredGenerations = 2;
 
         private readonly List<DisposeCollector> retired = [];
@@ -134,12 +121,6 @@ namespace YMM43D.Integration
             isBroken = false;
         }
 
-        /// <summary>
-        /// いま確保してある大きさで、要求された大きさを賄えるかを返します。
-        /// </summary>
-        /// <remarks>
-        /// 大きすぎるまま抱え続けないよう、余りが倍を超えたら作り直します。
-        /// </remarks>
         private bool Fits(int width, int height)
             => Size.Width >= width
             && Size.Height >= height

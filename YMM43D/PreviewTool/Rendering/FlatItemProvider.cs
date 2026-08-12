@@ -6,17 +6,10 @@ using YMM43D.Scene3D;
 
 namespace YMM43D.PreviewTool.Rendering
 {
-    /// <summary>
-    /// 3D対応していない普通のアイテムを、板にテクスチャを貼った形で 3D 空間に表示します。
-    /// </summary>
-    /// <remarks>
-    /// 独自の <see cref="I3DProvider"/> を持たないアイテムすべてに使われる既定の描画方法です。
-    /// </remarks>
     internal sealed class FlatItemProvider : I3DProvider, IDisposable
     {
         private readonly DeviceResourceCache<RenderPipeline<TransformConstants>> pipelines;
 
-        /// <summary>アイテムの見た目そのものを貼るため、必ず画像を要求します。</summary>
         public bool RequiresMappedTexture => true;
 
         public FlatItemProvider()

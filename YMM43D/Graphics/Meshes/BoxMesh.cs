@@ -41,9 +41,6 @@ namespace YMM43D.Graphics.Meshes
         /// </summary>
         public static BoxMesh CreateExtrusionBox(ID3D11Device device) => new(device, 0f, 1f, null);
 
-        /// <param name="cornerColors">
-        /// 8頂点の色。<c>null</c> の場合はすべて白になります。
-        /// </param>
         private BoxMesh(ID3D11Device device, float zNear, float zFar, Color4[]? cornerColors)
         {
             var white = new Color4(1f, 1f, 1f, 1f);

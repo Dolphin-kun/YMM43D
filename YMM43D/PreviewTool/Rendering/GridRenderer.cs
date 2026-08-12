@@ -8,12 +8,6 @@ using YukkuriMovieMaker.Commons;
 
 namespace YMM43D.PreviewTool.Rendering
 {
-    /// <summary>
-    /// 3Dプレビューの床面グリッドと座標軸。
-    /// </summary>
-    /// <remarks>
-    /// 実際の格子はピクセルシェーダーで描くため、形状は巨大な四角形1枚だけです。
-    /// </remarks>
     internal sealed class GridRenderer : IDisposable
     {
         [StructLayout(LayoutKind.Sequential)]
@@ -52,9 +46,6 @@ namespace YMM43D.PreviewTool.Rendering
         public void Dispose() => pipelines.Dispose();
     }
 
-    /// <summary>
-    /// 床面に格子と座標軸を描くシェーダー。
-    /// </summary>
     internal sealed class GridMaterial : IMaterial
     {
         private readonly DisposeCollector disposer = new();

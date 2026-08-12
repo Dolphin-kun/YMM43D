@@ -10,9 +10,6 @@ using YukkuriMovieMaker.Plugin.Effects;
 
 namespace Extrusion3D
 {
-    /// <summary>
-    /// アイテムの画像を Z 方向に押し出して立体に見せるエフェクト。
-    /// </summary>
     [VideoEffect("立体化3D", ["3D"], [])]
     public class Extrusion3DEffect : VideoEffect3DBase
     {

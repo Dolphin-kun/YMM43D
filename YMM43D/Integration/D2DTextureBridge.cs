@@ -71,18 +71,8 @@ namespace YMM43D.Integration
             }
         }
 
-        /// <summary>
-        /// テクスチャ1枚あたりに認める画素数。
-        /// </summary>
-        /// <remarks>
-        /// 一辺だけを見ていると、16384×16384 のような 1GB 級の確保を通してしまいます。
-        /// 面積で頭打ちにします。
-        /// </remarks>
         private const long MaxTexturePixels = 4096L * 4096L;
 
-        /// <summary>
-        /// 上限に収めるための縮小率を返します。収まっていれば 1。
-        /// </summary>
         private static float GetFittingScale(int width, int height)
         {
             var pixels = (long)width * height;
@@ -133,6 +123,25 @@ namespace YMM43D.Integration
             }
         }
 
+        /// <summary>
+        /// 指定した鍵に対応しないテクスチャを破棄します。
+        /// </summary>
+        /// <remarks>
+        /// テクスチャは画像1枚ぶんの大きさを占めます。鍵をアイテムにしている呼び出し側は、
+        /// タイムライン上から消えたアイテムのぶんをここで手放してください。
+        /// </remarks>
+        public void RetainOnly(IReadOnlySet<object> keys)
+        {
+            lock (gate)
+            {
+                foreach (var key in cache.Keys.Where(k => !keys.Contains(k)).ToArray())
+                {
+                    if (cache.Remove(key, out var texture))
+                        texture.Dispose();
+                }
+            }
+        }
+
         /// <summary>キャッシュしているテクスチャをすべて破棄します。</summary>
         public void Clear()
         {
@@ -150,25 +159,12 @@ namespace YMM43D.Integration
             privateContext.Dispose();
         }
 
-        /// <summary>
-        /// 3D描画側と YMM4 側の両方から参照できる、1枚分のテクスチャ。
-        /// </summary>
-        /// <remarks>
-        /// 書き込むのは YMM4 のデバイス、読むのは 3D 描画用のデバイスで、両者は
-        /// 別々の命令列を GPU に流します。何も調整しないと書き込みの途中が読まれ、
-        /// プレビューがちらつきます。そこで鍵付きミューテックスで受け渡しします。
-        /// 書き込み側が鍵 0 を取って描き、鍵 1 で手放す。読み出し側は鍵 1 を取り、
-        /// 次に書き込む直前まで握り続けてから鍵 0 で返します。
-        /// </remarks>
         private sealed class SharedItemTexture : IDisposable
         {
-            /// <summary>書き込み側（YMM4 のデバイス）が取得する鍵。</summary>
             private const ulong WriteKey = 0;
 
-            /// <summary>読み出し側（3D 描画用のデバイス）が取得する鍵。</summary>
             private const ulong ReadKey = 1;
 
-            /// <summary>相手が鍵を返すのを待つ上限（ミリ秒）。</summary>
             private const int SyncTimeoutMs = 500;
 
             private readonly DisposeCollector disposer = new();
@@ -181,13 +177,6 @@ namespace YMM43D.Integration
 
             private bool holdsReadLock;
 
-            /// <summary>
-            /// 鍵の受け渡しに失敗し、このテクスチャが使えなくなったかどうか。
-            /// </summary>
-            /// <remarks>
-            /// 鍵を取り損ねると誰も持っていない鍵番号のまま止まってしまうため、
-            /// 復帰させずに作り直します。
-            /// </remarks>
             private bool isBroken;
 
             public ID3D11ShaderResourceView ShaderResourceView { get; }
@@ -228,22 +217,12 @@ namespace YMM43D.Integration
                 targetBitmap = Collect(deviceContext.CreateBitmapFromDxgiSurface(surface));
             }
 
-            /// <summary>
-            /// このテクスチャが指定の条件で再利用できるかを返します。
-            /// </summary>
             public bool Matches(int width, int height, ID3D11Device ymmDevice)
                 => !isBroken
                 && this.width == width
                 && this.height == height
                 && ymmDevicePointer == ymmDevice.NativePointer;
 
-            /// <summary>
-            /// 最新の画像内容を焼き込みます。
-            /// </summary>
-            /// <param name="scale">
-            /// 焼き込むときの縮小率。テクスチャが覆う範囲は <paramref name="bounds"/> の
-            /// ままなので、粗くなるだけで UV は変わりません。
-            /// </param>
             public void Update(
                 IGraphicsDevicesAndContext ymmDevices,
                 ID2D1DeviceContext deviceContext,

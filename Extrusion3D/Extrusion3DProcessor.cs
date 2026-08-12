@@ -7,13 +7,6 @@ using YukkuriMovieMaker.Commons;
 
 namespace Extrusion3D
 {
-    /// <summary>
-    /// 立体化エフェクトの描画処理。
-    /// </summary>
-    /// <remarks>
-    /// 入力画像を箱の前後の面に貼り、その間をレイマーチングで埋めることで
-    /// 押し出されたように見せます。描画結果は 3Dプレビューと動画出力の両方に出ます。
-    /// </remarks>
     internal sealed class Extrusion3DProcessor : VideoEffect3DProcessorBase
     {
         private readonly Extrusion3DEffect effect;
@@ -70,8 +63,8 @@ namespace Extrusion3D
             pipelines.Get(render.Device).Draw(render.Context, constants, settings);
         }
 
-        /// <summary>厚み（ワールド単位）。</summary>
-        private float GetThickness(in FrameContext time) => effect.Thickness.GetFloat(time) / 100f;
+        private float GetThickness(in FrameContext time)
+            => WorldScale.ToWorld(effect.Thickness.GetFloat(time));
 
         protected override WorldBounds GetLocalBounds(in FrameContext itemTime)
         {

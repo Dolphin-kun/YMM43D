@@ -19,11 +19,6 @@ namespace YMM43D.Integration
     /// </remarks>
     public sealed class Renderer3DTo2D : IDisposable
     {
-        /// <summary>手元に残しておくコマンドリストの数。</summary>
-        /// <remarks>
-        /// YMM4 がいつ再生し終えるかは分かりません。次のフレームを作るそばから前回の分を
-        /// 破棄すると、まだ参照されている資源を消してアクセス違反になります。
-        /// </remarks>
         private const int CommandListRetention = 3;
 
         private readonly RenderSurface3D surface = new();
@@ -123,10 +118,6 @@ namespace YMM43D.Integration
             }
         }
 
-        /// <remarks>
-        /// 描くのはビットマップ1枚だけで、変換は掛けません。位置・拡大率・回転の
-        /// 打ち消しは射影行列に畳み込んであるので、ここに残す仕事はありません。
-        /// </remarks>
         private ID2D1Image BuildCommandList(
             IGraphicsDevicesAndContext ymmDevices,
             ID2D1Bitmap1? bitmap,

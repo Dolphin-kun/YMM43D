@@ -6,37 +6,23 @@ using YukkuriMovieMaker.Commons;
 
 namespace Extrusion3D
 {
-    /// <summary>
-    /// 立体化エフェクトの定数バッファ。
-    /// </summary>
-    /// <remarks>
-    /// レイアウトは <see cref="ExtrusionMaterial"/> の HLSL 側 <c>cbuffer</c> 宣言と
-    /// 1対1で対応します。片方だけを変更すると描画結果が壊れます。
-    /// </remarks>
     [StructLayout(LayoutKind.Sequential)]
     internal struct ExtrusionConstants
     {
         public Matrix4x4 WorldViewProjection;
         public Vector4 SideColor;
 
-        /// <summary>ボックスのローカル座標系におけるカメラ位置。レイマーチングの起点です。</summary>
         public Vector3 CameraLocalPos;
 
         public float Opacity;
 
-        /// <summary><see cref="ExtrusionType"/> の値。</summary>
         public int ExtrusionType;
 
-        /// <summary>側面の陰影の強さ（0.0〜1.0）。</summary>
         public float Attenuation;
 
         private Vector2 padding;
     }
 
-    /// <summary>
-    /// 押し出しボックスの内部をレイマーチングし、入力画像の不透明部分だけを
-    /// 立体として描画するシェーダー。
-    /// </summary>
     internal sealed class ExtrusionMaterial : IMaterial
     {
         private readonly DisposeCollector disposer = new();
@@ -45,14 +31,6 @@ namespace Extrusion3D
         public ID3D11PixelShader PixelShader { get; }
         public byte[] VertexShaderBytecode { get; }
 
-        /// <summary>
-        /// 頂点シェーダーとピクセルシェーダーで共有する宣言。
-        /// </summary>
-        /// <remarks>
-        /// 以前は両者が別々に <c>cbuffer</c> を宣言しており、内容が食い違っていた。
-        /// 頂点シェーダー側は先頭の行列しか読まないため偶然動いていたが、
-        /// 後続のメンバーを参照した時点で壊れる状態だったため1つにまとめている。
-        /// </remarks>
         private const string SharedDeclarations = """
             cbuffer ExtrusionConstants : register(b0)
             {

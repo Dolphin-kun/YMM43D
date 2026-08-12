@@ -3,14 +3,6 @@ using YMM43D.Scene3D;
 
 namespace YMM43D.Integration
 {
-    /// <summary>
-    /// カメラの値が前回の確認時から変化したかを判定します。
-    /// </summary>
-    /// <remarks>
-    /// <see cref="SceneCamera"/> の値はキーフレームアニメーションなので、
-    /// プロパティ変更通知だけでは「今のフレームでの見え方が変わったか」を判定できません。
-    /// そのため実際に評価した値を覚えておいて比較します。
-    /// </remarks>
     internal sealed class CameraChangeTracker
     {
         private const float Epsilon = 0.0001f;
@@ -18,10 +10,6 @@ namespace YMM43D.Integration
         private bool hasSnapshot;
         private Snapshot last;
 
-        /// <summary>
-        /// 変化していれば <c>true</c> を返し、現在値を記録します。
-        /// 初回の呼び出しは基準を作るだけなので <c>false</c> を返します。
-        /// </summary>
         public bool HasChanged(SceneCamera camera, in FrameContext time)
         {
             var current = Snapshot.Capture(camera, time);
@@ -40,10 +28,8 @@ namespace YMM43D.Integration
             return true;
         }
 
-        /// <summary>
-        /// 変化判定を行わずに現在値だけを記録します。
-        /// カメラを直接操作した直後に呼び、次回の判定で誤検知が起きないようにします。
-        /// </summary>
+        // ここでの記録は「今の値を基準に置き直す」という意味。カメラを直接
+        // 動かした直後に呼ばないと、次の HasChanged が同じ変化を拾い直す。
         public void Sync(SceneCamera camera, in FrameContext time)
         {
             last = Snapshot.Capture(camera, time);

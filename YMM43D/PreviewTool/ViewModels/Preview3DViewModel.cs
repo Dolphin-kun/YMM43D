@@ -16,9 +16,6 @@ using YukkuriMovieMaker.Project.Items;
 
 namespace YMM43D.PreviewTool.ViewModels
 {
-    /// <summary>
-    /// 3Dプレビューツールの状態。
-    /// </summary>
     public class Preview3DViewModel : Bindable, ITimelineToolViewModel, IDisposable
     {
         private readonly DisposeCollector disposer = new();
@@ -36,7 +33,6 @@ namespace YMM43D.PreviewTool.ViewModels
         private List<PreviewItem> previewItems = [];
         private bool isDisposed;
 
-        /// <summary>出力に使われるシーンカメラ。</summary>
         public SceneCamera SceneCamera
         {
             get => sceneCamera;
@@ -57,7 +53,6 @@ namespace YMM43D.PreviewTool.ViewModels
             private set => Set(ref d3dHost, value, nameof(D3DHost));
         }
 
-        /// <summary>プレビュー視点をシーンカメラの位置に戻します。</summary>
         public ICommand ResetToSceneCameraCommand { get; }
 
         public Preview3DViewModel()
@@ -123,9 +118,6 @@ namespace YMM43D.PreviewTool.ViewModels
             UpdatePreviewItems();
         }
 
-        /// <summary>
-        /// プレビュー視点をシーンカメラに合わせ直します。
-        /// </summary>
         public void ResetToSceneCamera()
         {
             if (timeline is null)
@@ -223,9 +215,6 @@ namespace YMM43D.PreviewTool.ViewModels
                 toolInfo.Scenes?.AllScenes?.Cast<ISceneInfo>() ?? []);
         }
 
-        /// <summary>
-        /// 現在フレームに存在するアイテムと、その描画プロバイダーの一覧を作り直します。
-        /// </summary>
         private void UpdatePreviewItems()
         {
             if (timeline?.Items is not { } items)
@@ -250,15 +239,6 @@ namespace YMM43D.PreviewTool.ViewModels
             previewItems = updated;
         }
 
-        /// <summary>
-        /// アイテムを 3D 描画できるプロバイダーを集めます。
-        /// 1つも見つからなければ、板にテクスチャを貼る既定の方法を使います。
-        /// </summary>
-        /// <remarks>
-        /// アイテム自身が 3D 描画を持つ場合は、それだけを使います。エフェクト側の
-        /// 3D 描画は、アイテムを平面化した絵をもとに立体を組み立てるものなので、
-        /// 既に立体であるアイテムに重ねると、本体と平たい写しの二重表示になります。
-        /// </remarks>
         private IEnumerable<I3DProvider> FindProviders(IVideoItem item)
         {
             var providers = new List<I3DProvider>();

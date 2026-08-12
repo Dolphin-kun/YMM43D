@@ -9,16 +9,8 @@ using YukkuriMovieMaker.Project;
 
 namespace YMM43D.PreviewTool.ViewModels
 {
-    /// <summary>
-    /// 出力に使われるシーンカメラを編集するツールの状態。
-    /// </summary>
     public class Preview3DSettingsToolViewModel : Bindable, ITimelineToolViewModel, IDisposable
     {
-        /// <summary>
-        /// カメラの値はスライダー操作で変わるが、変更通知だけでは
-        /// 「今のフレームでの見え方が変わったか」を判定できないため、
-        /// 一定間隔で確認する。
-        /// </summary>
         private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(50);
 
         private readonly TimelineRefresher refresher = new();

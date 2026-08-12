@@ -4,14 +4,6 @@ using YukkuriMovieMaker.Commons;
 
 namespace PixelPoints3D
 {
-    /// <summary>
-    /// 点の並びを三次元的に歪ませる設定を、シェーダーが使える形に直したもの。
-    /// </summary>
-    /// <remarks>
-    /// 「強さ」は種類ごとに意味が違います（波なら振幅、ねじれなら端での角度、
-    /// 球に巻くなら移し具合）。換算はここで済ませてしまい、シェーダー側は
-    /// ワールド単位・ラジアン・比率という素直な値だけを見ます。
-    /// </remarks>
     internal readonly record struct PointDeform(
         DeformKind Kind, Vector3 Axis, float Amount, float Period, float Phase)
     {
@@ -54,14 +46,6 @@ namespace PixelPoints3D
                 Rotation3D.ToRadians(effect.DeformPhase.GetFloat(time)));
         }
 
-        /// <summary>
-        /// 変形で点がはみ出す分を、格子の半分の大きさに足します。
-        /// </summary>
-        /// <remarks>
-        /// 出力画像の大きさはここから決まります。足りないと絵の端が切れ、
-        /// 多すぎると無駄に大きな画像を確保します。切れるほうが困るので、
-        /// 迷ったら大きめに見積もっています。
-        /// </remarks>
         public Vector3 Expand(Vector3 half) => Kind switch
         {
             DeformKind.None => half,
@@ -79,10 +63,8 @@ namespace PixelPoints3D
             _ => Vector3.Max(half, new Vector3(SumOf(Across(half)))),
         };
 
-        /// <summary>軸に沿った成分。</summary>
         private Vector3 Along(Vector3 v) => Axis * Vector3.Dot(Axis, v);
 
-        /// <summary>軸に垂直な成分。</summary>
         private Vector3 Across(Vector3 v) => v - Along(v);
 
         private static float SumOf(Vector3 v) => v.X + v.Y + v.Z;

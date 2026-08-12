@@ -8,9 +8,6 @@ using YukkuriMovieMaker.Commons;
 
 namespace Shape3D
 {
-    /// <summary>
-    /// 3D図形アイテムの描画。3Dプレビューと動画出力の両方から使われます。
-    /// </summary>
     internal sealed class Shape3DSource : Shape3DSourceBase
     {
         private readonly Shape3DParameter parameter;
@@ -39,15 +36,9 @@ namespace Shape3D
             pipeline.Draw(render.Context, constants, item.ToDrawSettings(FaceCulling.Back));
         }
 
-        /// <summary>
-        /// 立方体の一辺の長さ（ワールド単位）。
-        /// </summary>
         private float GetEdgeLength(in FrameContext itemTime)
             => WorldScale.ToWorld(parameter.Size.GetFloat(itemTime));
 
-        /// <summary>
-        /// 大きさと回転を掛けた、この図形だけの変換。
-        /// </summary>
         private Matrix4x4 GetLocalMatrix(in FrameContext itemTime)
             => Matrix4x4.CreateScale(GetEdgeLength(itemTime))
              * Rotation3D.ForObject(
@@ -55,11 +46,6 @@ namespace Shape3D
                    parameter.RotationY.GetFloat(itemTime),
                    parameter.RotationZ.GetFloat(itemTime));
 
-        /// <remarks>
-        /// 回転角は分かっているので、実際に回した範囲を返す。どの向きにも対応できる
-        /// 外接立方体を返すと、辺の長さが最大で √3 ≒ 1.73 倍になり、そのぶん
-        /// 出力画像が無駄に大きくなる。
-        /// </remarks>
         protected override WorldBounds GetWorldBounds(in FrameContext itemTime)
             => WorldBounds.FromCube(1f).Transform(GetLocalMatrix(itemTime));
 

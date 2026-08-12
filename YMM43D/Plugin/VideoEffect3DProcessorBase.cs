@@ -126,15 +126,6 @@ namespace YMM43D.Plugin
             return Neutralize(description.DrawDescription);
         }
 
-        /// <summary>
-        /// YMM4 が画像に掛けようとしている配置を、3D のワールド行列に直します。
-        /// </summary>
-        /// <remarks>
-        /// アイテムのプロパティではなく <c>DrawDescription</c> を使うのが要点です。
-        /// こちらには描画元の都合や前段のエフェクトまで織り込んだ<b>最終的な</b>配置が
-        /// 入っています。たとえば画像アイテムは、実寸と表示したい大きさの差を
-        /// <c>Zoom</c> に載せてきます。
-        /// </remarks>
         private static Matrix4x4 ToWorldPlacement(DrawDescription draw)
         {
             var zoom = draw.Zoom;
@@ -158,18 +149,6 @@ namespace YMM43D.Plugin
             return Matrix4x4.CreateScale(scale) * rotation * translation;
         }
 
-        /// <summary>
-        /// YMM4 に配置させないための <see cref="DrawDescription"/> を作ります。
-        /// </summary>
-        /// <remarks>
-        /// 位置・拡大率・回転・カメラはすべてワールド行列に取り込んで描画済みです。
-        /// あとから打ち消すのではなく、はじめから何もしないよう伝えます。打ち消す方式だと
-        /// 3つを別々の仕組みで相殺することになり、互いの干渉を確かめる術がありません。
-        /// <para>
-        /// 副作用として、このエフェクトより<b>後ろ</b>に置いたエフェクトからは、アイテムの
-        /// 位置や拡大率が既定値に見えます。それらを見るエフェクトは前に置いてください。
-        /// </para>
-        /// </remarks>
         private static DrawDescription Neutralize(DrawDescription draw) => draw with
         {
             Draw = Vector3.Zero,
@@ -179,18 +158,6 @@ namespace YMM43D.Plugin
             Camera = Matrix4x4.Identity,
         };
 
-        /// <summary>
-        /// 前段のエフェクトが作った変換を 3D の形そのものに掛け、後段には渡さないようにします。
-        /// </summary>
-        /// <remarks>
-        /// 「3D回転」や「回り込みカメラ」は <c>DrawDescription.Camera</c> に変換を書き込みます。
-        /// そのまま後段に流すと、YMM4 が出来上がった平らな絵に 2D の変形として掛けてしまい、
-        /// 立体が板のまま歪みます。
-        /// <para>
-        /// 見えるのは自分より<b>前</b>に置かれたエフェクトの分だけです。立体化するエフェクトは、
-        /// カメラ系エフェクトより後ろに置いてください。
-        /// </para>
-        /// </remarks>
         private static void ConsumeCamera(DrawDescription draw, ref Matrix4x4 world)
         {
             if (draw.Camera == Matrix4x4.Identity)
@@ -218,17 +185,6 @@ namespace YMM43D.Plugin
                 Input = null;
         }
 
-        /// <summary>
-        /// 入力画像を 3D 描画用デバイスのテクスチャに焼き込み、実寸を控えます。
-        /// </summary>
-        /// <remarks>
-        /// <b>必ず YMM4 の描画スレッドから、<see cref="Update"/> の中で呼んでください。</b>
-        /// 入力画像の寿命は YMM4 が決めます。設定を続けざまに変えると描画元やエフェクト
-        /// 連鎖が組み直され、その過程で前の画像が破棄されます。破棄の瞬間に別のスレッドが
-        /// 同じ画像を触っていると、解放済みの領域へ飛んで <c>ExecutionEngineException</c>
-        /// でプロセスごと落ちます。<see cref="D2DGate"/> では防げません。あの鍵は
-        /// このプラグインの呼び出し同士を並べるだけで、YMM4 側の破棄は止められません。
-        /// </remarks>
         private void BakeInput()
         {
             if (Input is not { } input)

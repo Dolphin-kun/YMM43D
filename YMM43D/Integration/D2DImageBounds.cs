@@ -55,11 +55,6 @@ namespace YMM43D.Integration
             return Unknown;
         }
 
-        /// <summary>描画範囲として意味のある値かどうかを調べます。</summary>
-        /// <remarks>
-        /// 範囲が確定できない画像には無限大や NaN が返ることがあります。そのまま使うと
-        /// テクスチャの大きさが負や桁外れの値になり、確保の時点で落ちます。
-        /// </remarks>
         private static bool IsUsable(in RawRectF bounds)
             => float.IsFinite(bounds.Left) && float.IsFinite(bounds.Top)
             && float.IsFinite(bounds.Right) && float.IsFinite(bounds.Bottom)

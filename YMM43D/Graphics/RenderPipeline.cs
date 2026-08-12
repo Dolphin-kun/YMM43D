@@ -131,11 +131,6 @@ namespace YMM43D.Graphics
             ResetState(context, settings);
         }
 
-        /// <summary>
-        /// 設定したステートを既定値に戻します。
-        /// このコンテキストは YMM4 本体や他のプラグインの描画とも共有されるため、
-        /// 自分が変更した状態を残さないようにします。
-        /// </summary>
         private static void ResetState(ID3D11DeviceContext context, in DrawSettings settings)
         {
             // テクスチャを SRV に束ねたままにすると、同じテクスチャを次に

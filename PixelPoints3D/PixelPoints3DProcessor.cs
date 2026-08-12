@@ -8,14 +8,8 @@ using YukkuriMovieMaker.Commons;
 
 namespace PixelPoints3D
 {
-    /// <summary>
-    /// 点群3D の描画処理。
-    /// </summary>
     internal sealed class PixelPoints3DProcessor : VideoEffect3DProcessorBase
     {
-        /// <summary>
-        /// 一度に描く点の数の上限。超えると間隔を自動で粗くします。
-        /// </summary>
         private const int MaxPoints = 300_000;
 
         private readonly PixelPoints3DEffect effect;
@@ -28,16 +22,8 @@ namespace PixelPoints3D
             resources = new DeviceResourceCache<GridResources>(device => new GridResources(device));
         }
 
-        /// <summary>点を打つ場所を決めるのに、アイテムの画像そのものが要る。</summary>
         public override bool RequiresMappedTexture => true;
 
-        /// <summary>
-        /// 実寸はワールド行列ではなく、格子の大きさとして自分で扱います。
-        /// </summary>
-        /// <remarks>
-        /// 取り込ませると、格子が縦横で違う倍率に引き伸ばされます。粒が長方形になり、
-        /// 線の太さも向きによって変わってしまいます。
-        /// </remarks>
         public override bool ScalesToInputSize => false;
 
         public override void Draw(in Render3DContext render, DrawContext3D item)
@@ -108,7 +94,6 @@ namespace PixelPoints3D
                 UseSourceColor = source == PointColorSource.Image ? 1f : 0f,
             };
 
-        /// <remarks>色は形ごとに違うので入れません。<see cref="WithColor"/> が差し込みます。</remarks>
         private PointCloudConstants BuildConstants(
             in FrameContext time,
             DrawContext3D item,
@@ -150,13 +135,6 @@ namespace PixelPoints3D
         private static float GetThickness(Animation? pixels, in FrameContext time)
             => pixels is null ? 0f : WorldScale.ToWorld(pixels.GetFloat(time));
 
-        /// <summary>
-        /// カメラの向きを、この形状のローカル座標系に持ち込みます。
-        /// </summary>
-        /// <remarks>
-        /// 粒と線を画面に正対させるのに使います。逆行列が取れない場合（大きさが 0 など）は、
-        /// 正対をあきらめて素直な軸を返します。
-        /// </remarks>
         private static Vector3 GetViewAxis(
             in Render3DContext render,
             in Matrix4x4 world,
@@ -174,7 +152,6 @@ namespace PixelPoints3D
             return localAxis.LengthSquared() > 0f ? Vector3.Normalize(localAxis) : viewAxis;
         }
 
-        /// <summary>格子が占める大きさ（ワールド単位）。</summary>
         private Vector3 GetExtent(in FrameContext time, Vector2 sizePixels) => new(
             WorldScale.ToWorld(sizePixels.X),
             WorldScale.ToWorld(sizePixels.Y),
@@ -188,13 +165,6 @@ namespace PixelPoints3D
                 effect.SpacingZ.GetFloat(time)),
             MaxPoints);
 
-        /// <summary>
-        /// 点群そのものに掛ける、大きさ・回転・位置。
-        /// </summary>
-        /// <param name="centerPixels">
-        /// 入力画像の中心が、アイテムの原点からどれだけずれているか（ピクセル、Y は下が正）。
-        /// 実寸をワールド行列に取り込んでいないぶん、この寄せは自分で行います。
-        /// </param>
         private Matrix4x4 GetLocalMatrix(in FrameContext time, Vector2 centerPixels)
             => Matrix4x4.CreateScale(effect.Scale.GetFloat(time) / 100f)
              * Rotation3D.ForObject(
@@ -239,16 +209,10 @@ namespace PixelPoints3D
             base.Dispose();
         }
 
-        /// <summary>
-        /// デバイス1つ分の資源。格子は分割数が変わったときだけ作り直します。
-        /// </summary>
         private sealed class GridResources(ID3D11Device device) : IDisposable
         {
             private PointGrid? grid;
 
-            /// <remarks>
-            /// 粒・線・面で頂点の並びは同じなので、シェーダーと入力レイアウトは1組で足ります。
-            /// </remarks>
             public RenderPipeline<PointCloudConstants> Pipeline { get; } = new(
                 device, GridVertex.InputElements, new PointCloudMaterial(device));
 

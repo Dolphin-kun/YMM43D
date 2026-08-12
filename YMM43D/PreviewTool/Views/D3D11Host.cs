@@ -140,8 +140,6 @@ namespace YMM43D.PreviewTool.Views
             held.Dispose();
         }
 
-        
-
         private void CreateSwapChain()
         {
             if (device == null || Handle == nint.Zero) return;

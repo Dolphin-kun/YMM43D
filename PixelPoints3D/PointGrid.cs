@@ -8,25 +8,12 @@ using YukkuriMovieMaker.Commons;
 
 namespace PixelPoints3D
 {
-    /// <summary>
-    /// 格子の何番目の点かを表す頂点。
-    /// </summary>
-    /// <remarks>
-    /// 座標は持ちません。実際の位置は頂点シェーダーが格子番号から組み立てます。
-    /// <see cref="Corner"/> と <see cref="Other"/> の使い方は形状ごとに違います。
-    /// <list type="table">
-    /// <item><term>粒</term><description>四隅を <c>Corner</c> の ±1 で表す。<c>Other</c> は自分自身</description></item>
-    /// <item><term>線</term><description><c>Other</c> がもう一方の端。<c>Corner.x</c> の ±1 で太さの左右に開く</description></item>
-    /// <item><term>面</term><description>どちらも使わない</description></item>
-    /// </list>
-    /// </remarks>
     [StructLayout(LayoutKind.Sequential)]
     internal struct GridVertex(Vector3 cell, Vector2 corner, Vector3 other)
     {
         public Vector3 Cell = cell;
         public Vector2 Corner = corner;
 
-        /// <summary>線のもう一方の端。線以外では自分自身と同じ値。</summary>
         public Vector3 Other = other;
 
         public GridVertex(Vector3 cell, Vector2 corner) : this(cell, corner, cell) { }
@@ -41,18 +28,10 @@ namespace PixelPoints3D
         ];
     }
 
-    /// <summary>格子の分割数。</summary>
-    /// <remarks>各方向の「点の個数」であって、区画の数ではありません。</remarks>
     internal readonly record struct GridSize(int X, int Y, int Z)
     {
         public int PointCount => X * Y * Z;
 
-        /// <summary>
-        /// 大きさと間隔から分割数を求めます。上限を超える場合は間隔を粗くして収めます。
-        /// </summary>
-        /// <remarks>
-        /// 切り捨てるのではなく粗くするのは、絵の範囲が変わらないほうが分かりやすいからです。
-        /// </remarks>
         public static GridSize Create(Vector3 sizePixels, Vector3 spacingPixels, int maxPoints)
         {
             var scale = 1f;
@@ -85,25 +64,16 @@ namespace PixelPoints3D
         }
     }
 
-    /// <summary>
-    /// 格子1つ分の、粒・線・面それぞれの形状。
-    /// </summary>
-    /// <remarks>
-    /// 3つとも同じ格子番号を参照するので、作り直すのは分割数が変わったときだけです。
-    /// </remarks>
     internal sealed class PointGrid : IDisposable
     {
         private readonly DisposeCollector disposer = new();
 
         public GridSize Size { get; }
 
-        /// <summary>粒。1点につき四角形1枚。</summary>
         public IMesh Points { get; }
 
-        /// <summary>隣り合う点をつなぐ線。</summary>
         public IMesh? Lines { get; }
 
-        /// <summary>隣り合う4点を埋める三角形。</summary>
         public IMesh? Faces { get; }
 
         public PointGrid(ID3D11Device device, GridSize size)
@@ -150,14 +120,6 @@ namespace PixelPoints3D
             return new GridMesh(device, vertices, indices, PrimitiveTopology.TriangleList);
         }
 
-        /// <remarks>
-        /// 線は <c>LineList</c> ではなく細長い四角形で作ります。D3D11 の線は太さを
-        /// 持てず、常に 1 ピクセルになってしまうためです。
-        /// <para>
-        /// 右・下・奥に加えて、区画の対角線も引きます。面は四角形を三角形2枚に割って
-        /// 張るので、対角線が無いと線と面で形が食い違います。
-        /// </para>
-        /// </remarks>
         private static IMesh? BuildLines(ID3D11Device device, GridSize size)
         {
             // 各点から右・下・奥へ1本ずつ。端の点は伸ばす先が無い。
@@ -268,7 +230,6 @@ namespace PixelPoints3D
 
         public void Dispose() => disposer.Dispose();
 
-        /// <summary>格子番号だけを持つ形状。</summary>
         private sealed class GridMesh : IMesh
         {
             private readonly DisposeCollector disposer = new();
@@ -280,7 +241,6 @@ namespace PixelPoints3D
             public InputElementDescription[] InputElements => GridVertex.InputElements;
             public PrimitiveTopology Topology { get; }
 
-            /// <remarks>点の数は 65536 を軽く超えるため、インデックスは 32 ビット。</remarks>
             public Format IndexFormat => Format.R32_UInt;
 
             public GridMesh(

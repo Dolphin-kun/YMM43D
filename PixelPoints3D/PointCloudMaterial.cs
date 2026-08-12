@@ -6,9 +6,6 @@ using YukkuriMovieMaker.Commons;
 
 namespace PixelPoints3D
 {
-    /// <summary>
-    /// 点群の定数バッファ。HLSL 側の <c>cbuffer</c> 宣言と1対1で対応します。
-    /// </summary>
     [StructLayout(LayoutKind.Sequential)]
     internal struct PointCloudConstants
     {
@@ -16,75 +13,51 @@ namespace PixelPoints3D
 
         public Vector4 Color;
 
-        /// <summary>格子の分割数（点の個数）。</summary>
         public Vector3 GridCount;
 
-        /// <summary>この不透明度に満たない場所には点を打たない。</summary>
         public float Threshold;
 
-        /// <summary>格子が占める大きさ（ワールド単位）。</summary>
         public Vector3 Extent;
 
         public float Opacity;
 
-        /// <summary>ばらつきの最大量（ワールド単位）。</summary>
         public Vector3 Scatter;
 
         public float Seed;
 
-        /// <summary>カメラの右方向を、この形状のローカル座標系に持ち込んだもの。</summary>
         public Vector3 ViewRight;
 
-        /// <summary>粒の一辺の半分（ワールド単位）。</summary>
         public float PointHalfSize;
 
         public Vector3 ViewUp;
 
-        /// <summary>線の太さの半分（ワールド単位）。</summary>
         public float LineHalfWidth;
 
         public Vector3 ViewForward;
 
-        /// <summary>0 以外なら、色の代わりに画像の色を使う。</summary>
         public float UseSourceColor;
 
-        /// <summary>この描画だけに掛かる不透明度。面に指定した値を入れる。</summary>
         public float ExtraOpacity;
 
-        /// <summary>面ごとに不透明度を散らす量（0〜1）。</summary>
         public float OpacityRandomness;
 
-        /// <summary>0 以外なら、粒を四角形ではなく円で描く。</summary>
         public float PointIsRound;
 
         private float padding;
 
-        /// <summary>変形の軸（単位ベクトル）。</summary>
         public Vector3 DeformAxis;
 
-        /// <summary><see cref="PixelPoints3D.DeformKind"/> の値をそのまま入れる。</summary>
         public float DeformKind;
 
-        /// <summary>変形の強さ。種類ごとに単位が違う。<see cref="PointDeform"/> が換算済み。</summary>
         public float DeformAmount;
 
-        /// <summary>波1つ分の長さ（ワールド単位）。</summary>
         public float DeformPeriod;
 
-        /// <summary>波やねじれのずれ（ラジアン）。</summary>
         public float DeformPhase;
 
-        /// <summary>線を引かない割合（0〜1）。線を描くときだけ入れる。</summary>
         public float LineRandomness;
     }
 
-    /// <summary>
-    /// 格子番号から点の位置を組み立て、画像に中身がある場所だけを残すシェーダー。
-    /// </summary>
-    /// <remarks>
-    /// 頂点は座標を持たず、格子の何番目かだけを持ちます。位置・ばらつき・変形は
-    /// すべてここで計算するので、パラメータを動かしてもバッファの作り直しが要りません。
-    /// </remarks>
     internal sealed class PointCloudMaterial : IMaterial
     {
         private readonly DisposeCollector disposer = new();
