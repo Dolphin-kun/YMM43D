@@ -161,16 +161,24 @@ namespace PixelPoints3D
         }
 
         /// <remarks>
+        /// <para>
         /// 線は <c>LineList</c> ではなく細長い四角形で作ります。D3D11 の線は太さを
         /// 持てず、常に 1 ピクセルになってしまうためです。四角形なら太さを指定でき、
         /// 面や粒と同じシェーダーで描けます。
+        /// </para>
+        /// <para>
+        /// 右・下・奥に加えて、区画の対角線も引きます。面は四角形を三角形2枚に割って
+        /// 張るので、対角線が無いと線と面で形が食い違います。
+        /// </para>
         /// </remarks>
         private static IMesh? BuildLines(ID3D11Device device, GridSize size)
         {
             // 各点から右・下・奥へ1本ずつ。端の点は伸ばす先が無い。
+            // 対角線は区画ごとに1本。
             var count = (size.X - 1) * size.Y * size.Z
                       + size.X * (size.Y - 1) * size.Z
-                      + size.X * size.Y * (size.Z - 1);
+                      + size.X * size.Y * (size.Z - 1)
+                      + (size.X - 1) * (size.Y - 1) * size.Z;
 
             if (count <= 0)
                 return null;
@@ -211,6 +219,9 @@ namespace PixelPoints3D
                         if (x + 1 < size.X) Connect(x, y, z, 1, 0, 0);
                         if (y + 1 < size.Y) Connect(x, y, z, 0, 1, 0);
                         if (z + 1 < size.Z) Connect(x, y, z, 0, 0, 1);
+
+                        // 面の分割に合わせた対角線（左上 → 右下）。
+                        if (x + 1 < size.X && y + 1 < size.Y) Connect(x, y, z, 1, 1, 0);
                     }
                 }
             }

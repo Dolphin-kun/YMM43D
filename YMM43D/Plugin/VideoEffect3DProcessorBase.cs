@@ -70,6 +70,24 @@ namespace YMM43D.Plugin
         public virtual bool RequiresMappedTexture => false;
 
         /// <summary>
+        /// 入力画像の実寸をワールド行列に取り込むかどうか。
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// <c>true</c>（既定）のとき、<see cref="Draw"/> に渡るワールド行列は 1×1 の板を
+        /// 入力画像の大きさに広げる変換を含みます。<see cref="GetLocalBounds"/> も
+        /// 1×1 の板を基準に答えてください。立体化3D のように、入力画像をそのまま
+        /// 貼り付ける形状に向いています。
+        /// </para>
+        /// <para>
+        /// <c>false</c> にすると実寸は取り込まれず、すべてワールド単位で扱えます。
+        /// 縦横で倍率が変わらないので、粒や線のように太さを持つものを歪ませずに描けます。
+        /// 実寸は <see cref="TryGetSize"/> で自分で取ってください。
+        /// </para>
+        /// </remarks>
+        protected virtual bool ScalesToInputSize => true;
+
+        /// <summary>
         /// 3D空間に描画します。プレビューと出力の両方から呼ばれます。
         /// </summary>
         public abstract void Draw(in Render3DContext render, DrawContext3D item);
@@ -103,7 +121,7 @@ namespace YMM43D.Plugin
             // プレビュー経路では呼び出し側が実寸をワールド行列に入れてくれるが、
             // 出力経路では自分で入れる必要がある。両者で見た目を揃えるため、
             // ここでも同じ換算を掛ける。
-            var world = TryGetSize(out var size, out var offset)
+            var world = ScalesToInputSize && TryGetSize(out var size, out var offset)
                 ? WorldScale.CreateSizeMatrix(size, offset + size / 2f)
                 : Matrix4x4.Identity;
 

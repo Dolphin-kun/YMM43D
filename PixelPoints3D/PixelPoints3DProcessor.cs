@@ -35,6 +35,15 @@ namespace PixelPoints3D
         /// <summary>点を打つ場所を決めるのに、アイテムの画像そのものが要る。</summary>
         public override bool RequiresMappedTexture => true;
 
+        /// <summary>
+        /// 実寸はワールド行列ではなく、格子の大きさとして自分で扱います。
+        /// </summary>
+        /// <remarks>
+        /// 取り込ませると、格子が縦横で違う倍率に引き伸ばされます。粒が長方形になり、
+        /// 線の太さも向きによって変わってしまいます。
+        /// </remarks>
+        protected override bool ScalesToInputSize => false;
+
         public override void Draw(in Render3DContext render, DrawContext3D item)
         {
             var texture = item.Texture ?? GetTexture(render.Device);
@@ -45,7 +54,7 @@ namespace PixelPoints3D
                 ? FrameContext.FromItem(description)
                 : item.Time;
 
-            if (!TryGetSize(out var sizePixels, out _))
+            if (!TryGetSize(out var sizePixels, out var offsetPixels))
                 return;
 
             var extent = GetExtent(time, sizePixels);
@@ -53,7 +62,7 @@ namespace PixelPoints3D
                 return;
 
             var size = GetGridSize(time, sizePixels);
-            var world = GetLocalMatrix(time) * item.World;
+            var world = GetLocalMatrix(time, offsetPixels + sizePixels / 2f) * item.World;
 
             var shared = resources.Get(render.Device);
             var grid = shared.GetGrid(size);
@@ -155,21 +164,31 @@ namespace PixelPoints3D
                 effect.SpacingZ.GetFloat(time)),
             MaxPoints);
 
-        /// <summary>点群そのものに掛ける、大きさ・回転・位置。</summary>
-        private Matrix4x4 GetLocalMatrix(in FrameContext time)
+        /// <summary>
+        /// 点群そのものに掛ける、大きさ・回転・位置。
+        /// </summary>
+        /// <param name="centerPixels">
+        /// 入力画像の中心が、アイテムの原点からどれだけずれているか（ピクセル、Y は下が正）。
+        /// 実寸をワールド行列に取り込んでいないぶん、この寄せは自分で行います。
+        /// </param>
+        /// <remarks>
+        /// 大きさと回転は点群自身の中心に掛かり、そのあと画像の中心へ寄せてから
+        /// 指定された位置へ動かします。
+        /// </remarks>
+        private Matrix4x4 GetLocalMatrix(in FrameContext time, Vector2 centerPixels)
             => Matrix4x4.CreateScale(effect.Scale.GetFloat(time) / 100f)
              * Rotation3D.ForObject(
                    effect.RotationX.GetFloat(time),
                    effect.RotationY.GetFloat(time),
                    effect.RotationZ.GetFloat(time))
              * Matrix4x4.CreateTranslation(
-                   WorldScale.ToWorld(effect.PositionX.GetFloat(time)),
-                   -WorldScale.ToWorld(effect.PositionY.GetFloat(time)),
+                   WorldScale.ToWorld(effect.PositionX.GetFloat(time) + centerPixels.X),
+                   -WorldScale.ToWorld(effect.PositionY.GetFloat(time) + centerPixels.Y),
                    WorldScale.ToWorld(effect.PositionZ.GetFloat(time)));
 
         protected override WorldBounds GetLocalBounds(in FrameContext itemTime)
         {
-            if (!TryGetSize(out var sizePixels, out _))
+            if (!TryGetSize(out var sizePixels, out var offsetPixels))
                 return WorldBounds.Empty;
 
             var extent = GetExtent(itemTime, sizePixels);
@@ -187,7 +206,8 @@ namespace PixelPoints3D
 
             var half = extent / 2f + margin;
 
-            return new WorldBounds(-half, half).Transform(GetLocalMatrix(itemTime));
+            return new WorldBounds(-half, half)
+                .Transform(GetLocalMatrix(itemTime, offsetPixels + sizePixels / 2f));
         }
 
         public override void Dispose()
