@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Windows.Media;
 using YMM43D.Plugin;
@@ -32,6 +33,7 @@ namespace PixelPoints3D
 
         private const string Grid = "点群3D";
         private const string Shape = "形";
+        private const string Deform = "変形";
         private const string Scatter = "ばらつき";
         private const string Place = "配置";
 
@@ -83,6 +85,50 @@ namespace PixelPoints3D
         [Display(AutoGenerateField = true)]
         public ImmutableList<FaceParams> FaceSettings { get => faceSettings; set => Set(ref faceSettings, value); }
         private ImmutableList<FaceParams> faceSettings = [];
+
+        // 変形
+        [Display(GroupName = Deform, Name = "種類", Description = "点の並びをどう歪ませるか")]
+        [EnumComboBox]
+        public DeformKind DeformKind
+        {
+            get => deformKind;
+            set
+            {
+                Set(ref deformKind, value);
+                OnPropertyChanged(nameof(IsDeformed));
+            }
+        }
+        private DeformKind deformKind = DeformKind.None;
+
+        /// <summary>変形の設定を表示してよいか。</summary>
+        /// <remarks>
+        /// <c>ShowPropertyEditorWhen</c> は「この値のとき」しか書けないため、
+        /// 「なし以外のとき」を表せません。判定をこちらに寄せて、真偽で答えます。
+        /// </remarks>
+        [Browsable(false)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public bool IsDeformed => DeformKind != DeformKind.None;
+
+        [Display(GroupName = Deform, Name = "強さ", Description = "歪ませる量。負にすると逆向きに歪みます")]
+        [AnimationSlider("F0", "%", -100, 100)]
+        [ShowPropertyEditorWhen(nameof(IsDeformed), true)]
+        public Animation DeformAmount { get; } = new(50, -100000, 100000);
+
+        [Display(GroupName = Deform, Name = "向き", Description = "変形の軸。波が進む向き、ねじれの回転軸、球の極になります")]
+        [EnumComboBox]
+        [ShowPropertyEditorWhen(nameof(IsDeformed), true)]
+        public DeformAxis DeformAxis { get => deformAxis; set => Set(ref deformAxis, value); }
+        private DeformAxis deformAxis = DeformAxis.Y;
+
+        [Display(GroupName = Deform, Name = "周期", Description = "波1つ分の長さ")]
+        [AnimationSlider("F0", "px", 10, 1000)]
+        [ShowPropertyEditorWhen(nameof(DeformKind), DeformKind.Wave)]
+        public Animation DeformPeriod { get; } = new(200, 1, 100000);
+
+        [Display(GroupName = Deform, Name = "位相", Description = "波やねじれのずれ。動かすと流れます")]
+        [AnimationSlider("F0", "°", -360, 360)]
+        [ShowPropertyEditorWhen(nameof(IsDeformed), true)]
+        public Animation DeformPhase { get; } = new(0, -360000, 360000);
 
         // ばらつき
         [Display(GroupName = Scatter, Name = "位置X", Description = "横方向へ点をばらつかせる量")]
@@ -164,6 +210,7 @@ namespace PixelPoints3D
         [
             SpacingX, SpacingY, SpacingZ, Depth, Threshold,
             ..PointSettings, ..LineSettings, ..FaceSettings,
+            DeformAmount, DeformPeriod, DeformPhase,
             ScatterX, ScatterY, ScatterZ, Seed,
             PositionX, PositionY, PositionZ, Scale,
             RotationX, RotationY, RotationZ,
@@ -244,6 +291,46 @@ namespace PixelPoints3D
         private Color color = Colors.White;
 
         protected override IEnumerable<IAnimatable> GetAnimatables() => [Opacity, OpacityRandomness];
+    }
+
+    /// <summary>点の並びをどう歪ませるか。</summary>
+    /// <remarks>
+    /// 並び方そのものは平らな格子のままで、位置だけをあとから曲げます。
+    /// 元の絵の形は保たれたまま歪むので、文字や立ち絵の輪郭が分かる状態で
+    /// 立体的に動かせます。
+    /// <para>
+    /// 値はシェーダーへそのまま渡ります。並び順を変えると見た目が変わります。
+    /// </para>
+    /// </remarks>
+    public enum DeformKind
+    {
+        [Display(Name = "なし", Description = "歪ませません")]
+        None,
+
+        [Display(Name = "波", Description = "選んだ軸に沿って進む波で、奥行き方向に押し引きします")]
+        Wave,
+
+        [Display(Name = "ねじれ", Description = "選んだ軸のまわりに、進むほど強くひねります")]
+        Twist,
+
+        [Display(Name = "膨らみ", Description = "軸の中心ほど大きく持ち上げて、丸く盛り上げます")]
+        Bulge,
+
+        [Display(Name = "球に巻く", Description = "平らな並びを、選んだ軸を極とする球の面に貼り付けます")]
+        Sphere,
+    }
+
+    /// <summary>変形の軸。</summary>
+    public enum DeformAxis
+    {
+        [Display(Name = "X軸", Description = "横")]
+        X,
+
+        [Display(Name = "Y軸", Description = "縦")]
+        Y,
+
+        [Display(Name = "Z軸", Description = "奥行き")]
+        Z,
     }
 
     /// <summary>粒の形。</summary>

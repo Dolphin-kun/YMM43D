@@ -124,9 +124,17 @@ namespace PixelPoints3D
             GridSize size,
             Vector3 extent)
         {
+            var deform = PointDeform.Create(effect, time, extent);
+
             // 色は形ごとに違うので、ここでは入れない。WithColor が差し込む。
             return new PointCloudConstants
             {
+                DeformAxis = deform.Axis,
+                DeformKind = (float)deform.Kind,
+                DeformAmount = deform.Amount,
+                DeformPeriod = deform.Period,
+                DeformPhase = deform.Phase,
+
                 WorldViewProjection = Matrix4x4.Transpose(render.GetWorldViewProjection(world)),
                 GridCount = new Vector3(size.X, size.Y, size.Z),
                 Threshold = Math.Clamp(effect.Threshold.GetFloat(time) / 100f, 0f, 1f),
@@ -228,7 +236,9 @@ namespace PixelPoints3D
                 WorldScale.ToWorld(effect.ScatterZ.GetFloat(itemTime)))
                 + new Vector3(WorldScale.ToWorld(thickness) / 2f);
 
-            var half = extent / 2f + margin;
+            // 変形は格子の位置に掛かるので、ばらつきや太さより先に広げる。
+            // 描画先の大きさはここで決まるため、見落とすと絵の端が切れる。
+            var half = PointDeform.Create(effect, itemTime, extent).Expand(extent / 2f) + margin;
 
             return new WorldBounds(-half, half)
                 .Transform(GetLocalMatrix(itemTime, offsetPixels + sizePixels / 2f));

@@ -64,6 +64,23 @@ namespace PixelPoints3D
         public float PointIsRound;
 
         private float padding;
+
+        /// <summary>変形の軸（単位ベクトル）。</summary>
+        public Vector3 DeformAxis;
+
+        /// <summary>変形の種類。<see cref="PixelPoints3D.DeformKind"/> の値をそのまま入れる。</summary>
+        public float DeformKind;
+
+        /// <summary>変形の強さ。種類ごとに単位が違う。<see cref="PointDeform"/> が換算済み。</summary>
+        public float DeformAmount;
+
+        /// <summary>波1つ分の長さ（ワールド単位）。</summary>
+        public float DeformPeriod;
+
+        /// <summary>波やねじれのずれ（ラジアン）。</summary>
+        public float DeformPhase;
+
+        private float padding2;
     }
 
     /// <summary>
@@ -108,7 +125,15 @@ namespace PixelPoints3D
                 float  OpacityRandomness;
                 float  PointIsRound;
                 float  Padding;
+                float3 DeformAxis;
+                float  DeformKind;
+                float  DeformAmount;
+                float  DeformPeriod;
+                float  DeformPhase;
+                float  Padding2;
             };
+
+            static const float Pi = 3.14159265;
 
             struct VS_INPUT
             {
@@ -146,6 +171,71 @@ namespace PixelPoints3D
                 return GridCount > 1.5 ? cell / max(GridCount - 1.0, 1.0) : 0.5;
             }
 
+            // 点の並びを三次元的に歪ませる。
+            //
+            // 種類ごとの「強さ」の換算は PointDeform が済ませてあるので、ここでは
+            // ワールド単位・ラジアン・比率をそのまま使う。
+            //
+            // 線や面もこの結果を通るので、曲げても点と辺の対応は崩れない。
+            // 端点それぞれを歪ませてから結ぶためで、辺は折れ線として素直に追従する。
+            float3 Deform(float3 p)
+            {
+                if (DeformKind < 0.5)
+                    return p;
+
+                // 選んだ軸に沿った位置と、その向きの格子の半分の長さ。
+                float along = dot(p, DeformAxis);
+                float halfSpan = max(dot(abs(DeformAxis), Extent) * 0.5, 1e-4);
+
+                // 軸に垂直な成分。ねじれと膨らみで使う。
+                float3 across = p - DeformAxis * along;
+
+                if (DeformKind < 1.5)
+                {
+                    // 波。選んだ軸に沿って進み、奥行き方向に押し引きする。
+                    // 軸に奥行きを選んだときだけ、代わりに横方向へ押し引きする。
+                    float3 side = abs(DeformAxis.z) > 0.5 ? float3(1, 0, 0) : float3(0, 0, 1);
+
+                    return p + side * (DeformAmount * sin(2.0 * Pi * along / DeformPeriod + DeformPhase));
+                }
+
+                if (DeformKind < 2.5)
+                {
+                    // ねじれ。軸に沿って進むほど、軸のまわりに大きく回す。
+                    float angle = DeformAmount * (along / halfSpan) + DeformPhase;
+
+                    return DeformAxis * along
+                         + across * cos(angle)
+                         + cross(DeformAxis, across) * sin(angle);
+                }
+
+                if (DeformKind < 3.5)
+                {
+                    // 膨らみ。軸から遠いほど控えめに、中心ほど大きく軸の向きへ持ち上げる。
+                    float limit = max(length(Extent - abs(DeformAxis) * Extent) * 0.5, 1e-4);
+                    float ratio = saturate(length(across) / limit);
+
+                    return p + DeformAxis * (DeformAmount * (1.0 - ratio * ratio));
+                }
+
+                // 球に巻く。選んだ軸を極にして、平らな並びを球の面へ移す。
+                // 軸に沿った位置が緯度、軸に垂直な1方向が経度、残る1方向が半径のずれ
+                // になる。奥行きを持たせた格子は、入れ子の球殻として並ぶ。
+                float3 east = abs(DeformAxis.x) > 0.5 ? float3(0, 0, 1) : float3(1, 0, 0);
+                float3 up = cross(DeformAxis, east);
+
+                float halfEast = max(dot(abs(east), Extent) * 0.5, 1e-4);
+
+                float longitude = clamp(dot(p, east) / halfEast, -1.0, 1.0) * Pi + DeformPhase;
+                float latitude = clamp(along / halfSpan, -1.0, 1.0) * (Pi * 0.5);
+                float radius = halfEast + dot(p, up);
+
+                float3 sphere = DeformAxis * (radius * sin(latitude))
+                              + (east * cos(longitude) + up * sin(longitude)) * (radius * cos(latitude));
+
+                return lerp(p, sphere, DeformAmount);
+            }
+
             // 格子番号から、ばらつきまで含めた点の位置を求める。
             float3 Place(float3 cell)
             {
@@ -157,7 +247,9 @@ namespace PixelPoints3D
                     -(ratio.y - 0.5) * Extent.y,
                      (ratio.z - 0.5) * Extent.z);
 
-                return local + Hash(cell) * Scatter;
+                // ばらつきは変形のあとに足す。先に足すと、散らばりまで一緒に
+                // 曲げられて、量が場所によって変わってしまう。
+                return Deform(local) + Hash(cell) * Scatter;
             }
 
             PS_INPUT VSMain(VS_INPUT input)
