@@ -26,8 +26,10 @@
                 <TextBlock Text="回転角 (Roll)" FontSize="11" Margin="0,5,0,2"/>
                 <c:AnimationSlider Animation="{Binding Camera.Roll}" DefaultMin="-3600" DefaultMax="3600" DefaultValue="0"/>
                 
-                <TextBlock Text="距離 (Distance)" FontSize="11" Margin="0,5,0,2"/>
+                <TextBlock Text="遠近の強さ (Distance)" FontSize="11" Margin="0,5,0,2"/>
                 <c:AnimationSlider Animation="{Binding Camera.Distance}" DefaultMin="0.1" DefaultMax="1000" DefaultValue="10"/>
+                <TextBlock Text="寄り引きではありません。注視点の面にあるものは大きさが変わらず、手前と奥の差だけが変わります。"
+                           FontSize="10" Opacity="0.6" TextWrapping="Wrap" Margin="0,2,0,0"/>
                 
                 <Button Content="カメラをリセット" 
                         Command="{Binding ResetCameraCommand}" 
