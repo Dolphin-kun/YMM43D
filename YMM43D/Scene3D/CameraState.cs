@@ -8,9 +8,8 @@ namespace YMM43D.Scene3D
     /// <remarks>
     /// カメラは注視点のまわりを回る軌道カメラです。角度と距離と注視点が決まれば
     /// 姿勢が決まるので、キーフレームから取り出した「その瞬間の値」をこの形にして
-    /// 受け渡します。<see cref="SceneCamera"/> のようなオブジェクトを持ち回らないので、
-    /// タイムライン上のカメラアイテムから読んでも、プレビュー専用の視点から作っても
-    /// 同じように扱えます。
+    /// 受け渡します。タイムライン上のカメラアイテムから読んでも、プレビュー専用の
+    /// 視点から作っても同じように扱えます。
     /// </remarks>
     /// <param name="Yaw">水平方向の回転角（度）。</param>
     /// <param name="Pitch">垂直方向の回転角（度）。</param>
@@ -54,5 +53,17 @@ namespace YMM43D.Scene3D
                 && MathF.Abs(Distance - other.Distance) < Epsilon
                 && Vector3.DistanceSquared(Target, other.Target) < Epsilon * Epsilon;
         }
+    }
+
+    /// <summary>
+    /// ある時点におけるカメラの姿勢。
+    /// </summary>
+    public readonly record struct CameraPose(Vector3 Position, Vector3 Target, Vector3 Up, Matrix4x4 Rotation)
+    {
+        /// <summary>この姿勢に対応するビュー行列。</summary>
+        public Matrix4x4 ViewMatrix => Matrix4x4.CreateLookAt(Position, Target, Up);
+
+        /// <summary>カメラそのものを 3D 空間に描くためのワールド行列。</summary>
+        public Matrix4x4 WorldMatrix => Rotation * Matrix4x4.CreateTranslation(Position);
     }
 }

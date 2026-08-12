@@ -48,7 +48,7 @@ namespace YMM43D.Scene3D
                       * Matrix3x2.CreateScale(2f / width, -2f / height)
                       * Matrix3x2.CreateTranslation(-1f, 1f);
 
-            return SceneCamera.GetTangentProjection() * Lift(tangentToImage * toNdc);
+            return SceneProjection.GetTangentProjection() * Lift(tangentToImage * toNdc);
         }
 
         private static Matrix4x4 Lift(in Matrix3x2 affine) => new(

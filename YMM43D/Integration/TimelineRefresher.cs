@@ -48,8 +48,8 @@ namespace YMM43D.Integration
         /// タイムラインに対応する共有の <see cref="TimelineRefresher"/> を返します。
         /// </summary>
         /// <remarks>
-        /// 3Dプレビューと3Dプレビュー設定は同時に開けます。別々に持たせると、
-        /// 1回のカメラ操作に対して両方が描き直しを促し、費用が倍になります。
+        /// 3Dプレビューは同時に何枚も開けます。別々に持たせると、1回のカメラ操作に
+        /// 対して全部が描き直しを促し、費用が枚数ぶんに膨らみます。
         /// </remarks>
         public static TimelineRefresher For(Timeline timeline) => shared.GetOrAdd(timeline.ID, _ => new TimelineRefresher());
 
@@ -61,11 +61,9 @@ namespace YMM43D.Integration
         /// 呼び出し側は、値が変わったかどうかを気にせず定期的に呼んでください。
         /// </remarks>
         /// <returns>実際に再描画を促した場合は <c>true</c>。</returns>
-        public bool RefreshIfCameraChanged(Timeline timeline, SceneCamera fallback)
+        public bool RefreshIfCameraChanged(Timeline timeline)
         {
-            // カメラアイテムを置いていればその値、無ければ既定カメラの値を見る。
-            // どちらで動かしても描き直しが要るのは同じ。
-            if (tracker.HasChanged(SceneCameraResolver.Resolve(timeline, fallback)))
+            if (tracker.HasChanged(SceneCameraResolver.Resolve(timeline)))
                 isPending = true;
 
             if (!isPending)
@@ -104,14 +102,14 @@ namespace YMM43D.Integration
         /// これも間引きの対象です。ドラッグ中はマウスが動くたびに呼ばれるため、
         /// そのまま流すとシーンの描き直しが追いつきません。
         /// </remarks>
-        public void ForceRefresh(Timeline timeline, SceneCamera fallback)
+        public void ForceRefresh(Timeline timeline)
         {
             // 今の値を基準として記録しておかないと、次の
             // RefreshIfCameraChanged が同じ変化をもう一度拾ってしまう。
-            tracker.Sync(SceneCameraResolver.Resolve(timeline, fallback));
+            tracker.Sync(SceneCameraResolver.Resolve(timeline));
             isPending = true;
 
-            RefreshIfCameraChanged(timeline, fallback);
+            RefreshIfCameraChanged(timeline);
         }
 
         /// <summary>現在のタイムライン位置を表す <see cref="FrameContext"/>。</summary>

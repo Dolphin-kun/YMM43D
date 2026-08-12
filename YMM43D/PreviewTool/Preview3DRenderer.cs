@@ -53,7 +53,7 @@ namespace YMM43D.PreviewTool
 
             // 画角はシーンカメラの距離と動画の画面の高さで決まる。プレビュー用の
             // 視点をどこへ動かしても、写り方の縮尺は出力と揃う。
-            var projection = SceneCamera.GetProjectionMatrix(
+            var projection = SceneProjection.GetProjectionMatrix(
                 (float)width / Math.Max(1, height),
                 scene.ScreenHeight,
                 scene.SceneCameraDistance);

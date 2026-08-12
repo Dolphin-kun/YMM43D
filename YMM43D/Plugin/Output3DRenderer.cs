@@ -65,7 +65,7 @@ namespace YMM43D.Plugin
             // カメラアイテムがあればそれを、無ければ既定のカメラを使う。
             var camera = SceneCameraResolver.Resolve(description);
             var view = camera.GetPose().ViewMatrix;
-            var pixelsPerTangent = SceneCamera.GetPixelsPerTangent(camera.Distance);
+            var pixelsPerTangent = SceneProjection.GetPixelsPerTangent(camera.Distance);
 
             // シーン内での自分の居場所と、他の 3D 物体を調べる。
             var scene = SceneDepthCollector.Collect(description, self);

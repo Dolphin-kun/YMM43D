@@ -213,7 +213,7 @@ YMM43D.PreviewTool   3Dプレビューのツールウィンドウ。</pre>
 
 <p>
 画角は固定値ではなく、<b>注視点の面（Z = 0）が画面とちょうど 1 対 1 で対応するように</b>
-<code>SceneCamera.GetFieldOfView(screenHeight, distance)</code> が決めます。1080px・距離 10 なら 56.7 度です。
+<code>SceneProjection.GetFieldOfView(screenHeight, distance)</code> が決めます。1080px・距離 10 なら 56.7 度です。
 このため、Z = 0 に置いたアイテムは YMM4 が 2D で描く位置・大きさと一致します。
 </p>
 
@@ -225,8 +225,8 @@ YMM43D.PreviewTool   3Dプレビューのツールウィンドウ。</pre>
 <table>
 <tr><th>式</th><th>意味</th></tr>
 <tr><td><code>WorldScale.PixelsPerUnit</code></td><td>100。ワールド 1 単位 = 100 ピクセル</td></tr>
-<tr><td><code>SceneCamera.GetPixelsPerTangent(distance)</code></td><td>視線からの傾き 1 あたりのピクセル数。<code>PixelsPerUnit × distance</code></td></tr>
-<tr><td><code>SceneCamera.GetTangentProjection()</code></td><td>除算後の x・y が傾きそのものになる射影。2D 側の変換を後から掛けるための土台</td></tr>
+<tr><td><code>SceneProjection.GetPixelsPerTangent(distance)</code></td><td>視線からの傾き 1 あたりのピクセル数。<code>PixelsPerUnit × distance</code></td></tr>
+<tr><td><code>SceneProjection.GetTangentProjection()</code></td><td>除算後の x・y が傾きそのものになる射影。2D 側の変換を後から掛けるための土台</td></tr>
 </table>
 
 <h2 id="shape">4. 3D図形アイテムを作る</h2>
@@ -657,7 +657,9 @@ var pipeline = pipelines.Get(render.Device);</pre>
 
 <table>
 <tr><th>型</th><th>種別</th><th>説明</th></tr>
-<tr><td><code>SceneCamera</code></td><td>class</td><td>シーンを撮影する軌道カメラ。角度・距離はキーフレーム可能</td></tr>
+<tr><td><code>SceneProjection</code></td><td>static class</td><td>シーンを画面に写す射影。クリップ面と画角の決め方</td></tr>
+<tr><td><code>CameraState</code></td><td>struct</td><td>ある瞬間のカメラの設定値（角度・距離・注視点）</td></tr>
+<tr><td><code>CameraMove</code></td><td>struct</td><td>カメラをどれだけ動かすかの差分。ドラッグ操作を伝えるのに使う</td></tr>
 <tr><td><code>CameraPose</code></td><td>struct</td><td>ある時点でのカメラの位置・注視点・上方向</td></tr>
 <tr><td><code>WorldBounds</code></td><td>struct</td><td>描くものがワールド空間で占める範囲。出力画像の大きさを決めるのに使う</td></tr>
 <tr><td><code>WorldScale</code></td><td>static class</td><td>ピクセルとワールド単位の換算（1 単位 = 100px）</td></tr>
@@ -667,7 +669,6 @@ var pipeline = pipelines.Get(render.Device);</pre>
 <tr><td><code>FrameContext</code></td><td>struct</td><td>フレーム位置・長さ・FPS の組</td></tr>
 <tr><td><code>AnimationExtensions</code></td><td>static class</td><td><code>Animation</code> を <code>FrameContext</code> で評価する</td></tr>
 <tr><td><code>Rotation3D</code></td><td>static class</td><td>度からの回転行列の生成</td></tr>
-<tr><td><code>ProjectionType</code></td><td>enum</td><td><code>Perspective</code> / <code>Orthographic</code></td></tr>
 </table>
 
 <h4>DrawContext3D</h4>
@@ -730,7 +731,7 @@ double raw = parameter.Size.GetValue(item.Time);</pre>
 <tr><td><code>D2DImageBounds</code></td><td>画像の描画範囲を調べる</td></tr>
 <tr><td><code>ItemPlacement</code></td><td>アイテムの設定から 3D の配置行列と <code>ScreenPlacement</code> を作る</td></tr>
 <tr><td><code>SceneDepthCollector</code></td><td>シーン内の他の 3D 物体を集める。アイテムをまたいだ前後関係に使う</td></tr>
-<tr><td><code>SceneCameraRegistry</code></td><td>シーンごとのカメラを保持する</td></tr>
+<tr><td><code>SceneCameraResolver</code></td><td>その時刻に効いているカメラアイテムを探し、設定値を返す</td></tr>
 <tr><td><code>TimelineRefresher</code></td><td>カメラが動いたときに標準プレビューの再描画を促す</td></tr>
 </table>
 

@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
 using Vortice.Direct3D11;
+using YMM43D.Camera;
 using YMM43D.Integration;
 using YMM43D.Plugin;
 using YMM43D.PreviewTool.Views;
@@ -18,6 +19,9 @@ namespace YMM43D.PreviewTool.ViewModels
 {
     public class Preview3DViewModel : Bindable, ITimelineToolViewModel, IDisposable
     {
+        /// <summary>カメラアイテムを置くときの既定の長さ（秒）。</summary>
+        private const int DefaultCameraSeconds = 5;
+
         private readonly DisposeCollector disposer = new();
         private readonly Preview3DRenderer renderer = new();
         private readonly FreeCameraController freeCamera = new();
@@ -25,27 +29,13 @@ namespace YMM43D.PreviewTool.ViewModels
         private TimelineRefresher? refresher;
         private Timeline? timeline;
         private TimelineToolInfo? toolInfo;
-        private SceneCamera sceneCamera = new();
         private D3D11Host? d3dHost;
         private Scene? scene;
         private TimelineSourceAndDevices? sourceAndDevices;
         private TimelineSourceDescription? sourceDescription;
         private List<PreviewItem> previewItems = [];
+        private bool drivesSceneCamera = true;
         private bool isDisposed;
-
-        public SceneCamera SceneCamera
-        {
-            get => sceneCamera;
-            private set
-            {
-                if (ReferenceEquals(sceneCamera, value))
-                    return;
-
-                sceneCamera.PropertyChanged -= OnSceneCameraPropertyChanged;
-                Set(ref sceneCamera, value, nameof(SceneCamera));
-                sceneCamera.PropertyChanged += OnSceneCameraPropertyChanged;
-            }
-        }
 
         public D3D11Host? D3DHost
         {
@@ -53,16 +43,34 @@ namespace YMM43D.PreviewTool.ViewModels
             private set => Set(ref d3dHost, value, nameof(D3DHost));
         }
 
+        /// <summary>
+        /// <c>true</c> のとき、プレビュー上のドラッグがカメラアイテムを直接動かします。
+        /// <c>false</c> のときは見る位置だけが動き、出力には影響しません。
+        /// </summary>
+        public bool DrivesSceneCamera
+        {
+            get => drivesSceneCamera;
+            set
+            {
+                if (!Set(ref drivesSceneCamera, value, nameof(DrivesSceneCamera)))
+                    return;
+
+                freeCamera.Invalidate();
+            }
+        }
+
+        /// <summary>カメラアイテムを置ける状態かどうか。</summary>
+        public bool CanAddCamera => timeline is not null;
+
         public ICommand ResetToSceneCameraCommand { get; }
+        public ICommand AddCameraCommand { get; }
 
         public Preview3DViewModel()
         {
             disposer.Collect(renderer);
 
             ResetToSceneCameraCommand = new ActionCommand(_ => true, _ => ResetToSceneCamera());
-
-            sceneCamera.PropertyChanged += OnSceneCameraPropertyChanged;
-            disposer.CollectAction(this, () => sceneCamera.PropertyChanged -= OnSceneCameraPropertyChanged);
+            AddCameraCommand = new ActionCommand(_ => CanAddCamera, _ => AddCamera());
         }
 
         public void SetTimelineToolInfo(TimelineToolInfo info)
@@ -76,11 +84,12 @@ namespace YMM43D.PreviewTool.ViewModels
 
             toolInfo = info;
             timeline = info.Timeline;
+            OnPropertyChanged(nameof(CanAddCamera));
+
             if (timeline is null)
                 return;
 
             scene = info.Scenes?.AllScenes.FirstOrDefault(s => s.Timeline == timeline);
-            SceneCamera = SceneCameraRegistry.Get(timeline.ID);
             refresher = TimelineRefresher.For(timeline);
             UpdateSourceDescription();
 
@@ -119,28 +128,45 @@ namespace YMM43D.PreviewTool.ViewModels
             UpdatePreviewItems();
         }
 
+        /// <summary>見る位置を、いまシーンを撮っているカメラに戻します。</summary>
         public void ResetToSceneCamera()
         {
-            if (timeline is null)
-                return;
-
             freeCamera.Invalidate();
             freeCamera.EnsureInitialized(ResolveCamera());
         }
 
         /// <summary>
-        /// いまシーンを撮っているカメラ。カメラアイテムがあればその値になります。
+        /// いまの再生位置に、3Dカメラのアイテムを置きます。
         /// </summary>
-        private CameraState ResolveCamera()
-            => timeline is null
-                ? CameraState.Default
-                : SceneCameraResolver.Resolve(timeline, sceneCamera);
-
-        private void OnSceneCameraPropertyChanged(object? sender, PropertyChangedEventArgs e)
+        /// <remarks>
+        /// 空いているレイヤーを下から探します。<c>TryAddItems</c> は他のアイテムと
+        /// 重なると失敗するので、置けるまで順に試します。
+        /// </remarks>
+        public void AddCamera()
         {
-            if (e.PropertyName == nameof(SceneCamera.IsControlledByPreviewDrag) && sceneCamera.IsControlledByPreviewDrag)
-                ResetToSceneCamera();
+            if (timeline is null)
+                return;
+
+            var fps = Math.Max(1, timeline.VideoInfo.FPS);
+            var frame = timeline.CurrentFrame;
+
+            for (var layer = 0; layer <= timeline.MaxLayer + 1; layer++)
+            {
+                var item = new CameraItem
+                {
+                    Frame = frame,
+                    Length = Math.Min(fps * DefaultCameraSeconds, Math.Max(1, timeline.Length - frame)),
+                    Layer = layer,
+                };
+
+                if (timeline.TryAddItems([item], frame, layer, true))
+                    return;
+            }
         }
+
+        /// <summary>いまシーンを撮っているカメラ。アイテムが無ければ既定のカメラ。</summary>
+        private CameraState ResolveCamera()
+            => timeline is null ? CameraState.Default : SceneCameraResolver.Resolve(timeline);
 
         private void OnTimelinePropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
@@ -155,12 +181,11 @@ namespace YMM43D.PreviewTool.ViewModels
             if (d3dHost is null || timeline is null)
                 return;
 
-            // シーンカメラがキーフレームで動いた場合、YMM4 の標準プレビューは
-            // 自力では更新されないため、変化を検知して描き直しを促す。
-            if (sceneCamera.IsControlledByPreviewDrag)
+            // カメラを直接動かしているあいだは、見る位置もカメラに追従させる。
+            if (drivesSceneCamera)
                 freeCamera.Invalidate();
 
-            refresher?.RefreshIfCameraChanged(timeline, sceneCamera);
+            refresher?.RefreshIfCameraChanged(timeline);
 
             UpdatePreviewItems();
             d3dHost.RenderFrame();
@@ -196,17 +221,24 @@ namespace YMM43D.PreviewTool.ViewModels
             if (timeline is null)
                 return;
 
-            freeCamera.EnsureInitialized(ResolveCamera());
+            // カメラを直接動かす場合の基準は、いま効いているカメラアイテムの値。
+            // 平行移動の向きと大きさがそこから決まる。
+            var active = drivesSceneCamera ? SceneCameraResolver.Find(timeline) : null;
+            var basis = active is { } found ? found.Camera.GetState(found.ItemTime) : freeCamera.State;
 
-            if (!freeCamera.HandleMouse(position, kind, delta))
+            freeCamera.EnsureInitialized(basis);
+
+            if (freeCamera.HandleMouse(position, kind, delta, basis) is not { } move || move.IsZero)
                 return;
 
-            // シーンカメラを直接操作している場合だけ、視点の変化を出力側に反映する。
-            if (!sceneCamera.IsControlledByPreviewDrag)
+            if (active is not { } target)
+            {
+                freeCamera.Apply(move);
                 return;
+            }
 
-            freeCamera.ApplyTo(sceneCamera);
-            refresher?.ForceRefresh(timeline, sceneCamera);
+            target.Camera.Move(move);
+            refresher?.ForceRefresh(timeline);
         }
 
         private void UpdateSourceDescription()
@@ -238,7 +270,6 @@ namespace YMM43D.PreviewTool.ViewModels
             var visible = items
                 .OfType<IVideoItem>()
                 .Where(item => frame >= item.Frame && frame < item.Frame + item.Length)
-                .Where(item => !IsCamera(item))
                 .OrderBy(item => item.Layer);
 
             foreach (var item in visible)
@@ -249,16 +280,6 @@ namespace YMM43D.PreviewTool.ViewModels
 
             previewItems = updated;
         }
-
-        /// <summary>
-        /// カメラアイテムは撮る側なので、被写体として並べません。
-        /// </summary>
-        /// <remarks>
-        /// 並べると、何も描かない板として既定の描画方法に回されます。絵は出ませんが
-        /// 無駄に描画元を作ることになります。カメラの位置はガイドで表示されます。
-        /// </remarks>
-        private static bool IsCamera(IVideoItem item)
-            => item is ShapeItem shape && shape.ShapeParameter is ISceneCameraSource;
 
         private IEnumerable<I3DProvider> FindProviders(IVideoItem item)
         {

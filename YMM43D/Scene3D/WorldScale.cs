@@ -17,6 +17,9 @@ namespace YMM43D.Scene3D
         /// <summary>ピクセル単位の長さをワールド単位に直します。</summary>
         public static float ToWorld(float pixels) => pixels / PixelsPerUnit;
 
+        /// <summary>ワールド単位の長さをピクセル単位に直します。</summary>
+        public static float ToPixels(float units) => units * PixelsPerUnit;
+
         /// <summary>
         /// ピクセル単位の実寸と中心位置から、1×1 の板を実際の大きさ・位置に置く行列を作ります。
         /// </summary>

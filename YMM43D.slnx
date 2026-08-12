@@ -1,5 +1,4 @@
 <Solution>
-  <Project Path="Camera3D/Camera3D.csproj" />
   <Project Path="Extrusion3D/Extrusion3D.csproj" Id="70922751-6f3e-4d71-be67-e3e3b4e689c1" />
   <Project Path="PixelPoints3D/PixelPoints3D.csproj" />
   <Project Path="Shape3D/Shape3D.csproj" Id="5d846011-b892-433b-8395-7cc6172ee973" />

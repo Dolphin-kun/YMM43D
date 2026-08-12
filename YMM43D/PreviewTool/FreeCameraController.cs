@@ -1,114 +1,121 @@
 using System.Numerics;
 using System.Windows;
-using YMM43D.Scene3D;
 using YMM43D.PreviewTool.Views;
-using YukkuriMovieMaker.Commons;
+using YMM43D.Scene3D;
 
 namespace YMM43D.PreviewTool
 {
+    /// <summary>
+    /// プレビュー上のマウス操作を、カメラをどう動かすかに翻訳します。
+    /// </summary>
+    /// <remarks>
+    /// 返す差分は、プレビュー専用の視点にも、タイムラインのカメラアイテムにも
+    /// そのまま使えます。ドラッグを絶対値ではなく差分として扱うのは、キーフレームを
+    /// 打ったカメラを壊さずに動かせるようにするためです。
+    /// </remarks>
     internal sealed class FreeCameraController
     {
         private const float RotateSpeed = 0.5f;
         private const float PanSpeed = 0.0015f;
         private const float ZoomSpeed = 0.005f;
-        private const float MinDistance = 0.1f;
-        private const float MaxPitch = 89.9f;
 
         private enum DragMode { None, Rotate, Pan }
 
-        private float yaw;
-        private float pitch;
-        private float roll;
-        private float distance = 10f;
-        private Vector3 target = Vector3.Zero;
-
+        private CameraState state = CameraState.Default;
         private bool initialized;
         private DragMode drag;
         private Point lastMousePosition;
 
+        /// <summary>プレビュー専用の視点。</summary>
+        public CameraState State => state;
+
+        /// <summary>まだ同期していなければ、シーンのカメラに合わせます。</summary>
         public void EnsureInitialized(in CameraState camera)
         {
             if (initialized)
                 return;
 
-            yaw = camera.Yaw;
-            pitch = camera.Pitch;
-            roll = camera.Roll;
-            distance = camera.Distance;
-            target = camera.Target;
+            state = camera;
             initialized = true;
         }
 
+        /// <summary>次の機会にシーンのカメラへ合わせ直させます。</summary>
         public void Invalidate() => initialized = false;
 
-        public CameraPose GetPose() => new CameraState(yaw, pitch, roll, distance, target).GetPose();
+        /// <summary>プレビュー専用の視点の姿勢。</summary>
+        public CameraPose GetPose() => state.GetPose();
 
-        public void ApplyTo(SceneCamera camera)
-        {
-            if (!initialized)
-                return;
+        /// <summary>差分をプレビュー専用の視点に効かせます。</summary>
+        public void Apply(in CameraMove move) => state = move.ApplyTo(state);
 
-            camera.Yaw.CopyFrom(new Animation(yaw, -3600, 3600));
-            camera.Pitch.CopyFrom(new Animation(pitch, -90, 90));
-            camera.Roll.CopyFrom(new Animation(roll, -3600, 3600));
-            camera.Distance.CopyFrom(new Animation(distance, MinDistance, 1000));
-            camera.Target = target;
-        }
-
-        public bool HandleMouse(Point position, D3D11Host.MouseEventKind kind, int delta)
+        /// <summary>
+        /// マウス操作を差分に翻訳します。動かす量が無ければ <c>null</c> を返します。
+        /// </summary>
+        /// <param name="basis">
+        /// いま動かそうとしているカメラの設定値。平行移動の向きと大きさを決めるのに
+        /// 使います。プレビュー専用の視点を動かすならその値、カメラアイテムを動かす
+        /// ならそちらの値を渡してください。
+        /// </param>
+        public CameraMove? HandleMouse(
+            Point position, D3D11Host.MouseEventKind kind, int delta, in CameraState basis)
         {
             switch (kind)
             {
                 case D3D11Host.MouseEventKind.Down:
                     lastMousePosition = position;
                     drag = DragMode.Rotate;
-                    return false;
+                    return null;
 
                 case D3D11Host.MouseEventKind.RightDown:
                     lastMousePosition = position;
                     drag = DragMode.Pan;
-                    return false;
+                    return null;
 
                 case D3D11Host.MouseEventKind.Up:
                 case D3D11Host.MouseEventKind.RightUp:
                     drag = DragMode.None;
-                    return true;
+                    return null;
 
                 case D3D11Host.MouseEventKind.Move:
                     var difference = position - lastMousePosition;
                     lastMousePosition = position;
-                    return ApplyDrag(difference);
+                    return GetDragMove(difference, basis);
 
                 case D3D11Host.MouseEventKind.Wheel:
-                    distance = Math.Max(MinDistance, distance - delta * ZoomSpeed);
-                    return true;
+                    return new CameraMove(0f, 0f, 0f, -delta * ZoomSpeed, Vector3.Zero);
 
                 default:
-                    return false;
+                    return null;
             }
         }
 
-        private bool ApplyDrag(System.Windows.Vector difference)
+        /// <summary>ドラッグしている最中かどうか。</summary>
+        public bool IsDragging => drag != DragMode.None;
+
+        private CameraMove? GetDragMove(System.Windows.Vector difference, CameraState basis)
         {
             switch (drag)
             {
                 case DragMode.Rotate:
-                    yaw -= (float)difference.X * RotateSpeed;
-                    pitch = Math.Clamp(pitch - (float)difference.Y * RotateSpeed, -MaxPitch, MaxPitch);
-                    return true;
+                    return new CameraMove(
+                        -(float)difference.X * RotateSpeed,
+                        -(float)difference.Y * RotateSpeed,
+                        0f, 0f, Vector3.Zero);
 
                 case DragMode.Pan:
                     // 画面上の移動量を、視点の向きに合わせた平行移動に変換する。
                     // 距離に比例させることで、遠くから見ているときほど大きく動く。
-                    var rotation = Rotation3D.ForCamera(yaw, pitch, roll);
+                    var rotation = Rotation3D.ForCamera(basis.Yaw, basis.Pitch, basis.Roll);
                     var right = Vector3.Transform(Vector3.UnitX, rotation);
                     var up = Vector3.Transform(Vector3.UnitY, rotation);
-                    target += right * (float)-difference.X * distance * PanSpeed;
-                    target += up * (float)difference.Y * distance * PanSpeed;
-                    return true;
+
+                    var move = right * (float)-difference.X * basis.Distance * PanSpeed
+                             + up * (float)difference.Y * basis.Distance * PanSpeed;
+
+                    return new CameraMove(0f, 0f, 0f, 0f, move);
 
                 default:
-                    return false;
+                    return null;
             }
         }
     }
