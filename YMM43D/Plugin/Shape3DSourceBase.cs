@@ -52,22 +52,10 @@ namespace YMM43D.Plugin
         /// </remarks>
         protected abstract WorldBounds GetWorldBounds(in FrameContext itemTime);
 
-        /// <summary>
-        /// 描画に使う資源を、YMM4 の描画スレッドで用意します。
-        /// </summary>
-        /// <remarks>
-        /// ファイルの読み込みやテクスチャの焼き込みは、<see cref="Draw"/> の中ではなく
-        /// ここで行ってください。<see cref="Draw"/> は 3Dプレビューのスレッドからも
-        /// 呼ばれるため、YMM4 が所有する資源に触れてよい場所ではありません。
-        /// </remarks>
-        protected virtual void PrepareResources(in FrameContext itemTime) { }
-
         /// <inheritdoc/>
         public void Update(TimelineItemSourceDescription description)
         {
             var itemTime = FrameContext.FromItem(description);
-
-            PrepareResources(itemTime);
 
             // 図形アイテムには DrawDescription を返す口が無いので、アイテムの配置は
             // YMM4 が出来上がった画像に掛ける。3D 側でも同じ配置を取り込むため、

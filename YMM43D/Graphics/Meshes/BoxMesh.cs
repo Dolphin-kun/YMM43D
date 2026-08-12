@@ -13,11 +13,6 @@ namespace YMM43D.Graphics.Meshes
     /// 頂点カラーは白一色で、色はシェーダーが決めます。三角形2枚で1面、
     /// 前・後・左・右・上・下の順に並ぶので、面ごとに塗り分けたい場合は
     /// ピクセルシェーダーで <c>SV_PrimitiveID</c> を 2 で割ってください。
-    /// <para>
-    /// 面ごとに違う<b>画像</b>を貼りたい場合は、この形状ではなく
-    /// <see cref="PlaneMesh"/> を面の数だけ描いてください。テクスチャは
-    /// 描画1回につき1枚しか渡せません。
-    /// </para>
     /// </remarks>
     public sealed class BoxMesh : IMesh
     {

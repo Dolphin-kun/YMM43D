@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.ComponentModel.DataAnnotations;
 using System.Windows.Media;
 using YMM43D.Plugin;
@@ -7,7 +8,6 @@ using YukkuriMovieMaker.Exo;
 using YukkuriMovieMaker.ItemEditor.CustomVisibilityAttributes;
 using YukkuriMovieMaker.Plugin.Shape;
 using YukkuriMovieMaker.Project;
-using YukkuriMovieMaker.Settings;
 
 namespace Shape3D
 {
@@ -17,7 +17,20 @@ namespace Shape3D
         private const string Rotation = "3D回転";
         private const string Paint = "色";
 
-        [Display(GroupName = Body, Name = "サイズ")]
+        [Display(GroupName = Body, Name = "形", Description = "何面体を描くか")]
+        [EnumComboBox]
+        public SolidKind Solid
+        {
+            get => solid;
+            set
+            {
+                Set(ref solid, value);
+                OnPropertyChanged(nameof(FaceCount));
+            }
+        }
+        private SolidKind solid = SolidKind.Cube;
+
+        [Display(GroupName = Body, Name = "サイズ", Description = "いちばん長い差し渡し。六面体では一辺の長さ")]
         [AnimationSlider("F1", "px", 0, 500)]
         public Animation Size { get; } = new(100, 0, 100000);
 
@@ -38,110 +51,69 @@ namespace Shape3D
         public CubeFill Fill { get => fill; set => Set(ref fill, value); }
         private CubeFill fill = CubeFill.Solid;
 
-        [Display(GroupName = Paint, Name = "色", Description = "立方体の色")]
+        [Display(GroupName = Paint, Name = "色")]
         [ColorPicker]
         [ShowPropertyEditorWhen(nameof(Fill), CubeFill.Solid)]
         public Color Color { get => color; set => Set(ref color, value); }
         private Color color = Colors.White;
 
-        [Display(GroupName = Paint, Name = "画像", Description = "6面すべてに貼る画像。色は上から掛かります")]
-        [FileSelector(FileGroupType.Texture, FileType = FileType.画像)]
-        [ShowPropertyEditorWhen(nameof(Fill), CubeFill.Solid)]
-        public string Image { get => image; set => Set(ref image, value); }
-        private string image = "";
+        [Display(AutoGenerateField = true)]
+        public ImmutableList<FaceColor> FaceColors { get => faceColors; set => Set(ref faceColors, value); }
+        private ImmutableList<FaceColor> faceColors = [];
 
-        [Display(GroupName = Paint, Name = "前面")]
-        [ColorPicker]
-        [ShowPropertyEditorWhen(nameof(Fill), CubeFill.PerFace)]
-        public Color FrontColor { get => frontColor; set => Set(ref frontColor, value); }
-        private Color frontColor = Gray(0xFF);
+        /// <summary>いま選んでいる多面体の面の数。</summary>
+        internal int FaceCount => Polyhedron.FaceCountOf(Solid);
 
-        [Display(GroupName = Paint, Name = "前面の画像")]
-        [FileSelector(FileGroupType.Texture, FileType = FileType.画像)]
-        [ShowPropertyEditorWhen(nameof(Fill), CubeFill.PerFace)]
-        public string FrontImage { get => frontImage; set => Set(ref frontImage, value); }
-        private string frontImage = "";
-
-        [Display(GroupName = Paint, Name = "背面")]
-        [ColorPicker]
-        [ShowPropertyEditorWhen(nameof(Fill), CubeFill.PerFace)]
-        public Color BackColor { get => backColor; set => Set(ref backColor, value); }
-        private Color backColor = Gray(0xA8);
-
-        [Display(GroupName = Paint, Name = "背面の画像")]
-        [FileSelector(FileGroupType.Texture, FileType = FileType.画像)]
-        [ShowPropertyEditorWhen(nameof(Fill), CubeFill.PerFace)]
-        public string BackImage { get => backImage; set => Set(ref backImage, value); }
-        private string backImage = "";
-
-        [Display(GroupName = Paint, Name = "左面")]
-        [ColorPicker]
-        [ShowPropertyEditorWhen(nameof(Fill), CubeFill.PerFace)]
-        public Color LeftColor { get => leftColor; set => Set(ref leftColor, value); }
-        private Color leftColor = Gray(0xC0);
-
-        [Display(GroupName = Paint, Name = "左面の画像")]
-        [FileSelector(FileGroupType.Texture, FileType = FileType.画像)]
-        [ShowPropertyEditorWhen(nameof(Fill), CubeFill.PerFace)]
-        public string LeftImage { get => leftImage; set => Set(ref leftImage, value); }
-        private string leftImage = "";
-
-        [Display(GroupName = Paint, Name = "右面")]
-        [ColorPicker]
-        [ShowPropertyEditorWhen(nameof(Fill), CubeFill.PerFace)]
-        public Color RightColor { get => rightColor; set => Set(ref rightColor, value); }
-        private Color rightColor = Gray(0xD8);
-
-        [Display(GroupName = Paint, Name = "右面の画像")]
-        [FileSelector(FileGroupType.Texture, FileType = FileType.画像)]
-        [ShowPropertyEditorWhen(nameof(Fill), CubeFill.PerFace)]
-        public string RightImage { get => rightImage; set => Set(ref rightImage, value); }
-        private string rightImage = "";
-
-        [Display(GroupName = Paint, Name = "上面")]
-        [ColorPicker]
-        [ShowPropertyEditorWhen(nameof(Fill), CubeFill.PerFace)]
-        public Color TopColor { get => topColor; set => Set(ref topColor, value); }
-        private Color topColor = Gray(0xF0);
-
-        [Display(GroupName = Paint, Name = "上面の画像")]
-        [FileSelector(FileGroupType.Texture, FileType = FileType.画像)]
-        [ShowPropertyEditorWhen(nameof(Fill), CubeFill.PerFace)]
-        public string TopImage { get => topImage; set => Set(ref topImage, value); }
-        private string topImage = "";
-
-        [Display(GroupName = Paint, Name = "下面")]
-        [ColorPicker]
-        [ShowPropertyEditorWhen(nameof(Fill), CubeFill.PerFace)]
-        public Color BottomColor { get => bottomColor; set => Set(ref bottomColor, value); }
-        private Color bottomColor = Gray(0x90);
-
-        [Display(GroupName = Paint, Name = "下面の画像")]
-        [FileSelector(FileGroupType.Texture, FileType = FileType.画像)]
-        [ShowPropertyEditorWhen(nameof(Fill), CubeFill.PerFace)]
-        public string BottomImage { get => bottomImage; set => Set(ref bottomImage, value); }
-        private string bottomImage = "";
-
-        /// <summary>面の並びは <see cref="CubeFace"/> と同じ順。</summary>
-        internal Color[] FaceColors => Fill == CubeFill.Solid
-            ? [Color, Color, Color, Color, Color, Color]
-            : [FrontColor, BackColor, LeftColor, RightColor, TopColor, BottomColor];
-
-        internal string[] FaceImages => Fill == CubeFill.Solid
-            ? [Image, Image, Image, Image, Image, Image]
-            : [FrontImage, BackImage, LeftImage, RightImage, TopImage, BottomImage];
+        /// <summary>面の並び順に並べた、実際に塗る色。</summary>
+        internal IReadOnlyList<Color> ResolvedColors => Fill == CubeFill.Solid
+            ? [Color]
+            : [.. FaceColors.Select(f => f.Color)];
 
         public Shape3DParameter(SharedDataStore? sharedData) : base(sharedData)
         {
+            SubscribeChildUndoRedoable(FaceColors);
         }
 
         public Shape3DParameter() : this(null)
         {
         }
 
-        // 面ごとの初期値は無彩色で、上ほど明るく下ほど暗くしてある。1色だと
-        // 立方体が影の無い塊に見えて向きが読めないため。
-        private static Color Gray(byte level) => Color.FromRgb(level, level, level);
+        public override async ValueTask EndEditAsync()
+        {
+            await base.EndEditAsync();
+
+            FaceColors = Sync(FaceCount, FaceColors);
+        }
+
+        /// <summary>
+        /// 面の数に合わせて、色の数を増減します。
+        /// </summary>
+        /// <remarks>
+        /// 減らすときは後ろを落とすだけなので、面の多い形へ戻せば前の色が残ります。
+        /// 増やす分は、向きが読めるよう明るさを散らした無彩色にします。
+        /// </remarks>
+        private static ImmutableList<FaceColor> Sync(int count, ImmutableList<FaceColor> current)
+        {
+            if (current.Count == count)
+                return current;
+
+            if (current.Count > count)
+                return current.GetRange(0, count);
+
+            var grown = current.ToBuilder();
+            for (var i = current.Count; i < count; i++)
+                grown.Add(new FaceColor { Color = DefaultColorAt(i, count) });
+
+            return grown.ToImmutable();
+        }
+
+        private static Color DefaultColorAt(int face, int count)
+        {
+            // 面の数が変わっても端が白と暗灰色になるよう、割合で決める。
+            var level = (byte)(0x60 + 0x9F * face / Math.Max(1, count - 1));
+
+            return Color.FromRgb(level, level, level);
+        }
 
         protected override Shape3DSourceBase Create3DSource(IGraphicsDevicesAndContext devices)
             => new Shape3DSource(devices, this);
@@ -169,21 +141,10 @@ namespace Shape3D
             public Animation RotationX { get; } = new(0, -100000, 100000);
             public Animation RotationY { get; } = new(0, -100000, 100000);
             public Animation RotationZ { get; } = new(0, -100000, 100000);
+            public SolidKind Solid { get; set; }
             public CubeFill Fill { get; set; }
             public Color Color { get; set; }
-            public Color FrontColor { get; set; }
-            public Color BackColor { get; set; }
-            public Color LeftColor { get; set; }
-            public Color RightColor { get; set; }
-            public Color TopColor { get; set; }
-            public Color BottomColor { get; set; }
-            public string Image { get; set; } = "";
-            public string FrontImage { get; set; } = "";
-            public string BackImage { get; set; } = "";
-            public string LeftImage { get; set; } = "";
-            public string RightImage { get; set; } = "";
-            public string TopImage { get; set; } = "";
-            public string BottomImage { get; set; } = "";
+            public ImmutableList<Color> FaceColors { get; set; } = [];
 
             public SharedData(Shape3DParameter parameter)
             {
@@ -191,21 +152,10 @@ namespace Shape3D
                 RotationX.CopyFrom(parameter.RotationX);
                 RotationY.CopyFrom(parameter.RotationY);
                 RotationZ.CopyFrom(parameter.RotationZ);
+                Solid = parameter.Solid;
                 Fill = parameter.Fill;
                 Color = parameter.Color;
-                FrontColor = parameter.FrontColor;
-                BackColor = parameter.BackColor;
-                LeftColor = parameter.LeftColor;
-                RightColor = parameter.RightColor;
-                TopColor = parameter.TopColor;
-                BottomColor = parameter.BottomColor;
-                Image = parameter.Image;
-                FrontImage = parameter.FrontImage;
-                BackImage = parameter.BackImage;
-                LeftImage = parameter.LeftImage;
-                RightImage = parameter.RightImage;
-                TopImage = parameter.TopImage;
-                BottomImage = parameter.BottomImage;
+                FaceColors = [.. parameter.FaceColors.Select(f => f.Color)];
             }
 
             public void CopyTo(Shape3DParameter parameter)
@@ -214,22 +164,30 @@ namespace Shape3D
                 parameter.RotationX.CopyFrom(RotationX);
                 parameter.RotationY.CopyFrom(RotationY);
                 parameter.RotationZ.CopyFrom(RotationZ);
+                parameter.Solid = Solid;
                 parameter.Fill = Fill;
                 parameter.Color = Color;
-                parameter.FrontColor = FrontColor;
-                parameter.BackColor = BackColor;
-                parameter.LeftColor = LeftColor;
-                parameter.RightColor = RightColor;
-                parameter.TopColor = TopColor;
-                parameter.BottomColor = BottomColor;
-                parameter.Image = Image;
-                parameter.FrontImage = FrontImage;
-                parameter.BackImage = BackImage;
-                parameter.LeftImage = LeftImage;
-                parameter.RightImage = RightImage;
-                parameter.TopImage = TopImage;
-                parameter.BottomImage = BottomImage;
+                parameter.FaceColors = [.. FaceColors.Select(c => new FaceColor { Color = c })];
             }
         }
+    }
+
+    public class FaceColor : Animatable
+    {
+        [Display(GroupName = "面の色", Name = "面", Description = "上から順に、面の並びと同じ順です")]
+        [ColorPicker]
+        public Color Color { get => color; set => Set(ref color, value); }
+        private Color color = Colors.White;
+
+        protected override IEnumerable<IAnimatable> GetAnimatables() => [];
+    }
+
+    public enum CubeFill
+    {
+        [Display(Name = "単色", Description = "すべての面を同じ色で塗ります")]
+        Solid,
+
+        [Display(Name = "面ごと", Description = "面それぞれに色を指定します")]
+        PerFace,
     }
 }

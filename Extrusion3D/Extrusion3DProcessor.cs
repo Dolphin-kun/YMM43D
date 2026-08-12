@@ -30,8 +30,6 @@ namespace Extrusion3D
             if (texture is null)
                 return;
 
-            // エフェクトのパラメータはアイテム内の時間で評価する。描画要求が
-            // 届いていればそちらを優先し、無ければ呼び出し元の時間を使う。
             var time = EffectDescription is { } description
                 ? FrameContext.FromItem(description)
                 : item.Time;
@@ -42,8 +40,6 @@ namespace Extrusion3D
 
             var world = Matrix4x4.CreateScale(1f, 1f, thickness) * item.World;
 
-            // レイマーチングはボックスのローカル座標系で行うため、
-            // カメラ位置もその座標系に持ち込む。
             Matrix4x4.Invert(world, out var inverseWorld);
             var cameraLocalPos = Vector3.Transform(render.GetCameraPosition(), inverseWorld);
 
@@ -58,7 +54,6 @@ namespace Extrusion3D
                 Attenuation = effect.Attenuation.GetFloat(time) / 100f,
             };
 
-            // ボックスの内側からレイを飛ばすため、手前の面ではなく奥の面を描く。
             var settings = item.ToDrawSettings(FaceCulling.Front, texture) with { Blend = BlendMode.Normal };
             pipelines.Get(render.Device).Draw(render.Context, constants, settings);
         }
@@ -72,8 +67,6 @@ namespace Extrusion3D
             if (thickness <= 0)
                 return WorldBounds.Empty;
 
-            // ワールド行列が入力画像の実寸を掛けてくれるので、ここでは 1×1 の板として
-            // 答える。厚みだけは自分で掛けているぶん、そのまま奥行きになる。
             return new WorldBounds(
                 new Vector3(-0.5f, -0.5f, 0f),
                 new Vector3(0.5f, 0.5f, thickness));
