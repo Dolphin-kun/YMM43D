@@ -1,10 +1,11 @@
 using System.Collections.Concurrent;
+using YMM43D.Camera;
 using YMM43D.Plugin;
 using YMM43D.Scene3D;
 using YukkuriMovieMaker.Project;
 using YukkuriMovieMaker.Project.Items;
 
-namespace YMM43D.Integration
+namespace YMM43D.Commons
 {
     /// <summary>
     /// カメラが動いたときに、YMM4 の標準プレビューを描き直させます。

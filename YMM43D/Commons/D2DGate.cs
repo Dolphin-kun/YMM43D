@@ -1,4 +1,4 @@
-﻿namespace YMM43D.Integration
+﻿namespace YMM43D.Commons
 {
     /// <summary>
     /// Direct2D の操作を、このプラグイン全体で1本に直列化するための鍵。

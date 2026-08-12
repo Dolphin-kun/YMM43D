@@ -1,10 +1,11 @@
+using YMM43D.Commons;
 using YMM43D.Plugin;
 using YMM43D.Scene3D;
 using YukkuriMovieMaker.Player.Video;
 using YukkuriMovieMaker.Project;
 using YukkuriMovieMaker.Project.Items;
 
-namespace YMM43D.Integration
+namespace YMM43D.Camera
 {
     /// <summary>
     /// いまシーンを撮っているカメラを決めます。
@@ -16,7 +17,7 @@ namespace YMM43D.Integration
     public static class SceneCameraResolver
     {
         /// <summary>その時刻に効いているカメラアイテム。</summary>
-        public readonly record struct ActiveCamera(IItem Item, ISceneCamera Camera, FrameContext ItemTime);
+        public readonly record struct ActiveCamera(IItem Item, ISceneCamera Source, FrameContext ItemTime);
 
         /// <summary>描画要求に対応するカメラの設定値を返します。</summary>
         public static CameraState Resolve(TimelineItemSourceDescription description)
@@ -28,7 +29,7 @@ namespace YMM43D.Integration
 
         private static CameraState Resolve(Timeline? timeline, int frame, int fps)
             => Find(timeline, frame, fps) is { } active
-                ? active.Camera.GetState(active.ItemTime)
+                ? active.Source.GetState(active.ItemTime)
                 : CameraState.Default;
 
         /// <summary>

@@ -1,6 +1,7 @@
 using System.Numerics;
 using Vortice.Direct3D11;
 using Vortice.Mathematics;
+using YMM43D.Camera;
 using YMM43D.Plugin;
 using YMM43D.PreviewTool.Rendering;
 using YMM43D.Scene3D;
@@ -51,12 +52,12 @@ namespace YMM43D.PreviewTool
 
             var viewPose = scene.ViewPose;
 
-            // 画角はシーンカメラの距離と動画の画面の高さで決まる。プレビュー用の
+            // 画角はシーンカメラの設定と動画の画面の高さで決まる。プレビュー用の
             // 視点をどこへ動かしても、写り方の縮尺は出力と揃う。
             var projection = SceneProjection.GetProjectionMatrix(
                 (float)width / Math.Max(1, height),
                 scene.ScreenHeight,
-                scene.SceneCameraDistance);
+                SceneProjection.GetPixelsPerTangent(scene.SceneCamera, scene.ScreenHeight));
 
             var render = new Render3DContext(device, context, viewPose.ViewMatrix, projection);
 
@@ -80,10 +81,9 @@ namespace YMM43D.PreviewTool
     {
         public required CameraPose ViewPose { get; init; }
 
-        public required CameraPose SceneCameraPose { get; init; }
+        public required CameraState SceneCamera { get; init; }
 
-        public float SceneCameraDistance
-            => Vector3.Distance(SceneCameraPose.Position, SceneCameraPose.Target);
+        public CameraPose SceneCameraPose => SceneCamera.GetPose();
 
         public float ScreenHeight
             => Environment.SourceDescription?.ScreenSize.Height ?? 0f;

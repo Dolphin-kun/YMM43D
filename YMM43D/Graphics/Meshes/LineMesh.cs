@@ -1,6 +1,6 @@
 ﻿using System.Numerics;
-using Vortice.Direct3D;
 using Vortice.Direct3D11;
+using Vortice.Direct3D;
 using Vortice.Mathematics;
 using YukkuriMovieMaker.Commons;
 

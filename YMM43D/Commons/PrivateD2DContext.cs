@@ -1,7 +1,7 @@
 using Vortice.Direct2D1;
 using YukkuriMovieMaker.Commons;
 
-namespace YMM43D.Integration
+namespace YMM43D.Commons
 {
     /// <summary>
     /// プラグインが自分のためだけに使う Direct2D デバイスコンテキストを貸し出します。

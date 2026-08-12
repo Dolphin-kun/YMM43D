@@ -105,16 +105,18 @@ SharpGen.Runtime だけです。リフレクションも使用していません
 <div class="wide">
 <pre>YMM43D.Graphics      D3D11 の薄い包み。YMM4 を知らない。
       ↓
-YMM43D.Scene3D       カメラ・時間・描画コンテキストなど、3D シーンの語彙。
+YMM43D.Scene3D       時間・座標・描画コンテキストなど、3D シーンの語彙。
       ↓
-YMM43D.Integration   YMM4 のデバイスや画像との橋渡し。
+YMM43D.Camera        シーンを撮るカメラ。アイテム・設定値・射影。
+      ↓
+YMM43D.Commons       YMM4 のデバイスや画像との橋渡し。
       ↓
 YMM43D.Plugin        プラグイン作者が使う公開面。基底クラスとインターフェース。
       ↓
 YMM43D.PreviewTool   3Dプレビューのツールウィンドウ。</pre>
 </div>
 
-<p>プラグインを書くときに直接触れるのは、主に <code>YMM43D.Plugin</code> と <code>YMM43D.Scene3D</code>、
+<p>プラグインを書くときに直接触れるのは、主に <code>YMM43D.Plugin</code> と <code>YMM43D.Scene3D</code>・<code>YMM43D.Camera</code>、
 そして描画部品の <code>YMM43D.Graphics</code> です。</p>
 
 <h3>2つの描画経路</h3>
@@ -208,24 +210,25 @@ YMM43D.PreviewTool   3Dプレビューのツールウィンドウ。</pre>
 </p>
 
 <p>
-カメラは注視点を中心とした軌道カメラです。角度と距離は <code>Animation</code> なのでキーフレームを打てます。
+カメラは「3Dカメラ」アイテムとしてタイムラインに置きます。位置と向きを持ち、値はすべて
+<code>Animation</code> なのでキーフレームを打てます。カメラアイテムが無い区間は、原点を正面から見る既定のカメラになります。
 </p>
 
 <p>
-画角は固定値ではなく、<b>注視点の面（Z = 0）が画面とちょうど 1 対 1 で対応するように</b>
-<code>SceneProjection.GetFieldOfView(screenHeight, distance)</code> が決めます。1080px・距離 10 なら 56.7 度です。
-このため、Z = 0 に置いたアイテムは YMM4 が 2D で描く位置・大きさと一致します。
+画角は既定では固定値ではなく、<b>カメラから <code>DefaultFocalDistance</code>（10 単位 = 1000px）離れた面が
+画面とちょうど 1 対 1 で対応するように</b> 決まります。1080px なら 56.7 度です。
+このため、既定の位置に置いたカメラでは、Z = 0 のアイテムが YMM4 の 2D と同じ位置・大きさに写ります。
 </p>
 
 <p>
-その結果、<b>カメラ距離は「寄り引き」ではなく「遠近の強さ」を決めるつまみ</b>になります。
-近づけるほど画角が広がり、手前と奥の差が強く出ます。Z = 0 のものの大きさは距離によりません。
+カメラアイテムの「視野角変更」を入れると、画角を自分で決められます。狭くすると望遠になり、
+手前と奥の差が小さくなります。切っている間は上の自動の決め方に戻ります。
 </p>
 
 <table>
 <tr><th>式</th><th>意味</th></tr>
 <tr><td><code>WorldScale.PixelsPerUnit</code></td><td>100。ワールド 1 単位 = 100 ピクセル</td></tr>
-<tr><td><code>SceneProjection.GetPixelsPerTangent(distance)</code></td><td>視線からの傾き 1 あたりのピクセル数。<code>PixelsPerUnit × distance</code></td></tr>
+<tr><td><code>SceneProjection.GetPixelsPerTangent(camera, screenHeight)</code></td><td>視線からの傾き 1 あたりのピクセル数。自動なら <code>PixelsPerUnit × DefaultFocalDistance</code></td></tr>
 <tr><td><code>SceneProjection.GetTangentProjection()</code></td><td>除算後の x・y が傾きそのものになる射影。2D 側の変換を後から掛けるための土台</td></tr>
 </table>
 
@@ -618,7 +621,6 @@ var pipeline = pipelines.Get(render.Device);</pre>
 <tr><td><code>I3DSizeProvider</code></td><td>interface</td><td>描画される内容の実寸と原点からのずれ、およびそれをワールド行列に取り込んでよいか（<code>ScalesToInputSize</code>）を伝えられる</td></tr>
 <tr><td><code>I3DLocalTransform</code></td><td>interface</td><td>自分が使っているワールド行列を伝えられる。アイテムをまたいだ前後関係に使う</td></tr>
 <tr><td><code>I3DVideoEffect</code></td><td>interface</td><td><code>I3DProvider</code> と <code>I3DTextureProvider</code> の両方</td></tr>
-<tr><td><code>ICameraSync</code></td><td>interface</td><td>カメラの変化を YMM4 に伝える</td></tr>
 <tr><td><code>Shape3DSourceBase</code></td><td>abstract class</td><td>3D 図形アイテムの描画元。プレビューと出力の両経路を受け持つ</td></tr>
 <tr><td><code>ShapeParameter3DBase</code></td><td>abstract class</td><td>3D 図形アイテムの設定値</td></tr>
 <tr><td><code>VideoEffect3DBase</code></td><td>abstract class</td><td>3D 描画を行う映像エフェクト</td></tr>
@@ -626,7 +628,6 @@ var pipeline = pipelines.Get(render.Device);</pre>
 <tr><td><code>Output3DRenderer</code></td><td>class</td><td>3D 描画の結果を YMM4 の出力に流せる画像にする。図形もエフェクトもこれを通る</td></tr>
 <tr><td><code>Render3DContext</code></td><td>struct</td><td>描画先のデバイス・コンテキストとカメラ行列</td></tr>
 <tr><td><code>Provider3DRegistry</code></td><td>static class</td><td>パラメータとプロバイダーの対応表</td></tr>
-<tr><td><code>CameraSync</code></td><td>class</td><td><code>ICameraSync</code> の既定実装</td></tr>
 </table>
 
 <h4>I3DProvider</h4>
@@ -653,14 +654,24 @@ var pipeline = pipelines.Get(render.Device);</pre>
 <tr><td><code>GetCameraPosition()</code></td><td>ワールド空間でのカメラ位置。レイマーチングなどで使う</td></tr>
 </table>
 
+<h3>YMM43D.Camera</h3>
+
+<table>
+<tr><th>型</th><th>種別</th><th>説明</th></tr>
+<tr><td><code>CameraItem</code></td><td>class</td><td>タイムラインに置く「3Dカメラ」アイテム。<code>BaseItem</code> を継承する</td></tr>
+<tr><td><code>ISceneCamera</code></td><td>interface</td><td>カメラとして振る舞うアイテム。設定値を返し、ドラッグの差分を受け取る</td></tr>
+<tr><td><code>CameraState</code></td><td>struct</td><td>ある瞬間のカメラの設定値（位置・向き・視野角）</td></tr>
+<tr><td><code>CameraMove</code></td><td>struct</td><td>カメラをどれだけ動かすかの差分。ドラッグ操作を伝えるのに使う</td></tr>
+<tr><td><code>CameraPose</code></td><td>struct</td><td>ある時点でのカメラの位置・注視点・上方向</td></tr>
+<tr><td><code>SceneProjection</code></td><td>static class</td><td>シーンを画面に写す射影。クリップ面と画角の決め方</td></tr>
+<tr><td><code>SceneCameraResolver</code></td><td>static class</td><td>その時刻に効いているカメラアイテムを探し、設定値を返す</td></tr>
+<tr><td><code>ICameraSync</code> / <code>CameraSync</code></td><td>interface / class</td><td>カメラの変化を YMM4 に伝える</td></tr>
+</table>
+
 <h3>YMM43D.Scene3D</h3>
 
 <table>
 <tr><th>型</th><th>種別</th><th>説明</th></tr>
-<tr><td><code>SceneProjection</code></td><td>static class</td><td>シーンを画面に写す射影。クリップ面と画角の決め方</td></tr>
-<tr><td><code>CameraState</code></td><td>struct</td><td>ある瞬間のカメラの設定値（角度・距離・注視点）</td></tr>
-<tr><td><code>CameraMove</code></td><td>struct</td><td>カメラをどれだけ動かすかの差分。ドラッグ操作を伝えるのに使う</td></tr>
-<tr><td><code>CameraPose</code></td><td>struct</td><td>ある時点でのカメラの位置・注視点・上方向</td></tr>
 <tr><td><code>WorldBounds</code></td><td>struct</td><td>描くものがワールド空間で占める範囲。出力画像の大きさを決めるのに使う</td></tr>
 <tr><td><code>WorldScale</code></td><td>static class</td><td>ピクセルとワールド単位の換算（1 単位 = 100px）</td></tr>
 <tr><td><code>ScreenPlacement</code></td><td>struct</td><td>YMM4 が画像に掛ける 2D 配置（位置・拡大率・回転・Z の遠近）と、その逆変換</td></tr>
@@ -717,7 +728,7 @@ double raw = parameter.Size.GetValue(item.Time);</pre>
 <tr><td><code>BlendMode</code> / <code>FaceCulling</code></td><td>enum</td><td>合成方法とカリング</td></tr>
 </table>
 
-<h3>YMM43D.Integration</h3>
+<h3>YMM43D.Commons</h3>
 
 <p>YMM4 との橋渡しを行う層です。基底クラスを使っていれば、通常は <code>D2DTextureBridge</code> 以外を直接触ることはありません。</p>
 
@@ -731,7 +742,6 @@ double raw = parameter.Size.GetValue(item.Time);</pre>
 <tr><td><code>D2DImageBounds</code></td><td>画像の描画範囲を調べる</td></tr>
 <tr><td><code>ItemPlacement</code></td><td>アイテムの設定から 3D の配置行列と <code>ScreenPlacement</code> を作る</td></tr>
 <tr><td><code>SceneDepthCollector</code></td><td>シーン内の他の 3D 物体を集める。アイテムをまたいだ前後関係に使う</td></tr>
-<tr><td><code>SceneCameraResolver</code></td><td>その時刻に効いているカメラアイテムを探し、設定値を返す</td></tr>
 <tr><td><code>TimelineRefresher</code></td><td>カメラが動いたときに標準プレビューの再描画を促す</td></tr>
 </table>
 

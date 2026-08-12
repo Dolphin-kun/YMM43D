@@ -1,13 +1,13 @@
 ﻿using System.Numerics;
 using Vortice;
 using Vortice.Direct2D1;
-using Vortice.Mathematics;
 using Vortice.Direct3D11;
+using Vortice.Mathematics;
 using YMM43D.Graphics;
 using YMM43D.Plugin;
 using YukkuriMovieMaker.Commons;
 
-namespace YMM43D.Integration
+namespace YMM43D.Commons
 {
     /// <summary>
     /// 3D描画の結果を YMM4 が扱える <see cref="ID2D1Image"/> に変換します。

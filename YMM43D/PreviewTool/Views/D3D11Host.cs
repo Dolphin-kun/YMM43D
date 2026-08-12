@@ -1,10 +1,10 @@
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
-using Vortice.Direct3D11;
 using Vortice.DXGI;
+using Vortice.Direct3D11;
+using YMM43D.Commons;
 using YMM43D.Graphics;
-using YMM43D.Integration;
 using YukkuriMovieMaker.Commons;
 
 namespace YMM43D.PreviewTool.Views

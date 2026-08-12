@@ -1,8 +1,8 @@
 ﻿using System.Numerics;
 using Vortice.Direct2D1;
 using Vortice.Direct3D11;
+using YMM43D.Commons;
 using YMM43D.Graphics;
-using YMM43D.Integration;
 using YMM43D.Scene3D;
 using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Player.Video;

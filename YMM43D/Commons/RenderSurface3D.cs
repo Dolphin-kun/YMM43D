@@ -1,10 +1,10 @@
-﻿using Vortice.Direct2D1;
+﻿using Vortice.DXGI;
+using Vortice.Direct2D1;
 using Vortice.Direct3D11;
-using Vortice.DXGI;
 using YMM43D.Graphics;
 using YukkuriMovieMaker.Commons;
 
-namespace YMM43D.Integration
+namespace YMM43D.Commons
 {
     /// <summary>
     /// 3D描画用のレンダーターゲットと深度バッファを持ち、その結果を

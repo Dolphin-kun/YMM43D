@@ -1,11 +1,11 @@
 using System.ComponentModel.DataAnnotations;
 using System.Numerics;
 using System.Windows.Media;
-using YMM43D.Plugin;
 using YMM43D.Scene3D;
 using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Controls;
 using YukkuriMovieMaker.Exo;
+using YukkuriMovieMaker.ItemEditor.CustomVisibilityAttributes;
 using YukkuriMovieMaker.Project.Items;
 
 namespace YMM43D.Camera
@@ -24,48 +24,62 @@ namespace YMM43D.Camera
     /// </remarks>
     public sealed class CameraItem : BaseItem, ISceneCamera
     {
-        private const string Angle = "向き";
-        private const string Look = "注視点";
+        private const string Place = "カメラ位置";
 
-        [Display(GroupName = Angle, Name = "水平回転", Description = "注視点のまわりを横に回ります")]
+        // BaseItem の「全般」は 0〜5 を使う。項目の並びはこの値で決まるので、
+        // それより後ろの番号にしないとカメラの設定が上に来てしまう。
+        private const int FirstOrder = 100;
+
+        [Display(GroupName = Place, Name = "X", Description = "カメラを置く位置。右が正", Order = FirstOrder)]
+        [AnimationSlider("F0", "px", -2000, 2000)]
+        public Animation X { get; } = new(0, -1000000, 1000000);
+
+        [Display(GroupName = Place, Name = "Y", Description = "下が正。画面の座標と同じ向き", Order = FirstOrder + 1)]
+        [AnimationSlider("F0", "px", -2000, 2000)]
+        public Animation Y { get; } = new(0, -1000000, 1000000);
+
+        [Display(GroupName = Place, Name = "Z", Description = "手前が正。0 の面が、YMM4 が 2D で描く面", Order = FirstOrder + 2)]
+        [AnimationSlider("F0", "px", -5000, 5000)]
+        public Animation Z { get; } = new(DefaultZ, -1000000, 1000000);
+
+        [Display(GroupName = Place, Name = "水平回転", Description = "横を向きます", Order = FirstOrder + 3)]
         [AnimationSlider("F1", "°", -180, 180)]
         public Animation Yaw { get; } = new(0, -100000, 100000);
 
-        [Display(GroupName = Angle, Name = "垂直回転", Description = "注視点のまわりを縦に回ります")]
-        [AnimationSlider("F1", "°", -90, 90)]
-        public Animation Pitch { get; } = new(0, -CameraMove.MaxPitch, CameraMove.MaxPitch);
+        [Display(GroupName = Place, Name = "垂直回転", Description = "上下を向きます", Order = FirstOrder + 4)]
+        [AnimationSlider("F1", "°", -CameraState.MaxPitch, CameraState.MaxPitch)]
+        public Animation Pitch { get; } = new(0, -CameraState.MaxPitch, CameraState.MaxPitch);
 
-        [Display(GroupName = Angle, Name = "傾き", Description = "視線を軸にして画面を回します")]
+        [Display(GroupName = Place, Name = "傾き", Description = "視線を軸にして画面を回します", Order = FirstOrder + 5)]
         [AnimationSlider("F1", "°", -180, 180)]
         public Animation Roll { get; } = new(0, -100000, 100000);
 
-        [Display(GroupName = Angle, Name = "遠近の強さ",
-            Description = "寄り引きではありません。注視点の面にあるものは大きさが変わらず、手前と奥の差だけが変わります")]
-        [AnimationSlider("F1", "", 0.1, 100)]
-        public Animation Distance { get; } = new(10, CameraMove.MinDistance, 1000);
+        [Display(GroupName = Place, Name = "視野角変更",
+            Description = "切ると、Z=0 の面が YMM4 の画面とちょうど同じ大きさに写る画角になります",
+            Order = FirstOrder + 6)]
+        [ToggleSlider]
+        public bool IsFieldOfViewEnabled
+        {
+            get => isFieldOfViewEnabled;
+            set => Set(ref isFieldOfViewEnabled, value);
+        }
+        private bool isFieldOfViewEnabled;
 
-        [Display(GroupName = Look, Name = "X", Description = "カメラが向く先。動かすと被写体を追えます")]
-        [AnimationSlider("F0", "px", -1000, 1000)]
-        public Animation TargetX { get; } = new(0, -1000000, 1000000);
-
-        [Display(GroupName = Look, Name = "Y")]
-        [AnimationSlider("F0", "px", -1000, 1000)]
-        public Animation TargetY { get; } = new(0, -1000000, 1000000);
-
-        [Display(GroupName = Look, Name = "Z")]
-        [AnimationSlider("F0", "px", -1000, 1000)]
-        public Animation TargetZ { get; } = new(0, -1000000, 1000000);
+        [Display(GroupName = Place, Name = "視野角", Description = "縦方向の画角。狭いほど望遠になります",
+            Order = FirstOrder + 7)]
+        [AnimationSlider("F1", "°", 1, 179)]
+        [ShowPropertyEditorWhen(nameof(IsFieldOfViewEnabled), true)]
+        public Animation FieldOfView { get; } = new(DefaultFieldOfView, 1, 179);
 
         public override string Label => "3Dカメラ";
-
-        public override string Description => $"遠近 {Distance.GetFirstValue():F1}";
 
         public override Color ItemColor
         {
             get => itemColor;
             set => Set(ref itemColor, value);
         }
-        private Color itemColor = Color.FromRgb(0x1E, 0x8A, 0x7A);
+        // 3Dプレビューに出るカメラの枠と同じ色にする。どのアイテムがどの枠か分かる。
+        private Color itemColor = Color.FromRgb(0xFF, 0x99, 0x00);
 
         // 中身を持たないアイテムなので、伸ばせる長さに上限は無い。
         // YMM4 の図形やテキストも同じく TimeSpan.Zero を返す。
@@ -73,27 +87,32 @@ namespace YMM43D.Camera
 
         public override TimeSpan ContentLength => TimeSpan.Zero;
 
+        /// <summary>Z の初期値。原点を正面から見る位置に置く。</summary>
+        private const double DefaultZ = SceneProjection.DefaultFocalDistance * WorldScale.PixelsPerUnit;
+
+        /// <summary>画角を使い始めたときに、見え方があまり変わらない値。</summary>
+        private const double DefaultFieldOfView = 57;
+
         public CameraState GetState(in FrameContext itemTime) => new(
+            // 位置はピクセルで指定させる。3D 空間の単位を意識せずに、他のアイテムの
+            // 位置と同じ感覚で置けるようにするため。Y は画面と同じく下向きが正。
+            new Vector3(
+                WorldScale.ToWorld(X.GetFloat(itemTime)),
+                -WorldScale.ToWorld(Y.GetFloat(itemTime)),
+                WorldScale.ToWorld(Z.GetFloat(itemTime))),
             Yaw.GetFloat(itemTime),
             Pitch.GetFloat(itemTime),
             Roll.GetFloat(itemTime),
-            Distance.GetFloat(itemTime),
-            // 注視点はピクセルで指定させる。3D 空間の単位を意識せずに、他のアイテムの
-            // 位置と同じ感覚で置けるようにするため。Y は画面と同じく下向きが正。
-            new Vector3(
-                WorldScale.ToWorld(TargetX.GetFloat(itemTime)),
-                -WorldScale.ToWorld(TargetY.GetFloat(itemTime)),
-                WorldScale.ToWorld(TargetZ.GetFloat(itemTime))));
+            IsFieldOfViewEnabled ? FieldOfView.GetFloat(itemTime) : 0f);
 
         public void Move(in CameraMove move)
         {
             Nudge(Yaw, move.Yaw);
             Nudge(Pitch, move.Pitch);
             Nudge(Roll, move.Roll);
-            Nudge(Distance, move.Distance);
-            Nudge(TargetX, WorldScale.ToPixels(move.Target.X));
-            Nudge(TargetY, -WorldScale.ToPixels(move.Target.Y));
-            Nudge(TargetZ, WorldScale.ToPixels(move.Target.Z));
+            Nudge(X, WorldScale.ToPixels(move.Shift.X));
+            Nudge(Y, -WorldScale.ToPixels(move.Shift.Y));
+            Nudge(Z, WorldScale.ToPixels(move.Shift.Z));
         }
 
         /// <summary>
@@ -120,7 +139,7 @@ namespace YMM43D.Camera
         }
 
         protected override IEnumerable<IAnimatable> GetAnimatables()
-            => [Yaw, Pitch, Roll, Distance, TargetX, TargetY, TargetZ];
+            => [X, Y, Z, Yaw, Pitch, Roll, FieldOfView];
 
         public override IAsyncEnumerable<ExoItem> GetExoItemsAsync(ExoOutputDescription outputDescription)
             => AsyncEnumerable.Empty<ExoItem>();

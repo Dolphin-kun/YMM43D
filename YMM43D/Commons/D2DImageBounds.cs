@@ -1,7 +1,7 @@
 ﻿using Vortice;
 using Vortice.Direct2D1;
 
-namespace YMM43D.Integration
+namespace YMM43D.Commons
 {
     /// <summary>
     /// <see cref="ID2D1Image"/> の大きさを調べるヘルパー。

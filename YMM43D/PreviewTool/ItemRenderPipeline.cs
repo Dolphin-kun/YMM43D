@@ -1,14 +1,14 @@
 ﻿using System.Collections.Immutable;
 using System.Numerics;
 using Vortice.Direct2D1;
-using YMM43D.Integration;
+using YMM43D.Commons;
 using YMM43D.Plugin;
+using YMM43D.Scene3D;
 using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Player.Video;
+using YukkuriMovieMaker.Plugin.Effects;
 using YukkuriMovieMaker.Project;
 using YukkuriMovieMaker.Project.Items;
-using YukkuriMovieMaker.Plugin.Effects;
-using YMM43D.Scene3D;
 
 namespace YMM43D.PreviewTool
 {

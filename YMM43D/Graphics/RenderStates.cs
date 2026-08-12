@@ -1,6 +1,6 @@
-﻿using Vortice.Direct3D11;
+﻿using D3DBlend = Vortice.Direct3D11.Blend;
+using Vortice.Direct3D11;
 using YukkuriMovieMaker.Commons;
-using D3DBlend = Vortice.Direct3D11.Blend;
 
 namespace YMM43D.Graphics
 {

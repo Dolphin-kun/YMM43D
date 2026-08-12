@@ -1,6 +1,7 @@
 using System.Numerics;
 using Vortice.Direct3D11;
 using Vortice.Mathematics;
+using YMM43D.Camera;
 using YMM43D.Graphics;
 using YMM43D.Graphics.Materials;
 using YMM43D.Graphics.Meshes;

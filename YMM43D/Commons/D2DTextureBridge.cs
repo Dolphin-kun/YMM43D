@@ -1,11 +1,11 @@
 ﻿using System.Numerics;
 using Vortice;
+using Vortice.DXGI;
 using Vortice.Direct2D1;
 using Vortice.Direct3D11;
-using Vortice.DXGI;
 using YukkuriMovieMaker.Commons;
 
-namespace YMM43D.Integration
+namespace YMM43D.Commons
 {
     /// <summary>
     /// YMM4 が描いた <see cref="ID2D1Image"/> を、3D描画用デバイス上の

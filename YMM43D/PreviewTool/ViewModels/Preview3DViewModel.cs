@@ -4,7 +4,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using Vortice.Direct3D11;
 using YMM43D.Camera;
-using YMM43D.Integration;
+using YMM43D.Commons;
 using YMM43D.Plugin;
 using YMM43D.PreviewTool.Views;
 using YMM43D.Scene3D;
@@ -19,8 +19,8 @@ namespace YMM43D.PreviewTool.ViewModels
 {
     public class Preview3DViewModel : Bindable, ITimelineToolViewModel, IDisposable
     {
-        /// <summary>カメラアイテムを置くときの既定の長さ（秒）。</summary>
-        private const int DefaultCameraSeconds = 5;
+        /// <summary>カメラアイテムを置くときの既定の長さ（フレーム）。</summary>
+        private const int DefaultCameraLength = 300;
 
         private readonly DisposeCollector disposer = new();
         private readonly Preview3DRenderer renderer = new();
@@ -34,7 +34,7 @@ namespace YMM43D.PreviewTool.ViewModels
         private TimelineSourceAndDevices? sourceAndDevices;
         private TimelineSourceDescription? sourceDescription;
         private List<PreviewItem> previewItems = [];
-        private bool drivesSceneCamera = true;
+        private bool drivesSceneCamera;
         private bool isDisposed;
 
         public D3D11Host? D3DHost
@@ -147,7 +147,6 @@ namespace YMM43D.PreviewTool.ViewModels
             if (timeline is null)
                 return;
 
-            var fps = Math.Max(1, timeline.VideoInfo.FPS);
             var frame = timeline.CurrentFrame;
 
             for (var layer = 0; layer <= timeline.MaxLayer + 1; layer++)
@@ -155,7 +154,7 @@ namespace YMM43D.PreviewTool.ViewModels
                 var item = new CameraItem
                 {
                     Frame = frame,
-                    Length = Math.Min(fps * DefaultCameraSeconds, Math.Max(1, timeline.Length - frame)),
+                    Length = DefaultCameraLength,
                     Layer = layer,
                 };
 
@@ -211,7 +210,7 @@ namespace YMM43D.PreviewTool.ViewModels
             renderer.Draw(device, context, renderTarget, depthStencil, width, height, new PreviewScene
             {
                 ViewPose = freeCamera.GetPose(),
-                SceneCameraPose = camera.GetPose(),
+                SceneCamera = camera,
                 Time = time,
                 Environment = new PreviewEnvironment(device, sourceAndDevices.Devices, scene, sourceDescription),
                 Items = previewItems,
@@ -226,7 +225,7 @@ namespace YMM43D.PreviewTool.ViewModels
             // カメラを直接動かす場合の基準は、いま効いているカメラアイテムの値。
             // 平行移動の向きと大きさがそこから決まる。
             var active = drivesSceneCamera ? SceneCameraResolver.Find(timeline) : null;
-            var basis = active is { } found ? found.Camera.GetState(found.ItemTime) : freeCamera.State;
+            var basis = active is { } found ? found.Source.GetState(found.ItemTime) : freeCamera.State;
 
             freeCamera.EnsureInitialized(basis);
 
@@ -239,7 +238,7 @@ namespace YMM43D.PreviewTool.ViewModels
                 return;
             }
 
-            target.Camera.Move(move);
+            target.Source.Move(move);
             refresher?.ForceRefresh(timeline);
         }
 

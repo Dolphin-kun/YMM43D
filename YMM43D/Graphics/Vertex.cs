@@ -1,7 +1,7 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
-using Vortice.Direct3D11;
 using Vortice.DXGI;
+using Vortice.Direct3D11;
 using Vortice.Mathematics;
 
 namespace YMM43D.Graphics

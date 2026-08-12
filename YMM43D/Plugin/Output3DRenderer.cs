@@ -1,6 +1,7 @@
 ﻿using System.Numerics;
 using Vortice.Direct2D1;
-using YMM43D.Integration;
+using YMM43D.Camera;
+using YMM43D.Commons;
 using YMM43D.Scene3D;
 using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Player.Video;
@@ -65,7 +66,8 @@ namespace YMM43D.Plugin
             // カメラアイテムがあればそれを、無ければ既定のカメラを使う。
             var camera = SceneCameraResolver.Resolve(description);
             var view = camera.GetPose().ViewMatrix;
-            var pixelsPerTangent = SceneProjection.GetPixelsPerTangent(camera.Distance);
+            var pixelsPerTangent = SceneProjection.GetPixelsPerTangent(
+                camera, description.ScreenSize.Height);
 
             // シーン内での自分の居場所と、他の 3D 物体を調べる。
             var scene = SceneDepthCollector.Collect(description, self);

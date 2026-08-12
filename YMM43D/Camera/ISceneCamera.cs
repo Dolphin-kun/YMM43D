@@ -1,6 +1,6 @@
 using YMM43D.Scene3D;
 
-namespace YMM43D.Plugin
+namespace YMM43D.Camera
 {
     /// <summary>
     /// シーンを撮るカメラとして振る舞うアイテム。

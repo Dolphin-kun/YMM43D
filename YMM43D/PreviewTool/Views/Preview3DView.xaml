@@ -6,7 +6,7 @@
              xmlns:local="clr-namespace:YMM43D.PreviewTool.Views"
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="600"
-             Background="Black"
+             Background="Transparent"
              Focusable="True"
              PreviewKeyDown="UserControl_PreviewKeyDown">
     <!--
@@ -19,19 +19,24 @@
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="6,4">
-            <Button Content="カメラを追加"
-                    Command="{Binding AddCameraCommand}"
-                    IsEnabled="{Binding CanAddCamera}"
-                    ToolTip="いまの再生位置に「3Dカメラ」アイテムを置きます。空いているレイヤーを下から探します。"
-                    Padding="8,2"/>
+        <!-- 背景は塗らずに、置かれている場所の色をそのまま使う。メニューバーと同じ見え方になる -->
+        <ToolBarTray Grid.Row="0" IsLocked="True" Background="Transparent">
+            <ToolBar ToolBarTray.IsLocked="True" Background="Transparent" Padding="2,0">
+                <Button Content="カメラを追加"
+                        Command="{Binding AddCameraCommand}"
+                        IsEnabled="{Binding CanAddCamera}"
+                        ToolTip="いまの再生位置に「3Dカメラ」アイテムを置きます。空いているレイヤーを下から探します。"
+                        Padding="6,2"/>
 
-            <CheckBox Content="ドラッグでカメラを動かす"
-                      IsChecked="{Binding DrivesSceneCamera}"
-                      VerticalAlignment="Center"
-                      Margin="10,0,0,0"
-                      ToolTip="入れると、ドラッグがカメラアイテムを直接動かします。外すと見る位置だけが動き、出力は変わりません。カメラアイテムが無い間は常に見る位置だけが動きます。"/>
-        </StackPanel>
+                <Separator/>
+
+                <CheckBox Content="ドラッグでカメラを動かす"
+                          IsChecked="{Binding DrivesSceneCamera}"
+                          VerticalAlignment="Center"
+                          Margin="4,0"
+                          ToolTip="入れると、ドラッグがカメラアイテムを直接動かします。外すと見る位置だけが動き、出力は変わりません。カメラアイテムが無い間は、常に見る位置だけが動きます。"/>
+            </ToolBar>
+        </ToolBarTray>
 
         <!-- 3D表示 -->
         <ContentControl Grid.Row="1" Content="{Binding D3DHost}"/>

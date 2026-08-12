@@ -1,6 +1,6 @@
 using YMM43D.Scene3D;
 
-namespace YMM43D.Integration
+namespace YMM43D.Camera
 {
     internal sealed class CameraChangeTracker
     {

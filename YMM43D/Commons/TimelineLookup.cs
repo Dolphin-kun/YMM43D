@@ -1,7 +1,7 @@
 using YukkuriMovieMaker.Player.Video;
 using YukkuriMovieMaker.Project;
 
-namespace YMM43D.Integration
+namespace YMM43D.Commons
 {
     /// <summary>
     /// 描画要求から、いま描かれているシーンのタイムラインを探します。

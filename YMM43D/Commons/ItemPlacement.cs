@@ -2,7 +2,7 @@
 using YMM43D.Scene3D;
 using YukkuriMovieMaker.Project.Items;
 
-namespace YMM43D.Integration
+namespace YMM43D.Commons
 {
     /// <summary>
     /// YMM4 のアイテム設定から、3D 空間での配置を組み立てます。

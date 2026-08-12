@@ -1,7 +1,7 @@
 using System.Numerics;
 using Vortice;
 using Vortice.Direct3D11;
-using YMM43D.Integration;
+using YMM43D.Commons;
 using YMM43D.Plugin;
 using YMM43D.Scene3D;
 using YukkuriMovieMaker.Commons;

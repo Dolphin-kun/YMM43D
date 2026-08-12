@@ -1,6 +1,6 @@
 using YukkuriMovieMaker.Commons;
 
-namespace YMM43D.Plugin
+namespace YMM43D.Camera
 {
     /// <summary>
     /// カメラが動いたことを知らせる先。

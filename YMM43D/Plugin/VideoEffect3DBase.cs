@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using Vortice.Direct3D11;
+using YMM43D.Camera;
 using YMM43D.Scene3D;
 using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Plugin.Effects;

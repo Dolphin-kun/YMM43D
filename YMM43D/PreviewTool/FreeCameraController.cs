@@ -1,7 +1,7 @@
 using System.Numerics;
 using System.Windows;
+using YMM43D.Camera;
 using YMM43D.PreviewTool.Views;
-using YMM43D.Scene3D;
 
 namespace YMM43D.PreviewTool
 {
@@ -17,7 +17,11 @@ namespace YMM43D.PreviewTool
     {
         private const float RotateSpeed = 0.5f;
         private const float PanSpeed = 0.0015f;
-        private const float ZoomSpeed = 0.005f;
+        private const float DollySpeed = 0.1f;
+
+        /// <summary>視線の先を見失わないよう、軸までの距離に設ける範囲。</summary>
+        private const float MinPivotDistance = 0.5f;
+        private const float MaxPivotDistance = 200f;
 
         private enum DragMode { None, Rotate, Pan }
 
@@ -52,9 +56,8 @@ namespace YMM43D.PreviewTool
         /// マウス操作を差分に翻訳します。動かす量が無ければ <c>null</c> を返します。
         /// </summary>
         /// <param name="basis">
-        /// いま動かそうとしているカメラの設定値。平行移動の向きと大きさを決めるのに
-        /// 使います。プレビュー専用の視点を動かすならその値、カメラアイテムを動かす
-        /// ならそちらの値を渡してください。
+        /// いま動かそうとしているカメラの設定値。回る軸と移動量の大きさをここから
+        /// 決めるので、実際に動かす相手の値を渡してください。
         /// </param>
         public CameraMove? HandleMouse(
             Point position, D3D11Host.MouseEventKind kind, int delta, in CameraState basis)
@@ -82,7 +85,7 @@ namespace YMM43D.PreviewTool
                     return GetDragMove(difference, basis);
 
                 case D3D11Host.MouseEventKind.Wheel:
-                    return new CameraMove(0f, 0f, 0f, -delta * ZoomSpeed, Vector3.Zero);
+                    return Dolly(delta / 120f, basis);
 
                 default:
                     return null;
@@ -92,31 +95,74 @@ namespace YMM43D.PreviewTool
         /// <summary>ドラッグしている最中かどうか。</summary>
         public bool IsDragging => drag != DragMode.None;
 
-        private CameraMove? GetDragMove(System.Windows.Vector difference, CameraState basis)
+        private CameraMove? GetDragMove(System.Windows.Vector difference, in CameraState basis)
         {
             switch (drag)
             {
                 case DragMode.Rotate:
-                    return new CameraMove(
+                    return Orbit(
                         -(float)difference.X * RotateSpeed,
                         -(float)difference.Y * RotateSpeed,
-                        0f, 0f, Vector3.Zero);
+                        basis);
 
                 case DragMode.Pan:
                     // 画面上の移動量を、視点の向きに合わせた平行移動に変換する。
-                    // 距離に比例させることで、遠くから見ているときほど大きく動く。
-                    var rotation = Rotation3D.ForCamera(basis.Yaw, basis.Pitch, basis.Roll);
+                    // 見ている先までの距離に比例させることで、遠くから見ているときほど
+                    // 大きく動き、寄っているときは細かく動かせる。
+                    var rotation = basis.Rotation;
                     var right = Vector3.Transform(Vector3.UnitX, rotation);
                     var up = Vector3.Transform(Vector3.UnitY, rotation);
+                    var scale = GetPivotDistance(basis) * PanSpeed;
 
-                    var move = right * (float)-difference.X * basis.Distance * PanSpeed
-                             + up * (float)difference.Y * basis.Distance * PanSpeed;
-
-                    return new CameraMove(0f, 0f, 0f, 0f, move);
+                    return CameraMove.Translate(
+                        right * (float)-difference.X * scale + up * (float)difference.Y * scale);
 
                 default:
                     return null;
             }
+        }
+
+        /// <summary>
+        /// 視線の先を軸にして回り込みます。
+        /// </summary>
+        /// <remarks>
+        /// その場で首を振るだけだと、置いてあるものを別の角度から確かめられません。
+        /// 向きを変えたぶんだけ位置もずらして、軸が画面の真ん中に留まるようにします。
+        /// </remarks>
+        private static CameraMove Orbit(float yaw, float pitch, in CameraState basis)
+        {
+            var distance = GetPivotDistance(basis);
+            var pivot = basis.Position + basis.Forward * distance;
+
+            var turned = CameraMove.Rotate(yaw, pitch).ApplyTo(basis);
+            var moved = pivot - turned.Forward * distance;
+
+            return new CameraMove(yaw, pitch, 0f, moved - basis.Position);
+        }
+
+        /// <summary>視線に沿って前後に動きます。</summary>
+        private static CameraMove Dolly(float notches, in CameraState basis)
+            => CameraMove.Translate(basis.Forward * (notches * GetPivotDistance(basis) * DollySpeed));
+
+        /// <summary>
+        /// 回る軸までの距離。視線が YMM4 の描く面（Z=0）と交わる所を軸にします。
+        /// </summary>
+        /// <remarks>
+        /// アイテムはその面の近くに並ぶので、そこを軸にすると見ているものを中心に
+        /// 回り込めます。面と交わらないほど水平に近い視線のときは、既定の距離に戻します。
+        /// </remarks>
+        private static float GetPivotDistance(in CameraState basis)
+        {
+            var forward = basis.Forward;
+
+            if (MathF.Abs(forward.Z) < 0.05f)
+                return SceneProjection.DefaultFocalDistance;
+
+            var distance = -basis.Position.Z / forward.Z;
+
+            return float.IsFinite(distance) && distance > MinPivotDistance
+                ? MathF.Min(distance, MaxPivotDistance)
+                : SceneProjection.DefaultFocalDistance;
         }
     }
 }
