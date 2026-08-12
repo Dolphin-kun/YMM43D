@@ -66,7 +66,7 @@ namespace YMM43D.Integration
             if (self is null)
                 return SceneView.None;
 
-            if (FindTimeline(description) is not { } timeline || timeline.Items is not { } items)
+            if (TimelineLookup.Find(description) is not { } timeline || timeline.Items is not { } items)
                 return SceneView.None;
 
             var frame = description.TimelinePosition.Frame;
@@ -111,17 +111,6 @@ namespace YMM43D.Integration
             }
 
             return new SceneView(owner.Item, owner.Time, ownerPlacement, ownerScreen, occluders);
-        }
-
-        private static Timeline? FindTimeline(TimelineSourceDescription description)
-        {
-            foreach (var info in description.Scenes ?? [])
-            {
-                if (info is Scene scene && scene.ID == description.SceneId)
-                    return scene.Timeline;
-            }
-
-            return null;
         }
 
         private static IEnumerable<I3DProvider> FindProviders(IVideoItem item)

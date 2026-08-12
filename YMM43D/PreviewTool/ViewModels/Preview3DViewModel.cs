@@ -125,8 +125,16 @@ namespace YMM43D.PreviewTool.ViewModels
                 return;
 
             freeCamera.Invalidate();
-            freeCamera.EnsureInitialized(sceneCamera, TimelineRefresher.GetTime(timeline));
+            freeCamera.EnsureInitialized(ResolveCamera());
         }
+
+        /// <summary>
+        /// いまシーンを撮っているカメラ。カメラアイテムがあればその値になります。
+        /// </summary>
+        private CameraState ResolveCamera()
+            => timeline is null
+                ? CameraState.Default
+                : SceneCameraResolver.Resolve(timeline, sceneCamera);
 
         private void OnSceneCameraPropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
@@ -170,12 +178,13 @@ namespace YMM43D.PreviewTool.ViewModels
             }
 
             var time = TimelineRefresher.GetTime(timeline);
-            freeCamera.EnsureInitialized(sceneCamera, time);
+            var camera = ResolveCamera();
+            freeCamera.EnsureInitialized(camera);
 
             renderer.Draw(device, context, renderTarget, depthStencil, width, height, new PreviewScene
             {
                 ViewPose = freeCamera.GetPose(),
-                SceneCameraPose = sceneCamera.GetPose(time),
+                SceneCameraPose = camera.GetPose(),
                 Time = time,
                 Environment = new PreviewEnvironment(device, sourceAndDevices.Devices, scene, sourceDescription),
                 Items = previewItems,
@@ -187,7 +196,7 @@ namespace YMM43D.PreviewTool.ViewModels
             if (timeline is null)
                 return;
 
-            freeCamera.EnsureInitialized(sceneCamera, TimelineRefresher.GetTime(timeline));
+            freeCamera.EnsureInitialized(ResolveCamera());
 
             if (!freeCamera.HandleMouse(position, kind, delta))
                 return;
@@ -229,6 +238,7 @@ namespace YMM43D.PreviewTool.ViewModels
             var visible = items
                 .OfType<IVideoItem>()
                 .Where(item => frame >= item.Frame && frame < item.Frame + item.Length)
+                .Where(item => !IsCamera(item))
                 .OrderBy(item => item.Layer);
 
             foreach (var item in visible)
@@ -239,6 +249,16 @@ namespace YMM43D.PreviewTool.ViewModels
 
             previewItems = updated;
         }
+
+        /// <summary>
+        /// カメラアイテムは撮る側なので、被写体として並べません。
+        /// </summary>
+        /// <remarks>
+        /// 並べると、何も描かない板として既定の描画方法に回されます。絵は出ませんが
+        /// 無駄に描画元を作ることになります。カメラの位置はガイドで表示されます。
+        /// </remarks>
+        private static bool IsCamera(IVideoItem item)
+            => item is ShapeItem shape && shape.ShapeParameter is ISceneCameraSource;
 
         private IEnumerable<I3DProvider> FindProviders(IVideoItem item)
         {

@@ -73,25 +73,22 @@ namespace YMM43D.Scene3D
             Target = other.Target;
         }
 
+        /// <summary>指定時点の設定値を取り出します。</summary>
+        public CameraState GetState(in FrameContext time) => new(
+            Yaw.GetFloat(time),
+            Pitch.GetFloat(time),
+            Roll.GetFloat(time),
+            Distance.GetFloat(time),
+            Target);
+
         /// <summary>
         /// 指定時点の姿勢を、角度・距離・注視点から解決します。
         /// </summary>
-        public CameraPose GetPose(in FrameContext time)
-        {
-            var rotation = Rotation3D.ForCamera(
-                Yaw.GetFloat(time),
-                Pitch.GetFloat(time),
-                Roll.GetFloat(time));
-
-            var forward = Vector3.Transform(new Vector3(0, 0, -1), rotation);
-            var up = Vector3.Transform(Vector3.UnitY, rotation);
-            var position = Target - forward * Distance.GetFloat(time);
-
-            return new CameraPose(position, Target, up, rotation);
-        }
+        public CameraPose GetPose(in FrameContext time) => GetState(time).GetPose();
 
         /// <summary>指定時点のビュー行列。</summary>
         public Matrix4x4 GetViewMatrix(in FrameContext time) => GetPose(time).ViewMatrix;
+
         /// <summary>
         /// 射影行列。クリップ面はシーン全体で共通のため静的メソッドです。
         /// </summary>

@@ -11,7 +11,9 @@
     <Grid>
         <ScrollViewer VerticalScrollBarVisibility="Auto">
             <StackPanel Margin="10">
-                <TextBlock Text="シーンカメラ (出力用)" FontWeight="Bold" Margin="0,0,0,15" FontSize="14"/>
+                <TextBlock Text="シーンカメラ (出力用)" FontWeight="Bold" Margin="0,0,0,4" FontSize="14"/>
+                <TextBlock TextWrapping="Wrap" FontSize="10" Opacity="0.6" Margin="0,0,0,15"
+                           Text="ここの値はプロジェクトに保存されません。キーフレームを打ちたい場合や、設定を残したい場合は、タイムラインに「3Dカメラ」アイテムを置いてください。カメラアイテムがあるとそちらが優先されます。"/>
                 
                 <CheckBox Content="プレビュー画面のドラッグで操作する" 
                           IsChecked="{Binding Camera.IsControlledByPreviewDrag}" 

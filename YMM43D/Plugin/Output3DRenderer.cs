@@ -60,13 +60,12 @@ namespace YMM43D.Plugin
             Matrix4x4? placement = null)
         {
             var itemTime = FrameContext.FromItem(description);
-            var timelineTime = FrameContext.FromTimeline(description);
 
-            // カメラはシーン全体に属するため、アイテム内ではなくタイムライン上の
-            // 位置で評価する。
-            var camera = SceneCameraRegistry.Get(description);
-            var view = camera.GetViewMatrix(timelineTime);
-            var pixelsPerTangent = SceneCamera.GetPixelsPerTangent(camera.Distance.GetFloat(timelineTime));
+            // カメラはこのアイテムのものではなくシーン全体のもの。タイムラインに
+            // カメラアイテムがあればそれを、無ければ既定のカメラを使う。
+            var camera = SceneCameraResolver.Resolve(description);
+            var view = camera.GetPose().ViewMatrix;
+            var pixelsPerTangent = SceneCamera.GetPixelsPerTangent(camera.Distance);
 
             // シーン内での自分の居場所と、他の 3D 物体を調べる。
             var scene = SceneDepthCollector.Collect(description, self);

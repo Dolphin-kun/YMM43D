@@ -26,28 +26,22 @@ namespace YMM43D.PreviewTool
         private DragMode drag;
         private Point lastMousePosition;
 
-        public void EnsureInitialized(SceneCamera camera, in FrameContext time)
+        public void EnsureInitialized(in CameraState camera)
         {
             if (initialized)
                 return;
 
-            yaw = camera.Yaw.GetFloat(time);
-            pitch = camera.Pitch.GetFloat(time);
-            roll = camera.Roll.GetFloat(time);
-            distance = camera.Distance.GetFloat(time);
+            yaw = camera.Yaw;
+            pitch = camera.Pitch;
+            roll = camera.Roll;
+            distance = camera.Distance;
             target = camera.Target;
             initialized = true;
         }
 
         public void Invalidate() => initialized = false;
 
-        public CameraPose GetPose()
-        {
-            var rotation = Rotation3D.ForCamera(yaw, pitch, roll);
-            var forward = Vector3.Transform(new Vector3(0, 0, -1), rotation);
-            var up = Vector3.Transform(Vector3.UnitY, rotation);
-            return new CameraPose(target - forward * distance, target, up, rotation);
-        }
+        public CameraPose GetPose() => new CameraState(yaw, pitch, roll, distance, target).GetPose();
 
         public void ApplyTo(SceneCamera camera)
         {

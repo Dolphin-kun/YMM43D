@@ -61,9 +61,11 @@ namespace YMM43D.Integration
         /// 呼び出し側は、値が変わったかどうかを気にせず定期的に呼んでください。
         /// </remarks>
         /// <returns>実際に再描画を促した場合は <c>true</c>。</returns>
-        public bool RefreshIfCameraChanged(Timeline timeline, SceneCamera camera)
+        public bool RefreshIfCameraChanged(Timeline timeline, SceneCamera fallback)
         {
-            if (tracker.HasChanged(camera, GetTime(timeline)))
+            // カメラアイテムを置いていればその値、無ければ既定カメラの値を見る。
+            // どちらで動かしても描き直しが要るのは同じ。
+            if (tracker.HasChanged(SceneCameraResolver.Resolve(timeline, fallback)))
                 isPending = true;
 
             if (!isPending)
@@ -102,14 +104,14 @@ namespace YMM43D.Integration
         /// これも間引きの対象です。ドラッグ中はマウスが動くたびに呼ばれるため、
         /// そのまま流すとシーンの描き直しが追いつきません。
         /// </remarks>
-        public void ForceRefresh(Timeline timeline, SceneCamera camera)
+        public void ForceRefresh(Timeline timeline, SceneCamera fallback)
         {
             // 今の値を基準として記録しておかないと、次の
             // RefreshIfCameraChanged が同じ変化をもう一度拾ってしまう。
-            tracker.Sync(camera, GetTime(timeline));
+            tracker.Sync(SceneCameraResolver.Resolve(timeline, fallback));
             isPending = true;
 
-            RefreshIfCameraChanged(timeline, camera);
+            RefreshIfCameraChanged(timeline, fallback);
         }
 
         /// <summary>現在のタイムライン位置を表す <see cref="FrameContext"/>。</summary>
