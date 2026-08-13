@@ -5,7 +5,7 @@ using YMM43D.Graphics;
 using YMM43D.Graphics.Materials;
 using YMM43D.Graphics.Meshes;
 using YMM43D.Plugin;
-using YMM43D.Scene3D;
+using YMM43D.Commons;
 using YukkuriMovieMaker.Commons;
 using Color4 = Vortice.Mathematics.Color4;
 

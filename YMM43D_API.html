@@ -107,15 +107,15 @@ SharpGen.Runtime だけです。リフレクションも使用していません
 <p>ライブラリは 7 つの名前空間に分かれています。依存は上から下への一方向で、逆流しません。</p>
 
 <div class="wide">
-<pre>YMM43D.Graphics      D3D11 の薄い包み。YMM4 を知らない。形の作り方もここ。
+<pre>YMM43D.Graphics      D3D11 の薄い包み。YMM4 も 3D シーンも知らない。形の作り方もここ。
       ↓
-YMM43D.Scene3D       3D シーンの語彙。時間・座標・カメラ・光・掴む判定。
+YMM43D.Commons       汎用の型とモデル。時間・座標・カメラ・光・掴む判定・描画の受け渡し。
                      タイムラインを知らないので、YMM4 なしで動かして確かめられる。
       ↓
-YMM43D.Commons       YMM4 との橋渡し。デバイスや画像の受け渡しと、
+YMM43D.Player        YMM4 の再生・出力との橋渡し。デバイスや画像の受け渡しと、
                      タイムラインを走査してカメラ・光・目印を見つける係。
       ↓
-YMM43D.Plugin            プラグイン作者が使う公開面。基底クラスとインターフェース。
+YMM43D.Plugin            プラグイン作者が使う公開面。基底クラス。
       ↓
 YMM43D.Project.Items     .ymmp に保存されるアイテム。カメラ・光源・環境。
 YMM43D.Project.Shape     .ymmp に保存される図形パラメータ。「3Dアイテム」。
@@ -128,14 +128,15 @@ YMM43D.PreviewTool       3Dプレビューのツールウィンドウ。</pre>
 </p>
 
 <p>
-<code>Scene3D</code> と <code>Commons</code> の境目も同じ考え方で、題材ではなく
+<code>Commons</code> と <code>Player</code> の境目も同じ考え方で、題材ではなく
 「<b>YMM4 の <code>Timeline</code> を知っているか</b>」で分けています。
-<code>CameraState</code> や <code>SceneLight</code> は値でしかないので <code>Scene3D</code> に、
-それをタイムラインから探し出す <code>SceneCameraResolver</code> などは <code>Commons</code> に置きます。
+<code>CameraState</code> や <code>SceneLight</code> は値でしかないので <code>Commons</code> に、
+それをタイムラインから探し出す <code>SceneCameraResolver</code> などは <code>Player</code> に置きます。
+<code>Commons</code> だけを見れば、YMM4 を起動しなくても動かせます。
 </p>
 </div>
 
-<p>プラグインを書くときに直接触れるのは、主に <code>YMM43D.Plugin</code> と <code>YMM43D.Scene3D</code>、
+<p>プラグインを書くときに直接触れるのは、主に <code>YMM43D.Plugin</code> と <code>YMM43D.Commons</code>、
 そして描画部品の <code>YMM43D.Graphics</code> です。</p>
 
 <h3>2つの描画経路</h3>
@@ -705,19 +706,11 @@ var pipeline = pipelines.Get(render.Device);</pre>
 
 <table>
 <tr><th>型</th><th>種別</th><th>説明</th></tr>
-<tr><td><code>I3DProvider</code></td><td>interface</td><td>3D 空間に何かを描画できるオブジェクト。このライブラリの中心となる拡張点</td></tr>
-<tr><td><code>I3DTextureProvider</code></td><td>interface</td><td>自前で用意したテクスチャを 3D 描画に提供できる</td></tr>
-<tr><td><code>I3DSizeProvider</code></td><td>interface</td><td>描画される内容の実寸と原点からのずれ、およびそれをワールド行列に取り込んでよいか（<code>ScalesToInputSize</code>）を伝えられる</td></tr>
-<tr><td><code>I3DLocalTransform</code></td><td>interface</td><td>自分が使っているワールド行列を伝えられる。アイテムをまたいだ前後関係に使う</td></tr>
-<tr><td><code>I3DBounds</code></td><td>interface</td><td>描くものが占める範囲を伝えられる。3Dプレビューで掴む範囲に使う</td></tr>
-<tr><td><code>I3DVideoEffect</code></td><td>interface</td><td><code>I3DProvider</code> と <code>I3DTextureProvider</code> の両方</td></tr>
 <tr><td><code>Shape3DSourceBase</code></td><td>abstract class</td><td>3D 図形アイテムの描画元。プレビューと出力の両経路を受け持つ</td></tr>
 <tr><td><code>ShapeParameter3DBase</code></td><td>abstract class</td><td>3D 図形アイテムの設定値</td></tr>
 <tr><td><code>VideoEffect3DBase</code></td><td>abstract class</td><td>3D 描画を行う映像エフェクト</td></tr>
 <tr><td><code>VideoEffect3DProcessorBase</code></td><td>abstract class</td><td>その描画処理側。テクスチャ化・描画先の決定・配置の打ち消しを受け持つ</td></tr>
 <tr><td><code>Output3DRenderer</code></td><td>class</td><td>3D 描画の結果を YMM4 の出力に流せる画像にする。図形もエフェクトもこれを通る</td></tr>
-<tr><td><code>Render3DContext</code></td><td>struct</td><td>描画先のデバイス・コンテキストとカメラ行列</td></tr>
-<tr><td><code>Provider3DRegistry</code></td><td>static class</td><td>パラメータとプロバイダーの対応表</td></tr>
 </table>
 
 <h4>I3DProvider</h4>
@@ -771,7 +764,7 @@ var pipeline = pipelines.Get(render.Device);</pre>
 <code>Render3DContext.CreateConstants</code> がシーンの光を込みで組み立てるので、
 自作のマテリアルでもこれを渡せば陰影と霧が効きます。
 <code>Graphics</code> は GPU のことだけを知る層なので、光を流し込むのは
-<code>Scene3D.SceneConstants</code> の役目です。
+<code>SceneConstants</code> の役目です。
 自前の <code>cbuffer</code> を持つマテリアルは、<code>ShaderSource.TransformFields</code> を先頭に置き、
 C# 側の構造体の先頭に <code>TransformConstants</code> を埋めれば、並びが食い違いません
 （「立体化3D」がこの形です）。
@@ -831,14 +824,11 @@ public void MoveMarker(in Vector3 shift, in FrameContext itemTime, in EditScope 
 <tr><th>作り方</th><th>見た目</th><th>掴んだとき</th></tr>
 <tr><td><code>SceneMarker.ForDirectionalLight(向き)</code></td><td>原点から一定の距離に浮かぶ太陽。原点へ線が伸びる</td><td>動かした先の向きに回る</td></tr>
 <tr><td><code>SceneMarker.ForPointLight(位置, 届く距離)</code></td><td>小さな球と、届く距離を表す大きな球</td><td>その位置へ移る</td></tr>
-<tr><td><code>SceneMarker.ForEnvironment()</code></td><td>原点に置いた箱</td><td>選ぶだけ（<code>IsMovable</code> が false）</td></tr>
 </table>
 
 <div class="note">
 <p>
-環境アイテムはシーン全体に効くもので、置き場所がありません。目印は「そこにある」ことを
-示すための原点の印で、動かしても意味が無いため <code>IsMovable</code> を false にしてあります。
-掴むとタイムライン上で選択されるので、設定を開く手がかりとしては働きます。
+環境アイテムは目印を出しません。シーン全体に効くもので、置き場所が無いためです。
 </p>
 </div>
 
@@ -852,7 +842,7 @@ public void MoveMarker(in Vector3 shift, in FrameContext itemTime, in EditScope 
 <tr><td><code>CubeFill</code></td><td>enum</td><td>単色で塗るか、面グループごとに塗り分けるか</td></tr>
 </table>
 
-<h3>YMM43D.Scene3D</h3>
+<h3>YMM43D.Commons</h3>
 
 <table>
 <tr><th>型</th><th>種別</th><th>説明</th></tr>
@@ -865,8 +855,16 @@ public void MoveMarker(in Vector3 shift, in FrameContext itemTime, in EditScope 
 <tr><td><code>ISceneLightSource</code></td><td>interface</td><td>光源として振る舞うアイテム</td></tr>
 <tr><td><code>ISceneEnvironment</code></td><td>interface</td><td>環境光と霧を決めるアイテム</td></tr>
 <tr><td><code>ISceneMarkerSource</code></td><td>interface</td><td>3Dプレビューに目印を出すアイテム。掴んで動かされたら差分を受け取る</td></tr>
-<tr><td><code>SceneMarker</code></td><td>struct</td><td>目印の見た目と場所。動かせないものは掴んで選ぶだけになる</td></tr>
-<tr><td><code>MarkerKind</code></td><td>enum</td><td>目印の絵柄。平行光・点光源・環境</td></tr>
+<tr><td><code>SceneMarker</code></td><td>struct</td><td>目印の見た目と場所</td></tr>
+<tr><td><code>MarkerKind</code></td><td>enum</td><td>目印の絵柄。平行光・点光源</td></tr>
+<tr><td><code>I3DProvider</code></td><td>interface</td><td>3D 空間に何かを描画できるオブジェクト。このライブラリの中心となる拡張点</td></tr>
+<tr><td><code>I3DTextureProvider</code></td><td>interface</td><td>自前で用意したテクスチャを 3D 描画に提供できる</td></tr>
+<tr><td><code>I3DSizeProvider</code></td><td>interface</td><td>描画される内容の実寸と原点からのずれ、およびそれをワールド行列に取り込んでよいか（<code>ScalesToInputSize</code>）を伝えられる</td></tr>
+<tr><td><code>I3DLocalTransform</code></td><td>interface</td><td>自分が使っているワールド行列を伝えられる。アイテムをまたいだ前後関係に使う</td></tr>
+<tr><td><code>I3DBounds</code></td><td>interface</td><td>描くものが占める範囲を伝えられる。3Dプレビューで掴む範囲に使う</td></tr>
+<tr><td><code>I3DVideoEffect</code></td><td>interface</td><td><code>I3DProvider</code> と <code>I3DTextureProvider</code> の両方</td></tr>
+<tr><td><code>Render3DContext</code></td><td>struct</td><td>描画先のデバイス・コンテキストとカメラ行列</td></tr>
+<tr><td><code>Provider3DRegistry</code></td><td>static class</td><td>パラメータとプロバイダーの対応表</td></tr>
 <tr><td><code>WorldBounds</code></td><td>struct</td><td>描くものがワールド空間で占める範囲。出力画像の大きさを決めるのに使う</td></tr>
 <tr><td><code>PickRay</code></td><td>struct</td><td>画面上の1点から伸ばす半直線。3Dプレビューでアイテムを掴むのに使う</td></tr>
 <tr><td><code>TransformGizmo</code></td><td>struct</td><td>アイテムを動かす向きの案内。矢印と輪の当たり判定</td></tr>
@@ -937,7 +935,7 @@ double raw = parameter.Size.GetValue(item.Time);</pre>
 <tr><td><code>BlendMode</code> / <code>FaceCulling</code></td><td>enum</td><td>合成方法とカリング</td></tr>
 </table>
 
-<h3>YMM43D.Commons</h3>
+<h3>YMM43D.Player</h3>
 
 <p>YMM4 との橋渡しを行う層です。基底クラスを使っていれば、通常は <code>D2DTextureBridge</code> 以外を直接触ることはありません。</p>
 
