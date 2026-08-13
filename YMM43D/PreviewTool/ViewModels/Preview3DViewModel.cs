@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Numerics;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -25,6 +26,7 @@ namespace YMM43D.PreviewTool.ViewModels
         private readonly DisposeCollector disposer = new();
         private readonly Preview3DRenderer renderer = new();
         private readonly FreeCameraController freeCamera = new();
+        private readonly ItemDragController itemDrag = new();
 
         private TimelineRefresher? refresher;
         private Timeline? timeline;
@@ -116,10 +118,12 @@ namespace YMM43D.PreviewTool.ViewModels
 
             host.Render += OnRender;
             host.MouseAction += OnMouseAction;
+            host.KeyAction += OnKeyAction;
             disposer.CollectAction(host, () =>
             {
                 host.Render -= OnRender;
                 host.MouseAction -= OnMouseAction;
+                host.KeyAction -= OnKeyAction;
             });
 
             CompositionTarget.Rendering += OnCompositionRendering;
@@ -217,13 +221,25 @@ namespace YMM43D.PreviewTool.ViewModels
             });
         }
 
+        /// <summary>
+        /// マウス操作を振り分けます。
+        /// </summary>
+        /// <remarks>
+        /// 左ドラッグは、アイテムの上から始めればそのアイテムを動かし、何も無い所から
+        /// 始めればカメラを回します。同じボタンで両方できるのは、掴む物があるかどうかが
+        /// 押した瞬間に決まるからです。アイテムの上でもカメラを回したいときは
+        /// Alt を押しながらドラッグしてください。右ドラッグとホイールは常にカメラです。
+        /// </remarks>
         private void OnMouseAction(Point position, D3D11Host.MouseEventKind kind, int delta)
         {
             if (timeline is null)
                 return;
 
+            if (HandleItemDrag(position, kind))
+                return;
+
             // カメラを直接動かす場合の基準は、いま効いているカメラアイテムの値。
-            // 平行移動の向きと大きさがそこから決まる。
+            // 回る軸と移動量の大きさがそこから決まる。
             var active = drivesSceneCamera ? SceneCameraResolver.Find(timeline) : null;
             var basis = active is { } found ? found.Source.GetState(found.ItemTime) : freeCamera.State;
 
@@ -240,6 +256,64 @@ namespace YMM43D.PreviewTool.ViewModels
 
             target.Source.Move(move);
             refresher?.ForceRefresh(timeline);
+        }
+
+        /// <summary>
+        /// アイテムを掴む・動かす・離すを処理します。
+        /// </summary>
+        /// <returns>アイテムの操作として扱ったら <c>true</c>。カメラには渡しません。</returns>
+        private bool HandleItemDrag(Point position, D3D11Host.MouseEventKind kind)
+        {
+            switch (kind)
+            {
+                case D3D11Host.MouseEventKind.Down:
+                    if ((D3D11Host.CurrentModifiers & ModifierKeys.Alt) != 0)
+                        return false;
+
+                    return TryGrab(position);
+
+                case D3D11Host.MouseEventKind.Move when itemDrag.IsDragging:
+                    if (renderer.CreateRay(ToVector(position)) is { } ray && itemDrag.Update(ray))
+                        refresher?.ForceRefresh(timeline!);
+
+                    return true;
+
+                case D3D11Host.MouseEventKind.Up when itemDrag.IsDragging:
+                    itemDrag.End();
+                    return true;
+
+                default:
+                    return false;
+            }
+        }
+
+        private bool TryGrab(Point position)
+        {
+            if (renderer.Pick(ToVector(position), out var ray) is not { } picked)
+                return false;
+
+            // 掴んだものを選択しておくと、右のプロパティ欄がそのアイテムに切り替わる。
+            if (timeline is not null)
+                timeline.SelectedItems = [picked.Item];
+
+            itemDrag.Begin(picked.Item, picked.World, ray, freeCamera.State.Forward);
+
+            return true;
+        }
+
+        private static Vector2 ToVector(Point position) => new((float)position.X, (float)position.Y);
+
+        /// <summary>
+        /// プレビュー上のキー操作。
+        /// </summary>
+        /// <remarks>
+        /// 3D表示は子ウィンドウなので、WPF のキー入力は届きません。
+        /// <see cref="D3D11Host"/> が拾ったものをここで解釈します。
+        /// </remarks>
+        private void OnKeyAction(Key key, ModifierKeys modifiers)
+        {
+            if (key == Key.R && modifiers == ModifierKeys.Control)
+                ResetToSceneCamera();
         }
 
         private void UpdateSourceDescription()

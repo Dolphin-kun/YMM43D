@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Input;
 using System.Windows.Interop;
 using Vortice.DXGI;
 using Vortice.Direct3D11;
@@ -22,7 +23,35 @@ namespace YMM43D.PreviewTool.Views
 
         public event Action<ID3D11Device, ID3D11DeviceContext, int, int>? Render;
         public event Action<Point, MouseEventKind, int>? MouseAction;
+        public event Action<Key, ModifierKeys>? KeyAction;
         public enum MouseEventKind { Down, Move, Up, Wheel, RightDown, RightUp }
+
+        /// <summary>
+        /// いま押されている修飾キー。
+        /// </summary>
+        /// <remarks>
+        /// 入力を受けているのは子ウィンドウなので、WPF の <c>Keyboard.Modifiers</c> は
+        /// 更新されません。OS に直接聞きます。
+        /// </remarks>
+        public static ModifierKeys CurrentModifiers
+        {
+            get
+            {
+                var modifiers = ModifierKeys.None;
+
+                if (IsDown(VirtualKeyControl)) modifiers |= ModifierKeys.Control;
+                if (IsDown(VirtualKeyShift)) modifiers |= ModifierKeys.Shift;
+                if (IsDown(VirtualKeyAlt)) modifiers |= ModifierKeys.Alt;
+
+                return modifiers;
+            }
+        }
+
+        private const int VirtualKeyShift = 0x10;
+        private const int VirtualKeyControl = 0x11;
+        private const int VirtualKeyAlt = 0x12;
+
+        private static bool IsDown(int virtualKey) => (GetKeyState(virtualKey) & 0x8000) != 0;
 
         private const string WindowClassName = "YMM43D_PreviewHost_Independent";
         private static bool isClassRegistered = false;
@@ -246,6 +275,13 @@ namespace YMM43D.PreviewTool.Views
                     MouseAction?.Invoke(new Point(0, 0), MouseEventKind.Wheel, delta);
                     handled = true;
                     break;
+
+                // KEYDOWN / SYSKEYDOWN。子ウィンドウが入力を受けている間、WPF の
+                // キー入力は流れてこないので、ここで拾って伝える。
+                case 0x0100:
+                case 0x0104:
+                    KeyAction?.Invoke(KeyInterop.KeyFromVirtualKey((int)wParam), CurrentModifiers);
+                    break;
             }
             return base.WndProc(hwnd, msg, wParam, lParam, ref handled);
         }
@@ -289,6 +325,9 @@ namespace YMM43D.PreviewTool.Views
 
         [LibraryImport("user32.dll", SetLastError = true)]
         private static partial nint SetFocus(nint hWnd);
+
+        [LibraryImport("user32.dll")]
+        private static partial short GetKeyState(int nVirtKey);
         #endregion
     }
 }

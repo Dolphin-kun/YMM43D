@@ -56,5 +56,32 @@ namespace YMM43D.Scene3D
         /// </summary>
         public static float GetFloat(this Animation animation, in FrameContext context)
             => (float)animation.GetValue(context.Frame, context.Length, context.Fps);
+
+        /// <summary>
+        /// キーフレームを壊さずに、すべての値を同じだけ動かします。
+        /// </summary>
+        /// <remarks>
+        /// プレビュー上のドラッグをアニメーションに反映するのに使います。その瞬間の値を
+        /// 書き込むと打ってある動きが消えるので、差分を全部の値に足します。
+        /// <para>
+        /// <see cref="Animation.AddToEachValues"/> は上下限で丸めません。範囲の外へ出た分が
+        /// そのまま溜まり、逆へドラッグしたときに同じ量だけ空回りします。足せるぶんだけに
+        /// 削ってから渡します。
+        /// </para>
+        /// </remarks>
+        public static void Nudge(this Animation animation, double delta)
+        {
+            if (delta == 0 || animation.Values is not { Count: > 0 } values)
+                return;
+
+            var room = Math.Min(animation.MaxValue - values.Max(v => v.Value), delta);
+            room = Math.Max(animation.MinValue - values.Min(v => v.Value), room);
+
+            // すでに範囲外にある場合、削った結果が向きごと反転することがある。
+            if (room == 0 || Math.Sign(room) != Math.Sign(delta))
+                return;
+
+            animation.AddToEachValues(room);
+        }
     }
 }

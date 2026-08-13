@@ -107,35 +107,12 @@ namespace YMM43D.Camera
 
         public void Move(in CameraMove move)
         {
-            Nudge(Yaw, move.Yaw);
-            Nudge(Pitch, move.Pitch);
-            Nudge(Roll, move.Roll);
-            Nudge(X, WorldScale.ToPixels(move.Shift.X));
-            Nudge(Y, -WorldScale.ToPixels(move.Shift.Y));
-            Nudge(Z, WorldScale.ToPixels(move.Shift.Z));
-        }
-
-        /// <summary>
-        /// キーフレームを壊さずに、すべての値を同じだけ動かします。
-        /// </summary>
-        /// <remarks>
-        /// <see cref="Animation.AddToEachValues"/> は上下限で丸めません。範囲の外へ
-        /// 出た分がそのまま溜まるので、逆へドラッグしたときに同じ量だけ空回りします。
-        /// 足せるぶんだけに削ってから渡します。
-        /// </remarks>
-        private static void Nudge(Animation animation, double delta)
-        {
-            if (delta == 0 || animation.Values is not { Count: > 0 } values)
-                return;
-
-            var room = Math.Min(animation.MaxValue - values.Max(v => v.Value), delta);
-            room = Math.Max(animation.MinValue - values.Min(v => v.Value), room);
-
-            // すでに範囲外にある場合、削った結果が向きごと反転することがある。
-            if (room == 0 || Math.Sign(room) != Math.Sign(delta))
-                return;
-
-            animation.AddToEachValues(room);
+            Yaw.Nudge(move.Yaw);
+            Pitch.Nudge(move.Pitch);
+            Roll.Nudge(move.Roll);
+            X.Nudge(WorldScale.ToPixels(move.Shift.X));
+            Y.Nudge(-WorldScale.ToPixels(move.Shift.Y));
+            Z.Nudge(WorldScale.ToPixels(move.Shift.Z));
         }
 
         protected override IEnumerable<IAnimatable> GetAnimatables()

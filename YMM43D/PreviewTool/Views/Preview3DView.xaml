@@ -19,24 +19,27 @@
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <!-- 背景は塗らずに、置かれている場所の色をそのまま使う。メニューバーと同じ見え方になる -->
-        <ToolBarTray Grid.Row="0" IsLocked="True" Background="Transparent">
-            <ToolBar ToolBarTray.IsLocked="True" Background="Transparent" Padding="2,0">
-                <Button Content="カメラを追加"
-                        Command="{Binding AddCameraCommand}"
-                        IsEnabled="{Binding CanAddCamera}"
-                        ToolTip="いまの再生位置に「3Dカメラ」アイテムを置きます。空いているレイヤーを下から探します。"
-                        Padding="6,2"/>
+        <!-- 背景は塗らずに、置かれている場所の色をそのまま使う -->
+        <Menu Grid.Row="0" Background="Transparent" Margin="0" Padding="0">
+            <MenuItem Header="カメラ">
+                <MenuItem Header="カメラを追加"
+                          Command="{Binding AddCameraCommand}"
+                          IsEnabled="{Binding CanAddCamera}"
+                          ToolTip="いまの再生位置に「3Dカメラ」アイテムを置きます。空いているレイヤーを下から探します。"/>
 
                 <Separator/>
 
-                <CheckBox Content="ドラッグでカメラを動かす"
+                <MenuItem Header="カメラ追従"
+                          IsCheckable="True"
                           IsChecked="{Binding DrivesSceneCamera}"
-                          VerticalAlignment="Center"
-                          Margin="4,0"
-                          ToolTip="入れると、ドラッグがカメラアイテムを直接動かします。外すと見る位置だけが動き、出力は変わりません。カメラアイテムが無い間は、常に見る位置だけが動きます。"/>
-            </ToolBar>
-        </ToolBarTray>
+                          ToolTip="入れると、見る位置がカメラアイテムに追従し、ドラッグがそのカメラを直接動かします。外すと見る位置だけが動き、出力は変わりません。"/>
+
+                <MenuItem Header="視点をカメラに戻す"
+                          Command="{Binding ResetToSceneCameraCommand}"
+                          InputGestureText="Ctrl+R"
+                          ToolTip="プレビューで見る位置を、いまシーンを撮っているカメラの位置に合わせ直します。"/>
+            </MenuItem>
+        </Menu>
 
         <!-- 3D表示 -->
         <ContentControl Grid.Row="1" Content="{Binding D3DHost}"/>
