@@ -28,11 +28,6 @@ namespace Extrusion3D
         }
         private ExtrusionType extrusionType = ExtrusionType.Image;
 
-        [Display(GroupName = "立体化3D", Name = "減衰", Description = "側面の減衰の強さを設定します")]
-        [AnimationSlider("F0", "%", 0, 100)]
-        [ShowPropertyEditorWhen(nameof(ExtrusionType), ExtrusionType.Image)]
-        public Animation Attenuation { get; } = new(0, 0, 100);
-
         [Display(GroupName = "立体化3D", Name = "陰影をつけない",
             Description = "光源を無視して、元の色のまま塗ります")]
         [ToggleSlider]
@@ -53,7 +48,7 @@ namespace Extrusion3D
             => AttachProcessor(new Extrusion3DProcessor(this, devices));
 
         protected override IEnumerable<IAnimatable> GetAnimatables()
-            => [Thickness, Attenuation, CameraSyncAnimation];
+            => [Thickness, CameraSyncAnimation];
 
         public override IEnumerable<string> CreateExoVideoFilters(
             int keyFrameIndex, ExoOutputDescription exoOutputDescription) => [];

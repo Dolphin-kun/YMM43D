@@ -2,6 +2,7 @@ using System.Numerics;
 using System.Runtime.InteropServices;
 using Vortice.Direct3D11;
 using YMM43D.Graphics;
+using YMM43D.Graphics.Materials;
 using YukkuriMovieMaker.Commons;
 
 namespace PixelPoints3D
@@ -9,7 +10,7 @@ namespace PixelPoints3D
     [StructLayout(LayoutKind.Sequential)]
     internal struct PointCloudConstants
     {
-        public Matrix4x4 WorldViewProjection;
+        public TransformConstants Transform;
 
         public Vector4 Color;
 
@@ -19,31 +20,23 @@ namespace PixelPoints3D
 
         public Vector3 Extent;
 
-        public float Opacity;
+        public float Seed;
 
         public Vector3 Scatter;
 
-        public float Seed;
+        public float PointHalfSize;
 
         public Vector3 ViewRight;
 
-        public float PointHalfSize;
+        public float LineHalfWidth;
 
         public Vector3 ViewUp;
 
-        public float LineHalfWidth;
+        public float UseSourceColor;
 
         public Vector3 ViewForward;
 
-        public float UseSourceColor;
-
         public float ExtraOpacity;
-
-        public float OpacityRandomness;
-
-        public float PointIsRound;
-
-        private readonly float padding;
 
         public Vector3 DeformAxis;
 
@@ -56,6 +49,14 @@ namespace PixelPoints3D
         public float DeformPhase;
 
         public float LineRandomness;
+
+        public float OpacityRandomness;
+
+        public float PointIsRound;
+
+        private readonly float padding0;
+
+        private readonly float padding1;
     }
 
     internal sealed class PointCloudMaterial : IMaterial
@@ -66,36 +67,54 @@ namespace PixelPoints3D
         public ID3D11PixelShader PixelShader { get; }
         public byte[] VertexShaderBytecode { get; }
 
-        private const string SharedDeclarations = """
+        private static readonly string SharedDeclarations = $$"""
+            {{ShaderSource.LightStruct}}
+
             cbuffer PointCloudConstants : register(b0)
             {
-                matrix WorldViewProjection;
+            {{ShaderSource.TransformFields}}
                 float4 Color;
                 float3 GridCount;
                 float  Threshold;
                 float3 Extent;
-                float  Opacity;
-                float3 Scatter;
                 float  Seed;
-                float3 ViewRight;
+                float3 Scatter;
                 float  PointHalfSize;
-                float3 ViewUp;
+                float3 ViewRight;
                 float  LineHalfWidth;
-                float3 ViewForward;
+                float3 ViewUp;
                 float  UseSourceColor;
+                float3 ViewForward;
                 float  ExtraOpacity;
-                float  OpacityRandomness;
-                float  PointIsRound;
-                float  Padding;
                 float3 DeformAxis;
                 float  DeformKind;
                 float  DeformAmount;
                 float  DeformPeriod;
                 float  DeformPhase;
                 float  LineRandomness;
+                float  OpacityRandomness;
+                float  PointIsRound;
+                float2 Padding;
             };
 
+            {{ShaderSource.TransformNames}}
+
+            {{ShaderSource.LightingFunctions}}
+
             static const float Pi = 3.14159265;
+
+            // 粒と線はカメラを向いた板でしかないので、球（線なら円柱）の表面と
+            // みなして法線を作る。縁ほど横を向くので、丸みがついて見える。
+            //
+            // 画素ごとに求めること。頂点で求めると四隅がどれも真横を向き、
+            // 補間された真ん中の法線が打ち消し合って 0 に潰れる。
+            float3 Billboard(float2 edge)
+            {
+                float2 offset = clamp(edge, -1.0, 1.0);
+                float depth = sqrt(saturate(1.0 - dot(offset, offset)));
+
+                return normalize(ViewRight * offset.x + ViewUp * offset.y - ViewForward * depth);
+            }
 
             struct VS_INPUT
             {
@@ -111,6 +130,12 @@ namespace PixelPoints3D
 
                 // 形の中心で 0、縁で ±1。Coverage() が縁を滑らかにするのに使う。
                 float2 Edge : EDGE;
+
+                float3 Nrm   : NORMAL;
+                float3 World : TEXCOORD1;
+
+                // 板（粒・線）なら 1。法線を画素ごとに作り直す合図。
+                nointerpolation float IsBillboard : BILLBOARD;
 
                 // x … 格子の点ごと（面の不透明度）、y … 線ごと（引くかどうか）。
                 nointerpolation float2 Random : RANDOM;
@@ -189,7 +214,7 @@ namespace PixelPoints3D
                 return lerp(p, sphere, DeformAmount);
             }
 
-            float3 Place(float3 cell)
+            float3 Shape(float3 cell)
             {
                 float3 ratio = Ratio(cell);
 
@@ -199,9 +224,26 @@ namespace PixelPoints3D
                     -(ratio.y - 0.5) * Extent.y,
                      (ratio.z - 0.5) * Extent.z);
 
+                return Deform(local);
+            }
+
+            float3 Place(float3 cell)
+            {
                 // ばらつきは変形のあとに足す。先に足すと、散らばりまで一緒に
                 // 曲げられて、量が場所によって変わってしまう。
-                return Deform(local) + Hash(cell) * Scatter;
+                return Shape(cell) + Hash(cell) * Scatter;
+            }
+
+            // 面は隣の点との差から本物の法線を出す。ばらつきは入れない。入れると
+            // 点ごとに向きが飛んで、面がざらついて見える。
+            float3 SurfaceNormal(float3 cell)
+            {
+                float3 along = Shape(cell + float3(1, 0, 0)) - Shape(cell - float3(1, 0, 0));
+                float3 down = Shape(cell + float3(0, 1, 0)) - Shape(cell - float3(0, 1, 0));
+
+                float3 normal = cross(along, down);
+
+                return dot(normal, normal) > 1e-12 ? normalize(normal) : -ViewForward;
             }
 
             PS_INPUT VSMain(VS_INPUT input)
@@ -227,6 +269,8 @@ namespace PixelPoints3D
 
                 float3 local = Place(input.Cell);
 
+                output.IsBillboard = any(input.Corner != 0.0) ? 1.0 : 0.0;
+
                 if (any(input.Other != input.Cell))
                 {
                     // 引かないと決まった線は、手前より奥へ送って刈り取らせる。
@@ -234,6 +278,8 @@ namespace PixelPoints3D
                     if (output.Random.y < LineRandomness)
                     {
                         output.Position = float4(0, 0, -1, 1);
+                        output.Nrm = float3(0, 0, 0);
+                        output.World = float3(0, 0, 0);
                         return output;
                     }
 
@@ -252,6 +298,8 @@ namespace PixelPoints3D
                 }
 
                 output.Position = mul(float4(local, 1.0), WorldViewProjection);
+                output.Nrm = mul(float4(SurfaceNormal(input.Cell), 0.0), WorldInverse).xyz;
+                output.World = mul(float4(local, 1.0), World).xyz;
                 return output;
             }
             """;
@@ -299,6 +347,13 @@ namespace PixelPoints3D
                     discard;
 
                 float3 rgb = UseSourceColor > 0.5 ? source.rgb : Color.rgb;
+
+                float3 normal = input.IsBillboard > 0.5
+                    ? mul(float4(Billboard(input.Edge), 0.0), WorldInverse).xyz
+                    : input.Nrm;
+
+                rgb = ApplyLight(rgb, normal, input.World);
+                rgb = ApplyFog(rgb, input.World);
 
                 return float4(rgb, alpha);
             }

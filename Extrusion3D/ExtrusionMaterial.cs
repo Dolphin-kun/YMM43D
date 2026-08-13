@@ -16,11 +16,7 @@ namespace Extrusion3D
 
         public Vector3 CameraLocalPos;
 
-        public float Attenuation;
-
         public int ExtrusionType;
-
-        private Vector3 padding;
     }
 
     internal sealed class ExtrusionMaterial : IMaterial
@@ -39,9 +35,7 @@ namespace Extrusion3D
             {{ShaderSource.TransformFields}}
                 float4 SideColor;
                 float3 CameraLocalPos;
-                float  Attenuation;
                 int    ExtrusionType;
-                float3 Padding;
             };
 
             {{ShaderSource.TransformNames}}
@@ -195,10 +189,7 @@ namespace Extrusion3D
                     ? txDiffuse.SampleLevel(samLinear, hitUV, 0).rgb
                     : SideColor.rgb;
 
-                // 減衰は、光源とは別に側面だけを暗く落とす昔ながらの効き方
-                float fade = lerp(1.0, max(0.3, dot(sideNormal, normalize(float3(0.5, 0.8, -0.5)))), Attenuation);
-
-                output.Color = float4(Shade3D(color * fade, sideNormal, worldPos), Opacity);
+                output.Color = float4(Shade3D(color, sideNormal, worldPos), Opacity);
                 return output;
             }
             """;

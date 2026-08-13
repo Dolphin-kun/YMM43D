@@ -58,6 +58,12 @@ namespace PixelPoints3D
         public bool DrawFaces { get => drawFaces; set => Set(ref drawFaces, value); }
         private bool drawFaces;
 
+        [Display(GroupName = Shape, Name = "陰影をつけない",
+            Description = "光源を無視して、指定した色のまま塗ります")]
+        [ToggleSlider]
+        public bool IsUnlit { get => isUnlit; set => Set(ref isUnlit, value); }
+        private bool isUnlit;
+
         [Display(AutoGenerateField = true)]
         public ImmutableList<PointParams> PointSettings { get => pointSettings; set => Set(ref pointSettings, value); }
         private ImmutableList<PointParams> pointSettings = [new PointParams()];
