@@ -42,6 +42,7 @@ namespace YMM43D.PreviewTool.ViewModels
         private IVideoItem? selected;
 
         private bool drivesSceneCamera;
+        private bool insertsKeyFrame;
         private bool isDisposed;
 
         public D3D11Host? D3DHost
@@ -64,6 +65,20 @@ namespace YMM43D.PreviewTool.ViewModels
 
                 freeCamera.Invalidate();
             }
+        }
+
+        /// <summary>
+        /// <c>true</c> のとき、ドラッグがいまの再生位置に中間点を打ち、そこだけを動かします。
+        /// </summary>
+        /// <remarks>
+        /// 切ってあるあいだは、打ってあるキーフレームすべてが同じだけ動きます。動きを
+        /// 壊さずに置き直せますが、それだけでは動きを作れません。入れると、止めた位置で
+        /// 少しずつ形を決めていく作り方ができます。
+        /// </remarks>
+        public bool InsertsKeyFrame
+        {
+            get => insertsKeyFrame;
+            set => Set(ref insertsKeyFrame, value, nameof(InsertsKeyFrame));
         }
 
         /// <summary>カメラアイテムを置ける状態かどうか。</summary>
@@ -131,12 +146,12 @@ namespace YMM43D.PreviewTool.ViewModels
 
             host.Render += OnRender;
             host.MouseAction += OnMouseAction;
-            host.KeyAction += OnKeyAction;
+            host.KeyHandler = HandleKey;
             disposer.CollectAction(host, () =>
             {
                 host.Render -= OnRender;
                 host.MouseAction -= OnMouseAction;
-                host.KeyAction -= OnKeyAction;
+                host.KeyHandler = null;
             });
 
             CompositionTarget.Rendering += OnCompositionRendering;
@@ -236,9 +251,21 @@ namespace YMM43D.PreviewTool.ViewModels
                 return;
             }
 
-            target.Source.Move(move);
+            target.Source.Move(move, GetEditScope(target.Item));
             refresher?.ForceRefresh(timeline);
         }
+
+        /// <summary>
+        /// そのアイテムを動かした結果を、アニメーションのどこに書き込むか。
+        /// </summary>
+        /// <remarks>
+        /// キーフレームはアイテムの先頭からの位置で打たれるので、タイムライン上の
+        /// 再生位置をアイテム内の位置に直します。
+        /// </remarks>
+        private EditScope GetEditScope(IItem item)
+            => insertsKeyFrame && timeline is not null
+                ? EditScope.AtFrame(timeline.CurrentFrame - item.Frame)
+                : EditScope.Whole;
 
         /// <summary>
         /// いまの再生位置に、3Dカメラのアイテムを置きます。
@@ -401,7 +428,9 @@ namespace YMM43D.PreviewTool.ViewModels
                 && renderer.Gizmo is { } gizmo
                 && renderer.CreateRay(screen) is { } gizmoRay)
             {
-                return itemDrag.Begin(selected, gizmo.Origin, grabbed, gizmoRay, freeCamera.State.Forward);
+                return itemDrag.Begin(
+                    selected, gizmo.Origin, grabbed, gizmoRay, freeCamera.State.Forward,
+                    GetEditScope(selected));
             }
 
             if (renderer.Pick(screen, out var ray) is not { } picked)
@@ -417,22 +446,22 @@ namespace YMM43D.PreviewTool.ViewModels
                 timeline.SelectedItems = [picked.Item];
 
             return itemDrag.Begin(
-                picked.Item, picked.World.Translation, GizmoHandle.Free, ray, freeCamera.State.Forward);
+                picked.Item, picked.World.Translation, GizmoHandle.Free, ray, freeCamera.State.Forward,
+                GetEditScope(picked.Item));
         }
 
         private static Vector2 ToVector(Point position) => new((float)position.X, (float)position.Y);
 
-        private void OnKeyAction(Key key, ModifierKeys modifiers) => HandleKey(key, modifiers);
-
         /// <summary>
         /// プレビュー上のキー操作。
         /// </summary>
-        /// <returns>受け取ったキーなら <c>true</c>。</returns>
+        /// <returns>受け取ったキーなら <c>true</c>。呼び出し側はそこで止めてください。</returns>
         /// <remarks>
         /// 3D表示は子ウィンドウなので、WPF のキー入力はそのままでは届きません。
         /// <see cref="D3D11Host"/> が拾ったものと、枠の側で拾ったものの両方がここに来ます。
         /// <para>
-        /// テンキーの割り当ては Blender に合わせています。
+        /// 数字はテンキーと本体側のどちらでも効くようにしています。テンキーの無い
+        /// キーボードでも同じように使えます。
         /// </para>
         /// </remarks>
         public bool HandleKey(Key key, ModifierKeys modifiers)
@@ -458,19 +487,23 @@ namespace YMM43D.PreviewTool.ViewModels
                     ViewAll();
                     return true;
 
-                case Key.NumPad0:
+                case Key.K when modifiers == ModifierKeys.None:
+                    InsertsKeyFrame = !InsertsKeyFrame;
+                    return true;
+
+                case Key.NumPad0 or Key.D0:
                     DrivesSceneCamera = !DrivesSceneCamera;
                     return true;
 
-                case Key.NumPad1:
+                case Key.NumPad1 or Key.D1:
                     ViewFrom(control ? "Back" : "Front");
                     return true;
 
-                case Key.NumPad3:
+                case Key.NumPad3 or Key.D3:
                     ViewFrom(control ? "Left" : "Right");
                     return true;
 
-                case Key.NumPad7:
+                case Key.NumPad7 or Key.D7:
                     ViewFrom(control ? "Bottom" : "Top");
                     return true;
 
@@ -520,6 +553,7 @@ namespace YMM43D.PreviewTool.ViewModels
             // YMM4 と同じく、番号の小さいレイヤーから先に描いて奥に置く。
             var visible = items
                 .OfType<IVideoItem>()
+                .Where(item => !item.IsHidden)
                 .Where(item => frame >= item.Frame && frame < item.Frame + item.Length)
                 .OrderBy(item => item.Layer);
 

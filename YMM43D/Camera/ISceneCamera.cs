@@ -29,10 +29,12 @@ namespace YMM43D.Camera
         /// <summary>
         /// プレビュー上のドラッグに合わせてカメラを動かします。
         /// </summary>
+        /// <param name="move">動かす量。</param>
+        /// <param name="scope">どこに書き込むか。</param>
         /// <remarks>
         /// 差分で受け取るのは、キーフレームを打ったカメラを壊さないためです。
         /// 全部のキーフレームを同じだけずらせば、打った動きは残ります。
         /// </remarks>
-        void Move(in CameraMove move);
+        void Move(in CameraMove move, in EditScope scope);
     }
 }

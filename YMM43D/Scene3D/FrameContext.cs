@@ -83,5 +83,59 @@ namespace YMM43D.Scene3D
 
             animation.AddToEachValues(room);
         }
+
+        /// <summary>
+        /// その位置に中間点を打って、そこの値だけを動かします。
+        /// </summary>
+        /// <param name="frame">アイテムの先頭から数えたフレーム位置。</param>
+        /// <remarks>
+        /// YMM4 のキーフレームはアイテムに1組しかなく、値の並びは「先頭・各中間点・末尾」の
+        /// 順です。中間点が <c>n</c> 個あれば値は <c>n+2</c> 個で、<c>i</c> 番目の中間点は
+        /// <c>i+1</c> 番目の値に対応します。
+        /// <para>
+        /// 移動方法が「なし」のままでは値を1つしか持てないので、中間点を打つ前に
+        /// 「直線移動」へ変えます。値が1つのうちは変えても見え方は変わりません。
+        /// </para>
+        /// <para>
+        /// 打てない場面（先頭・末尾など）では <see cref="Nudge"/> と同じ動きに戻します。
+        /// 打てないからといって何も動かないと、ドラッグが効かなくなってしまいます。
+        /// </para>
+        /// </remarks>
+        public static void NudgeAt(this Animation animation, double delta, int frame)
+        {
+            if (delta == 0)
+                return;
+
+            if (frame <= 0 || animation.KeyFrames is not { } keyFrames)
+            {
+                // 先頭の値は中間点ではなく、値の並びの 0 番目そのもの。
+                NudgeValue(animation, delta, 0);
+                return;
+            }
+
+            if (!AnimationTypeEx.IsKeyFrameSupported(animation.AnimationType))
+                animation.AnimationType = AnimationType.直線移動;
+
+            var index = keyFrames.Frames.IndexOf(frame);
+            if (index < 0)
+                index = keyFrames.Insert(frame);
+
+            NudgeValue(animation, delta, index + 1);
+        }
+
+        /// <summary>値の並びの1つだけを、上下限に収めて動かします。</summary>
+        private static void NudgeValue(Animation animation, double delta, int index)
+        {
+            if (animation.Values is not { } values || index < 0 || index >= values.Count)
+            {
+                // 値が揃っていない。打った中間点は残るが、動かす先が無い。
+                animation.Nudge(delta);
+                return;
+            }
+
+            var target = values[index];
+
+            target.Value = Math.Clamp(target.Value + delta, animation.MinValue, animation.MaxValue);
+        }
     }
 }

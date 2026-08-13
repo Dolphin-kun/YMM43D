@@ -15,6 +15,7 @@ namespace YMM43D.PreviewTool
     {
         private IVideoItem? target;
         private GizmoHandle handle;
+        private EditScope scope;
 
         // 面に沿って動かすとき用。
         private Vector3 planePoint;
@@ -44,13 +45,15 @@ namespace YMM43D.PreviewTool
         /// <param name="grabbed">掴んだ案内の部分。<see cref="GizmoHandle.Free"/> なら面に沿って動きます。</param>
         /// <param name="ray">掴んだ位置から伸ばした視線。</param>
         /// <param name="viewDirection">カメラが向いている方向。</param>
+        /// <param name="edit">動かした結果をアニメーションのどこに書き込むか。</param>
         /// <returns>掴めたら <c>true</c>。</returns>
         public bool Begin(
             IVideoItem item,
             in Vector3 origin,
             GizmoHandle grabbed,
             in PickRay ray,
-            in Vector3 viewDirection)
+            in Vector3 viewDirection,
+            in EditScope edit)
         {
             planePoint = origin;
 
@@ -81,6 +84,7 @@ namespace YMM43D.PreviewTool
 
             target = item;
             handle = grabbed;
+            scope = edit;
 
             return true;
         }
@@ -153,17 +157,17 @@ namespace YMM43D.PreviewTool
             lastAngle = angle;
 
             // YMM4 の回転角は時計回りが正。3D 空間の反時計回りとは向きが逆。
-            item.Rotation.Nudge(-delta * 180f / MathF.PI);
+            scope.Nudge(item.Rotation, -delta * 180f / MathF.PI);
 
             return true;
         }
 
-        private static void Shift(IVideoItem item, in Vector3 shift)
+        private void Shift(IVideoItem item, in Vector3 shift)
         {
             // YMM4 の座標はピクセル。Y は画面と同じく下向きが正。
-            item.X.Nudge(WorldScale.ToPixels(shift.X));
-            item.Y.Nudge(-WorldScale.ToPixels(shift.Y));
-            item.Z.Nudge(WorldScale.ToPixels(shift.Z));
+            scope.Nudge(item.X, WorldScale.ToPixels(shift.X));
+            scope.Nudge(item.Y, -WorldScale.ToPixels(shift.Y));
+            scope.Nudge(item.Z, WorldScale.ToPixels(shift.Z));
         }
 
         /// <summary>輪の上で、いまどの向きを指しているか。</summary>

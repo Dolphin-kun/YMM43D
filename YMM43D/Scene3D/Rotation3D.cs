@@ -13,6 +13,8 @@ namespace YMM43D.Scene3D
     {
         public static float ToRadians(float degrees) => degrees * MathF.PI / 180f;
 
+        public static float ToDegrees(float radians) => radians * 180f / MathF.PI;
+
         /// <summary>
         /// カメラ向けの回転行列。ロール → ピッチ → ヨー の順に適用します。
         /// </summary>

@@ -16,6 +16,7 @@ namespace YMM43D.PreviewTool
         private readonly GridRenderer grid = new();
         private readonly CameraGizmoRenderer cameraGizmo = new();
         private readonly TransformGizmoRenderer transformGizmo = new();
+        private readonly AxisIndicatorRenderer axisIndicator = new();
         private readonly FlatItemProvider flatItemProvider = new();
         private readonly ItemDrawContextBuilder contextBuilder = new();
 
@@ -89,6 +90,9 @@ namespace YMM43D.PreviewTool
             if (lastGizmo is { } gizmo)
                 transformGizmo.Draw(render, gizmo, scene.ActiveHandle);
 
+            // 描画先を別の枠に切り替えるので、最後に描く。
+            axisIndicator.Draw(render, viewPose, width, height);
+
             lastViewProjection = viewPose.ViewMatrix * projection;
             lastWidth = width;
             lastHeight = height;
@@ -96,7 +100,8 @@ namespace YMM43D.PreviewTool
 
         private TransformGizmo? FindGizmo(IVideoItem? selected, in Vector3 cameraPosition)
         {
-            if (selected is null)
+            // ロックしているあいだは動かせないので、案内も出さない。
+            if (selected is null || selected.IsLocked)
                 return null;
 
             foreach (var target in pickTargets)
@@ -246,6 +251,11 @@ namespace YMM43D.PreviewTool
 
             foreach (var target in pickTargets)
             {
+                // ロックしたアイテムは動かせない。掴めてしまうと、手前にある大きな
+                // アイテムが邪魔でその奥のものを選べなくなる。
+                if (target.Item.IsLocked)
+                    continue;
+
                 if (cast.IntersectUnitBox(target.World) is not { } distance || distance >= nearest)
                     continue;
 
@@ -261,6 +271,7 @@ namespace YMM43D.PreviewTool
             grid.Dispose();
             cameraGizmo.Dispose();
             transformGizmo.Dispose();
+            axisIndicator.Dispose();
             flatItemProvider.Dispose();
             contextBuilder.Dispose();
         }

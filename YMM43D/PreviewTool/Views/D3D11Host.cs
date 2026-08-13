@@ -23,7 +23,15 @@ namespace YMM43D.PreviewTool.Views
 
         public event Action<ID3D11Device, ID3D11DeviceContext, int, int>? Render;
         public event Action<Point, MouseEventKind, int>? MouseAction;
-        public event Action<Key, ModifierKeys>? KeyAction;
+
+        /// <summary>
+        /// キー入力の受け取り先。受け取ったら <c>true</c> を返してください。
+        /// </summary>
+        /// <remarks>
+        /// 戻り値を見て、受け取ったキーは YMM4 本体に流さないようにします。イベントでは
+        /// 戻り値を扱えないので、デリゲートを直接持ちます。
+        /// </remarks>
+        public Func<Key, ModifierKeys, bool>? KeyHandler { get; set; }
         public enum MouseEventKind { Down, Move, Up, Wheel, RightDown, RightUp, MiddleDown, MiddleUp }
 
         /// <summary>
@@ -292,7 +300,14 @@ namespace YMM43D.PreviewTool.Views
                 // キー入力は流れてこないので、ここで拾って伝える。
                 case 0x0100:
                 case 0x0104:
-                    KeyAction?.Invoke(KeyInterop.KeyFromVirtualKey((int)wParam), CurrentModifiers);
+                    // 受け取ったキーはここで止める。止めないと、同じキーで YMM4 本体の
+                    // ショートカットも一緒に動いてしまう。
+                    if (KeyHandler?.Invoke(KeyInterop.KeyFromVirtualKey((int)wParam), CurrentModifiers) == true)
+                    {
+                        handled = true;
+                        return nint.Zero;
+                    }
+
                     break;
             }
             return base.WndProc(hwnd, msg, wParam, lParam, ref handled);

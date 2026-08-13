@@ -32,8 +32,14 @@
                 <MenuItem Header="カメラ追従"
                           IsCheckable="True"
                           IsChecked="{Binding DrivesSceneCamera}"
-                          InputGestureText="テンキー0"
+                          InputGestureText="0"
                           ToolTip="入れると、見る位置がカメラアイテムに追従し、ドラッグがそのカメラを直接動かします。外すと見る位置だけが動き、出力は変わりません。"/>
+
+                <MenuItem Header="中間点を打つ"
+                          IsCheckable="True"
+                          IsChecked="{Binding InsertsKeyFrame}"
+                          InputGestureText="K"
+                          ToolTip="入れると、ドラッグがいまの再生位置に中間点を打ち、そこだけを動かします。外すと、打ってある中間点すべてが同じだけ動きます。カメラにもアイテムにも効きます。"/>
 
                 <MenuItem Header="視点をカメラに戻す"
                           Command="{Binding ResetToSceneCameraCommand}"
@@ -60,12 +66,12 @@
                 <Separator/>
 
                 <MenuItem Header="決まった向きから">
-                    <MenuItem Header="前から" Command="{Binding ViewFromCommand}" CommandParameter="Front" InputGestureText="テンキー1"/>
-                    <MenuItem Header="後ろから" Command="{Binding ViewFromCommand}" CommandParameter="Back" InputGestureText="Ctrl+テンキー1"/>
-                    <MenuItem Header="右から" Command="{Binding ViewFromCommand}" CommandParameter="Right" InputGestureText="テンキー3"/>
-                    <MenuItem Header="左から" Command="{Binding ViewFromCommand}" CommandParameter="Left" InputGestureText="Ctrl+テンキー3"/>
-                    <MenuItem Header="上から" Command="{Binding ViewFromCommand}" CommandParameter="Top" InputGestureText="テンキー7"/>
-                    <MenuItem Header="下から" Command="{Binding ViewFromCommand}" CommandParameter="Bottom" InputGestureText="Ctrl+テンキー7"/>
+                    <MenuItem Header="前から" Command="{Binding ViewFromCommand}" CommandParameter="Front" InputGestureText="1"/>
+                    <MenuItem Header="後ろから" Command="{Binding ViewFromCommand}" CommandParameter="Back" InputGestureText="Ctrl+1"/>
+                    <MenuItem Header="右から" Command="{Binding ViewFromCommand}" CommandParameter="Right" InputGestureText="3"/>
+                    <MenuItem Header="左から" Command="{Binding ViewFromCommand}" CommandParameter="Left" InputGestureText="Ctrl+3"/>
+                    <MenuItem Header="上から" Command="{Binding ViewFromCommand}" CommandParameter="Top" InputGestureText="7"/>
+                    <MenuItem Header="下から" Command="{Binding ViewFromCommand}" CommandParameter="Bottom" InputGestureText="Ctrl+7"/>
                 </MenuItem>
             </MenuItem>
         </Menu>

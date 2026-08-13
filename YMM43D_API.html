@@ -182,15 +182,28 @@ YMM43D.PreviewTool   3Dプレビューのツールウィンドウ。</pre>
 <tr><td><code>Shape3D</code></td><td>3Dアイテム</td><td>図形</td><td><code>Shape3DSourceBase</code> の最小構成</td></tr>
 <tr><td><code>Extrusion3D</code></td><td>立体化3D</td><td>映像エフェクト</td><td>入力画像をテクスチャに使う。レイマーチングと <code>SV_Depth</code></td></tr>
 <tr><td><code>PixelPoints3D</code></td><td>点群3D</td><td>映像エフェクト</td><td>頂点シェーダーで形を組み立てる。複数の形状を 1 つのシェーダーで描き分ける</td></tr>
-<tr><td><code>YMM43D.Flat3D</code></td><td>3D空間に置く</td><td>映像エフェクト</td><td>入力画像を板として置くだけの最小構成。設定を持たないエフェクトの例</td></tr>
+<tr><td><code>YMM43D.Flat3D</code></td><td>3D空間に置く</td><td>映像エフェクト</td><td>入力画像を板として置く。実寸と回転を自分で扱う（<code>ScalesToInputSize</code> が false）例</td></tr>
 </table>
 
 <p>
 「3D空間に置く」は、ふつうの 2D アイテムをシーンカメラに従わせるためのものです。
 3D の図形やエフェクトはもともとシーンカメラの視点で出力されますが、テキストや画像は
 YMM4 が 2D のまま描くのでカメラの影響を受けません。このエフェクトを付けると、他の 3D
-物体と同じ扱いになります。
+物体と同じ扱いになり、あわせて 3 軸の回転も掛けられます。
 </p>
+
+<div class="note">
+<p>
+2D アイテムをまとめてカメラに従わせたいときは、<b>エフェクトアイテム</b>に付けてください。
+エフェクトアイテムは下のレイヤーを合成した絵にエフェクトを掛けるので、1 つ置くだけで
+その下すべてが 1 枚の板としてカメラに乗ります（アイテムごとの前後関係は失われます）。
+</p>
+<p>
+アイテムの種類ごとに既定として持たせることもできます。エフェクトを付けたアイテムを
+YMM4 の「デフォルトのアイテム」として保存すると、以後その種類の新しいアイテムに
+最初から付いた状態になります。
+</p>
+</div>
 
 <p>プラグインのプロジェクトから YMM43D.dll を参照します。YMM4 本体の DLL 群と同じ場所に配置してください。</p>
 
@@ -668,6 +681,7 @@ var pipeline = pipelines.Get(render.Device);</pre>
 <tr><th>型</th><th>種別</th><th>説明</th></tr>
 <tr><td><code>CameraItem</code></td><td>class</td><td>タイムラインに置く「3Dカメラ」アイテム。<code>BaseItem</code> を継承する</td></tr>
 <tr><td><code>ISceneCamera</code></td><td>interface</td><td>カメラとして振る舞うアイテム。設定値を返し、ドラッグの差分を受け取る</td></tr>
+<tr><td><code>CameraAim</code></td><td>enum</td><td>向きの決め方。回転角で指定するか、注視点を向き続けるか</td></tr>
 <tr><td><code>CameraState</code></td><td>struct</td><td>ある瞬間のカメラの設定値（位置・向き・視野角）</td></tr>
 <tr><td><code>CameraMove</code></td><td>struct</td><td>カメラをどれだけ動かすかの差分。ドラッグ操作を伝えるのに使う</td></tr>
 <tr><td><code>CameraPose</code></td><td>struct</td><td>ある時点でのカメラの位置・注視点・上方向</td></tr>
@@ -689,7 +703,8 @@ var pipeline = pipelines.Get(render.Device);</pre>
 <tr><td><code>ImageProjection</code></td><td>static class</td><td>ワールドから 1 つのアイテムの出力画像までの射影を組み立てる</td></tr>
 <tr><td><code>DrawContext3D</code></td><td>class</td><td>1 つのアイテムを描画するための情報</td></tr>
 <tr><td><code>FrameContext</code></td><td>struct</td><td>フレーム位置・長さ・FPS の組</td></tr>
-<tr><td><code>AnimationExtensions</code></td><td>static class</td><td><code>Animation</code> を <code>FrameContext</code> で評価する</td></tr>
+<tr><td><code>AnimationExtensions</code></td><td>static class</td><td><code>Animation</code> を <code>FrameContext</code> で評価する。差分で動かす <code>Nudge</code> / <code>NudgeAt</code> も持つ</td></tr>
+<tr><td><code>EditScope</code></td><td>struct</td><td>ドラッグの結果をアニメーションのどこに書き込むか（全体か、中間点か）</td></tr>
 <tr><td><code>Rotation3D</code></td><td>static class</td><td>度からの回転行列の生成</td></tr>
 </table>
 

@@ -32,12 +32,26 @@ namespace YMM43D.Scene3D
         /// トリミングされた画像では描画範囲が原点から偏ります。
         /// </remarks>
         public static Matrix4x4 CreateSizeMatrix(Vector2 sizeInPixels, Vector2 centerInPixels)
+            => CreateSizeMatrix(sizeInPixels, centerInPixels, Matrix4x4.Identity);
+
+        /// <summary>
+        /// 1×1 の板を実寸に広げ、その場で回してから、中心へ動かす行列を作ります。
+        /// </summary>
+        /// <param name="rotation">広げた後に掛ける回転。</param>
+        /// <remarks>
+        /// 回すのは広げた後です。順を逆にすると、縦横の倍率が違うぶん斜めの辺が
+        /// 引き伸ばされ、正方形でない絵が平行四辺形になります。
+        /// </remarks>
+        /// <inheritdoc cref="CreateSizeMatrix(Vector2, Vector2)"/>
+        public static Matrix4x4 CreateSizeMatrix(
+            Vector2 sizeInPixels, Vector2 centerInPixels, in Matrix4x4 rotation)
         {
             if (sizeInPixels.X <= 0 || sizeInPixels.Y <= 0)
-                return Matrix4x4.Identity;
+                return rotation;
 
             // YMM4 の Y 軸は下向き、3D 空間は上向きなので中心のずれは符号を反転する。
             return Matrix4x4.CreateScale(ToWorld(sizeInPixels.X), ToWorld(sizeInPixels.Y), 1f)
+                 * rotation
                  * Matrix4x4.CreateTranslation(
                        ToWorld(centerInPixels.X), -ToWorld(centerInPixels.Y), 0f);
         }
