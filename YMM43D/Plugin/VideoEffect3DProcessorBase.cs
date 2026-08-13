@@ -23,7 +23,7 @@ namespace YMM43D.Plugin
     /// </para>
     /// </remarks>
     public abstract class VideoEffect3DProcessorBase
-        : IVideoEffectProcessor, I3DVideoEffect, I3DSizeProvider, I3DLocalTransform
+        : IVideoEffectProcessor, I3DVideoEffect, I3DSizeProvider, I3DLocalTransform, I3DBounds
     {
         private readonly VideoEffect3DBase? owner;
         private readonly D2DTextureBridge textureBridge = new();
@@ -91,6 +91,9 @@ namespace YMM43D.Plugin
         /// 何も描画しません。入力画像の実寸は <see cref="TryGetSize"/> で得られます。
         /// </remarks>
         protected abstract WorldBounds GetLocalBounds(in FrameContext itemTime);
+
+        /// <inheritdoc/>
+        WorldBounds I3DBounds.GetLocalBounds(in FrameContext itemTime) => GetLocalBounds(itemTime);
 
         /// <inheritdoc/>
         public DrawDescription Update(EffectDescription description)

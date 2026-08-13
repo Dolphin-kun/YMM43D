@@ -60,6 +60,21 @@ namespace YMM43D.Scene3D
         /// 拡大が掛かっていても、箱の側を作り直さずに済みます。
         /// </remarks>
         public float? IntersectUnitBox(in Matrix4x4 world, float minThickness = 0.001f)
+            => IntersectBox(WorldBounds.FromCube(1f), world, minThickness);
+
+        /// <summary>
+        /// 軸に沿った範囲との交点までの距離を返します。
+        /// </summary>
+        /// <param name="bounds">範囲（<paramref name="world"/> を掛ける前）。</param>
+        /// <param name="world">範囲に掛かっている変換。</param>
+        /// <param name="minThickness">
+        /// 厚みの下限。板のように潰れた形は厚みが 0 になり、そのままでは掴めません。
+        /// </param>
+        /// <remarks>
+        /// 半直線の方を変換の逆で引き戻し、軸に沿った箱として調べます。回転や
+        /// 拡大が掛かっていても、箱の側を作り直さずに済みます。
+        /// </remarks>
+        public float? IntersectBox(in WorldBounds bounds, in Matrix4x4 world, float minThickness = 0.001f)
         {
             if (!Matrix4x4.Invert(world, out var inverse))
                 return null;
@@ -67,7 +82,9 @@ namespace YMM43D.Scene3D
             var origin = Vector3.Transform(Origin, inverse);
             var direction = Vector3.TransformNormal(Direction, inverse);
 
-            var half = Vector3.Max(new Vector3(0.5f), new Vector3(minThickness / 2f));
+            // 潰れた軸は、中心を挟んで最低限の厚みまで広げる。
+            var center = (bounds.Min + bounds.Max) / 2f;
+            var half = Vector3.Max((bounds.Max - bounds.Min) / 2f, new Vector3(minThickness / 2f));
 
             var enter = float.NegativeInfinity;
             var exit = float.PositiveInfinity;
@@ -75,7 +92,7 @@ namespace YMM43D.Scene3D
             for (var axis = 0; axis < 3; axis++)
             {
                 var slope = Component(direction, axis);
-                var start = Component(origin, axis);
+                var start = Component(origin, axis) - Component(center, axis);
                 var limit = Component(half, axis);
 
                 if (MathF.Abs(slope) < 1e-9f)

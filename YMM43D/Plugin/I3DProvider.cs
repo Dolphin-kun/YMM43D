@@ -30,6 +30,23 @@ namespace YMM43D.Plugin
     }
 
     /// <summary>
+    /// 自分が描くものの大きさを答えられるオブジェクト。
+    /// </summary>
+    /// <remarks>
+    /// 3Dプレビューでアイテムを掴む範囲に使います。実装していないと、アイテム本来の
+    /// 2D の大きさで判定することになり、立体化した部分や 2D より大きな図形が掴めません。
+    /// <para>
+    /// 返す範囲は <see cref="DrawContext3D.World"/> を掛ける前の座標系です。出力画像の
+    /// 大きさを決めるのに使う範囲と同じものを返してください。
+    /// </para>
+    /// </remarks>
+    public interface I3DBounds
+    {
+        /// <summary>描くものが占める範囲。</summary>
+        WorldBounds GetLocalBounds(in FrameContext itemTime);
+    }
+
+    /// <summary>
     /// 自前で用意したテクスチャを 3D 描画に提供できるオブジェクト。
     /// </summary>
     /// <remarks>

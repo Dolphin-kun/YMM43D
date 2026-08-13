@@ -31,7 +31,8 @@ namespace YMM43D.PreviewTool
         public I3DProvider DefaultProvider => flatItemProvider;
 
         /// <summary>掴める見た目を1つ分。</summary>
-        internal readonly record struct PickTarget(IVideoItem Item, Matrix4x4 World);
+        /// <param name="Bounds">描くものが占める範囲（<paramref name="World"/> を掛ける前）。</param>
+        internal readonly record struct PickTarget(IVideoItem Item, Matrix4x4 World, WorldBounds Bounds);
 
         public void Draw(
             ID3D11Device device,
@@ -83,7 +84,8 @@ namespace YMM43D.PreviewTool
 
             pickTargets =
             [
-                .. scene.Items.Select((item, i) => new PickTarget(item.Item, drawContexts[i].World))
+                .. scene.Items.Select((item, i) => new PickTarget(
+                    item.Item, drawContexts[i].World, GetLocalBounds(item, drawContexts[i].Time)))
             ];
 
             lastGizmo = FindGizmo(scene.Selected, viewPose.Position);
@@ -96,6 +98,23 @@ namespace YMM43D.PreviewTool
             lastViewProjection = viewPose.ViewMatrix * projection;
             lastWidth = width;
             lastHeight = height;
+        }
+
+        /// <summary>
+        /// 描くものが占める範囲。答えられないプロバイダーは、アイテム本来の大きさで見ます。
+        /// </summary>
+        /// <remarks>
+        /// 掴む判定に使います。立体化したアイテムのように、描かれる範囲が 2D の
+        /// 大きさより広いものは、これが無いとはみ出した部分を掴めません。
+        /// </remarks>
+        private static WorldBounds GetLocalBounds(PreviewItem item, in FrameContext itemTime)
+        {
+            if (item.Provider is not I3DBounds provider)
+                return WorldBounds.FromCube(1f);
+
+            var bounds = provider.GetLocalBounds(itemTime);
+
+            return bounds.IsEmpty ? WorldBounds.FromCube(1f) : bounds;
         }
 
         private TransformGizmo? FindGizmo(IVideoItem? selected, in Vector3 cameraPosition)
@@ -192,7 +211,7 @@ namespace YMM43D.PreviewTool
                 if (item is not null && target.Item != item)
                     continue;
 
-                var box = WorldBounds.FromCube(1f).Transform(target.World);
+                var box = target.Bounds.Transform(target.World);
 
                 min = Vector3.Min(min, box.Min);
                 max = Vector3.Max(max, box.Max);
@@ -256,7 +275,7 @@ namespace YMM43D.PreviewTool
                 if (target.Item.IsLocked)
                     continue;
 
-                if (cast.IntersectUnitBox(target.World) is not { } distance || distance >= nearest)
+                if (cast.IntersectBox(target.Bounds, target.World) is not { } distance || distance >= nearest)
                     continue;
 
                 nearest = distance;

@@ -21,7 +21,7 @@ namespace YMM43D.Plugin
     /// </para>
     /// </remarks>
     public abstract class VideoEffect3DBase
-        : VideoEffectBase, I3DVideoEffect, ICameraSync, I3DSizeProvider, I3DLocalTransform
+        : VideoEffectBase, I3DVideoEffect, ICameraSync, I3DSizeProvider, I3DLocalTransform, I3DBounds
     {
         private readonly CameraSync cameraSync = new();
 
@@ -73,6 +73,14 @@ namespace YMM43D.Plugin
         /// </summary>
         public virtual void Draw(in Render3DContext render, DrawContext3D item)
             => Processor?.Draw(render, item);
+
+        /// <inheritdoc/>
+        /// <remarks>
+        /// 3Dプレビューがアイテムから辿り着くのはプロセッサではなくこちらなので、
+        /// 転送し忘れると掴む範囲がアイテム本来の 2D の大きさに戻ります。
+        /// </remarks>
+        public virtual WorldBounds GetLocalBounds(in Scene3D.FrameContext itemTime)
+            => Processor is I3DBounds provider ? provider.GetLocalBounds(itemTime) : WorldBounds.Empty;
 
         /// <inheritdoc/>
         public virtual ID3D11ShaderResourceView? GetTexture(ID3D11Device device)

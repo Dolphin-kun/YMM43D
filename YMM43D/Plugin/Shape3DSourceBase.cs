@@ -15,7 +15,7 @@ namespace YMM43D.Plugin
     /// 経路を受け持ちます。派生クラスが実装するのは <see cref="Draw"/> と
     /// <see cref="GetWorldBounds"/> の2つだけです。
     /// </remarks>
-    public abstract class Shape3DSourceBase : IShapeSource2, I3DProvider
+    public abstract class Shape3DSourceBase : IShapeSource2, I3DProvider, I3DBounds
     {
         private readonly Output3DRenderer renderer = new();
         private ID2D1Image? output;
@@ -51,6 +51,9 @@ namespace YMM43D.Plugin
         /// 返してください。大きさが無い範囲を返すと何も描画しません。
         /// </remarks>
         protected abstract WorldBounds GetWorldBounds(in FrameContext itemTime);
+
+        /// <inheritdoc/>
+        WorldBounds I3DBounds.GetLocalBounds(in FrameContext itemTime) => GetWorldBounds(itemTime);
 
         /// <inheritdoc/>
         public void Update(TimelineItemSourceDescription description)

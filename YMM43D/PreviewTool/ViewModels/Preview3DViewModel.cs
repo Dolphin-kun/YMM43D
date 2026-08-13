@@ -28,6 +28,7 @@ namespace YMM43D.PreviewTool.ViewModels
         private readonly Preview3DRenderer renderer = new();
         private readonly FreeCameraController freeCamera = new();
         private readonly ItemDragController itemDrag = new();
+        private readonly PreviewSceneBuilder sceneBuilder;
 
         private TimelineRefresher? refresher;
         private Timeline? timeline;
@@ -35,9 +36,6 @@ namespace YMM43D.PreviewTool.ViewModels
         private D3D11Host? d3dHost;
         private Scene? scene;
         private TimelineSourceAndDevices? sourceAndDevices;
-        private TimelineSourceDescription? sourceDescription;
-        private (int Width, int Height, int Fps, int Frame, int Length) lastSourceSignature;
-        private List<PreviewItem> previewItems = [];
         // 案内を出しているアイテム。タイムライン側の選択とは別に持つ。プレビューで
         // 掴んだものだけに案内を出したいので、他の経路で選んだものには反応させない。
         private IVideoItem? selected;
@@ -96,6 +94,7 @@ namespace YMM43D.PreviewTool.ViewModels
         public Preview3DViewModel()
         {
             disposer.Collect(renderer);
+            sceneBuilder = new PreviewSceneBuilder(renderer.DefaultProvider);
 
             ResetToSceneCameraCommand = new ActionCommand(_ => true, _ => ResetToSceneCamera());
             AddCameraCommand = new ActionCommand(_ => CanAddCamera, _ => AddCamera());
@@ -204,31 +203,20 @@ namespace YMM43D.PreviewTool.ViewModels
         public void LevelRoll() => ApplyCameraMove(basis => FreeCameraController.LevelRoll(basis));
 
         /// <summary>決まった向きから見ます。</summary>
-        /// <param name="name"><see cref="PresetViews"/> の名前。</param>
+        /// <param name="name"><see cref="ViewDirection"/> の名前。</param>
         public void ViewFrom(string? name)
         {
-            if (name is null || !PresetViews.TryGetValue(name, out var view))
-                return;
-
-            ApplyCameraMove(basis => freeCamera.ViewFrom(view.Yaw, view.Pitch, basis));
+            if (Enum.TryParse<ViewDirection>(name, out var direction))
+                ViewFrom(direction);
         }
 
-        /// <summary>
-        /// 決まった向きから見るときの、水平・垂直の回転角。
-        /// </summary>
-        /// <remarks>
-        /// 真上・真下は視線が定まらなくなる手前で止めます。ちょうど真上から見ると
-        /// 水平方向の向きが決められません。
-        /// </remarks>
-        private static readonly Dictionary<string, (float Yaw, float Pitch)> PresetViews = new()
+        /// <summary>決まった向きから見ます。</summary>
+        internal void ViewFrom(ViewDirection direction)
         {
-            ["Front"] = (0f, 0f),
-            ["Back"] = (180f, 0f),
-            ["Right"] = (90f, 0f),
-            ["Left"] = (-90f, 0f),
-            ["Top"] = (0f, -CameraState.MaxPitch),
-            ["Bottom"] = (0f, CameraState.MaxPitch),
-        };
+            var (yaw, pitch) = ViewDirections.GetAngles(direction);
+
+            ApplyCameraMove(basis => freeCamera.ViewFrom(yaw, pitch, basis));
+        }
 
         /// <summary>
         /// カメラの動きを、いま動かすべき相手に効かせます。
@@ -359,8 +347,9 @@ namespace YMM43D.PreviewTool.ViewModels
                 ViewPose = freeCamera.GetPose(),
                 SceneCamera = camera,
                 Time = time,
-                Environment = new PreviewEnvironment(device, sourceAndDevices.Devices, scene, sourceDescription),
-                Items = previewItems,
+                Environment = new PreviewEnvironment(
+                    device, sourceAndDevices.Devices, scene, sceneBuilder.SourceDescription),
+                Items = sceneBuilder.Items,
                 Selected = selected,
                 ActiveHandle = itemDrag.Handle,
             });
@@ -499,16 +488,6 @@ namespace YMM43D.PreviewTool.ViewModels
         /// </remarks>
         public bool HandleKey(Key key, ModifierKeys modifiers)
         {
-            // 元に戻す・やり直しは本体の操作。割り当ても本体の設定に合わせる。
-            if (HostCommands.Matches(CommandType.Undo, key, modifiers))
-                return TryUndoRedo(redo: false);
-
-            if (HostCommands.Matches(CommandType.Redo, key, modifiers))
-                return TryUndoRedo(redo: true);
-
-            if (HostCommands.Matches(CommandType.AddKeyFrameAtCurrentFrame, key, modifiers))
-                return HostCommands.Execute(CommandType.AddKeyFrameAtCurrentFrame, d3dHost);
-
             var control = (modifiers & ModifierKeys.Control) != 0;
             var shift = (modifiers & ModifierKeys.Shift) != 0;
 
@@ -539,20 +518,36 @@ namespace YMM43D.PreviewTool.ViewModels
                     return true;
 
                 case Key.NumPad1 or Key.D1:
-                    ViewFrom(control ? "Back" : "Front");
+                    ViewFrom(control ? ViewDirection.Back : ViewDirection.Front);
                     return true;
 
                 case Key.NumPad3 or Key.D3:
-                    ViewFrom(control ? "Left" : "Right");
+                    ViewFrom(control ? ViewDirection.Left : ViewDirection.Right);
                     return true;
 
                 case Key.NumPad7 or Key.D7:
-                    ViewFrom(control ? "Bottom" : "Top");
+                    ViewFrom(control ? ViewDirection.Bottom : ViewDirection.Top);
                     return true;
 
                 default:
-                    return false;
+                    // 割り当ての決まっていないキーだけ、本体の操作に回す。先に回すと、
+                    // 本体側で同じキーを使っている操作にプレビューの割り当てが負ける。
+                    return TryHostKey(key, modifiers);
             }
+        }
+
+        /// <summary>
+        /// 本体に割り当てられている操作のうち、プレビュー上でも効かせたいもの。
+        /// </summary>
+        private bool TryHostKey(Key key, ModifierKeys modifiers)
+        {
+            if (HostCommands.Matches(CommandType.Undo, key, modifiers))
+                return TryUndoRedo(redo: false);
+
+            if (HostCommands.Matches(CommandType.Redo, key, modifiers))
+                return TryUndoRedo(redo: true);
+
+            return false;
         }
 
         /// <summary>
@@ -578,83 +573,16 @@ namespace YMM43D.PreviewTool.ViewModels
             return true;
         }
 
-        /// <summary>
-        /// 描画元の情報を、いまのタイムラインの設定に合わせます。
-        /// </summary>
-        /// <remarks>
-        /// 画面の大きさや FPS は編集中に変えられます。作り直しは安くないので、
-        /// 前回と違うときだけ組み立て直します。
-        /// </remarks>
         private void UpdateSourceDescription()
         {
-            if (timeline is null || toolInfo is null)
-                return;
-
-            var info = timeline.VideoInfo;
-            var signature = (info.Width, info.Height, info.FPS, timeline.CurrentFrame, timeline.Length);
-
-            if (sourceDescription is not null && signature == lastSourceSignature)
-                return;
-
-            lastSourceSignature = signature;
-            sourceDescription = new TimelineSourceDescription(
-                new System.Drawing.Size(info.Width, info.Height),
-                new YukkuriMovieMaker.Player.Video.FrameTime(timeline.CurrentFrame, info.FPS),
-                new YukkuriMovieMaker.Player.Video.FrameTime(timeline.Length, info.FPS),
-                info.FPS,
-                TimelineSourceUsage.Playing,
-                timeline.ID,
-                toolInfo.Scenes?.AllScenes?.Cast<ISceneInfo>() ?? []);
+            if (timeline is not null && toolInfo is not null)
+                sceneBuilder.UpdateSource(timeline, toolInfo);
         }
 
         private void UpdatePreviewItems()
         {
-            if (timeline?.Items is not { } items)
-                return;
-
-            var frame = timeline.CurrentFrame;
-            var updated = new List<PreviewItem>();
-
-            // 半透明な板は深度を書き込まないため、重なりは描画順で決まる。
-            // YMM4 と同じく、番号の小さいレイヤーから先に描いて奥に置く。
-            var visible = items
-                .OfType<IVideoItem>()
-                .Where(item => !item.IsHidden)
-                .Where(item => frame >= item.Frame && frame < item.Frame + item.Length)
-                .OrderBy(item => item.Layer);
-
-            foreach (var item in visible)
-            {
-                foreach (var provider in FindProviders(item))
-                    updated.Add(new PreviewItem(provider, item, item.Frame, item.Length));
-            }
-
-            previewItems = updated;
-        }
-
-        private IEnumerable<I3DProvider> FindProviders(IVideoItem item)
-        {
-            var providers = new List<I3DProvider>();
-
-            if (item is I3DProvider itemProvider)
-                providers.Add(itemProvider);
-
-            if (item is ShapeItem shape && Provider3DRegistry.Find(shape.ShapeParameter) is { } shapeProvider)
-                providers.Add(shapeProvider);
-
-            if (providers.Count > 0)
-                return providers.Distinct();
-
-            foreach (var effect in item.VideoEffects ?? [])
-            {
-                if (effect.IsEnabled && effect is I3DProvider effectProvider)
-                    providers.Add(effectProvider);
-            }
-
-            if (providers.Count == 0)
-                return [renderer.DefaultProvider];
-
-            return providers.Distinct();
+            if (timeline is not null)
+                sceneBuilder.UpdateItems(timeline);
         }
 
         public void Dispose()
@@ -667,7 +595,7 @@ namespace YMM43D.PreviewTool.ViewModels
             timeline = null;
             toolInfo = null;
             sourceAndDevices = null;
-            previewItems.Clear();
+            sceneBuilder.Clear();
 
             GC.SuppressFinalize(this);
         }
