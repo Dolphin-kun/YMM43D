@@ -260,6 +260,11 @@ namespace YMM43D.PreviewTool.ViewModels
 
             target.Source.Move(move, GetEditScope(target.Item));
             refresher?.ForceRefresh(timeline);
+
+            // ドラッグの区切りはマウスを離したときに入れる。キーやホイールのように
+            // 1回で終わる操作は、ここで区切らないと履歴に残らない。
+            if (!freeCamera.IsDragging)
+                SeparateHistory();
         }
 
         /// <summary>
@@ -379,16 +384,37 @@ namespace YMM43D.PreviewTool.ViewModels
             if (timeline is null)
                 return;
 
-            if (HandleItemDrag(position, kind))
-                return;
+            // 押した所と離した所で、元に戻す履歴を区切る。動かしている最中は区切らない
+            // ので、ドラッグ1回ぶんが 1 手にまとまる。
+            var boundary = kind is not D3D11Host.MouseEventKind.Move;
 
-            var modifiers = D3D11Host.CurrentModifiers;
+            if (boundary)
+                SeparateHistory();
 
-            // 押した瞬間はドラッグの種類を覚えるだけで、動く量は返ってこない。
-            // その場合に相手を探しに行っても無駄なので、差分が出てから振り分ける。
-            ApplyCameraMove(basis =>
-                freeCamera.HandleMouse(position, kind, delta, modifiers, basis) ?? CameraMove.None);
+            if (!HandleItemDrag(position, kind))
+            {
+                var modifiers = D3D11Host.CurrentModifiers;
+
+                // 押した瞬間はドラッグの種類を覚えるだけで、動く量は返ってこない。
+                // その場合に相手を探しに行っても無駄なので、差分が出てから振り分ける。
+                ApplyCameraMove(basis =>
+                    freeCamera.HandleMouse(position, kind, delta, modifiers, basis) ?? CameraMove.None);
+            }
+
+            if (boundary)
+                SeparateHistory();
         }
+
+        /// <summary>
+        /// 元に戻す履歴に区切りを入れます。
+        /// </summary>
+        /// <remarks>
+        /// YMM4 は変更を積み上げておき、区切ったところまでを 1 手として覚えます。
+        /// 区切らないまま変更すると、その変更は履歴に入らず、直前の 1 手を戻したときに
+        /// 一緒に巻き戻ってしまいます（アイテムを足して動かした後に戻すと、移動ではなく
+        /// アイテムごと消える、という形で出ます）。
+        /// </remarks>
+        private void SeparateHistory() => toolInfo?.UndoRedoManager?.Record();
 
         /// <summary>
         /// アイテムを掴む・動かす・離すを処理します。

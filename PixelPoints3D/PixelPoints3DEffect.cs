@@ -24,19 +24,19 @@ namespace PixelPoints3D
         private const string Place = "配置";
 
         [Display(GroupName = Grid, Name = "距離X", Description = "X軸方向の点と点の間隔")]
-        [AnimationSlider("F0", "px", 1, 200)]
+        [AnimationSlider("F1", "px", 1, 200)]
         public Animation SpacingX { get; } = new(20, 1, 2000);
 
         [Display(GroupName = Grid, Name = "距離Y", Description = "Y軸方向の点と点の間隔")]
-        [AnimationSlider("F0", "px", 1, 200)]
+        [AnimationSlider("F1", "px", 1, 200)]
         public Animation SpacingY { get; } = new(20, 1, 2000);
 
         [Display(GroupName = Grid, Name = "距離Z", Description = "z軸方向の点と点の間隔")]
-        [AnimationSlider("F0", "px", 1, 200)]
+        [AnimationSlider("F1", "px", 1, 200)]
         public Animation SpacingZ { get; } = new(20, 1, 2000);
 
         [Display(GroupName = Grid, Name = "奥行き", Description = "点を重ねる奥行きの厚み。0 なら1枚だけ")]
-        [AnimationSlider("F0", "px", 0, 500)]
+        [AnimationSlider("F1", "px", 0, 500)]
         public Animation Depth { get; } = new(0, 0, 5000);
 
         [Display(GroupName = Grid, Name = "しきい値", Description = "この不透明度より薄いところには点を打ちません")]
@@ -105,7 +105,7 @@ namespace PixelPoints3D
         private DeformAxis deformAxis = DeformAxis.Y;
 
         [Display(GroupName = Deform, Name = "周期", Description = "波1つ分の長さ")]
-        [AnimationSlider("F0", "px", 10, 1000)]
+        [AnimationSlider("F1", "px", 10, 1000)]
         [ShowPropertyEditorWhen(nameof(DeformKind), DeformKind.Wave)]
         public Animation DeformPeriod { get; } = new(200, 1, 100000);
 

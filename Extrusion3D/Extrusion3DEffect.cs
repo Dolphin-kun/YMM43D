@@ -16,7 +16,7 @@ namespace Extrusion3D
         public override string Label => "立体化3D";
 
         [Display(GroupName = "立体化3D", Name = "厚み", Description = "3D立体化の厚みを設定します")]
-        [AnimationSlider("F0", "", 0, 100)]
+        [AnimationSlider("F1", "px", 0, 100)]
         public Animation Thickness { get; } = new(10, 0, 1000);
 
         [Display(GroupName = "立体化3D", Name = "側面", Description = "側面の種類")]
