@@ -35,7 +35,12 @@ namespace YMM43D.PreviewTool.ViewModels
         private Scene? scene;
         private TimelineSourceAndDevices? sourceAndDevices;
         private TimelineSourceDescription? sourceDescription;
+        private (int Width, int Height, int Fps, int Frame, int Length) lastSourceSignature;
         private List<PreviewItem> previewItems = [];
+        // 案内を出しているアイテム。タイムライン側の選択とは別に持つ。プレビューで
+        // 掴んだものだけに案内を出したいので、他の経路で選んだものには反応させない。
+        private IVideoItem? selected;
+
         private bool drivesSceneCamera;
         private bool isDisposed;
 
@@ -135,7 +140,7 @@ namespace YMM43D.PreviewTool.ViewModels
         /// <summary>見る位置を、いまシーンを撮っているカメラに戻します。</summary>
         public void ResetToSceneCamera()
         {
-            freeCamera.Invalidate();
+            freeCamera.Reset();
             freeCamera.EnsureInitialized(ResolveCamera());
         }
 
@@ -192,6 +197,9 @@ namespace YMM43D.PreviewTool.ViewModels
 
             refresher?.RefreshIfCameraChanged(timeline);
 
+            // 画面の大きさは編集中に変えられる。カメラの枠の縦横比がそれで決まるので、
+            // フレームが進んでいなくても追いかける。
+            UpdateSourceDescription();
             UpdatePreviewItems();
             d3dHost.RenderFrame();
         }
@@ -218,6 +226,8 @@ namespace YMM43D.PreviewTool.ViewModels
                 Time = time,
                 Environment = new PreviewEnvironment(device, sourceAndDevices.Devices, scene, sourceDescription),
                 Items = previewItems,
+                Selected = selected,
+                ActiveHandle = itemDrag.Handle,
             });
         }
 
@@ -287,18 +297,39 @@ namespace YMM43D.PreviewTool.ViewModels
             }
         }
 
+        /// <summary>
+        /// 押した所にあるものを掴みます。
+        /// </summary>
+        /// <remarks>
+        /// 案内の矢印や輪を先に見ます。アイテムより手前に出ているので、重なって
+        /// いるときは案内の方を掴めた方が扱いやすいためです。
+        /// </remarks>
         private bool TryGrab(Point position)
         {
-            if (renderer.Pick(ToVector(position), out var ray) is not { } picked)
+            var screen = ToVector(position);
+
+            if (selected is not null
+                && renderer.PickGizmo(screen) is var grabbed and not GizmoHandle.None
+                && renderer.Gizmo is { } gizmo
+                && renderer.CreateRay(screen) is { } gizmoRay)
+            {
+                return itemDrag.Begin(selected, gizmo.Origin, grabbed, gizmoRay, freeCamera.State.Forward);
+            }
+
+            if (renderer.Pick(screen, out var ray) is not { } picked)
+            {
+                selected = null;
                 return false;
+            }
+
+            selected = picked.Item;
 
             // 掴んだものを選択しておくと、右のプロパティ欄がそのアイテムに切り替わる。
             if (timeline is not null)
                 timeline.SelectedItems = [picked.Item];
 
-            itemDrag.Begin(picked.Item, picked.World, ray, freeCamera.State.Forward);
-
-            return true;
+            return itemDrag.Begin(
+                picked.Item, picked.World.Translation, GizmoHandle.Free, ray, freeCamera.State.Forward);
         }
 
         private static Vector2 ToVector(Point position) => new((float)position.X, (float)position.Y);
@@ -316,12 +347,25 @@ namespace YMM43D.PreviewTool.ViewModels
                 ResetToSceneCamera();
         }
 
+        /// <summary>
+        /// 描画元の情報を、いまのタイムラインの設定に合わせます。
+        /// </summary>
+        /// <remarks>
+        /// 画面の大きさや FPS は編集中に変えられます。作り直しは安くないので、
+        /// 前回と違うときだけ組み立て直します。
+        /// </remarks>
         private void UpdateSourceDescription()
         {
             if (timeline is null || toolInfo is null)
                 return;
 
             var info = timeline.VideoInfo;
+            var signature = (info.Width, info.Height, info.FPS, timeline.CurrentFrame, timeline.Length);
+
+            if (sourceDescription is not null && signature == lastSourceSignature)
+                return;
+
+            lastSourceSignature = signature;
             sourceDescription = new TimelineSourceDescription(
                 new System.Drawing.Size(info.Width, info.Height),
                 new YukkuriMovieMaker.Player.Video.FrameTime(timeline.CurrentFrame, info.FPS),

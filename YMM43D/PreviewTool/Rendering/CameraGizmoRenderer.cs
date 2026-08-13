@@ -47,24 +47,17 @@ namespace YMM43D.PreviewTool.Rendering
         /// <summary>
         /// カメラの形。原点がレンズの位置で、-Z の方向を向いています。
         /// </summary>
+        /// <remarks>
+        /// 写る範囲そのものである四角錐と、上がどちらかを示す三角形だけで描きます。
+        /// 箱の本体を足すと、画角によって四角錐の開き方が変わるぶん、本体との
+        /// つながりが不格好になります。
+        /// </remarks>
         private static Vector3[] BuildOutline(Vector2 tangent)
         {
-            var bodyMin = new Vector3(-0.4f, -0.3f, 0.0f);
-            var bodyMax = new Vector3(0.4f, 0.3f, 0.8f);
-
-            // 本体の8頂点。手前の面 (0-3) が前方、奥の面 (4-7) が後方。
-            Vector3[] body =
-            [
-                new(bodyMin.X, bodyMin.Y, bodyMin.Z), new(bodyMax.X, bodyMin.Y, bodyMin.Z),
-                new(bodyMax.X, bodyMax.Y, bodyMin.Z), new(bodyMin.X, bodyMax.Y, bodyMin.Z),
-                new(bodyMin.X, bodyMin.Y, bodyMax.Z), new(bodyMax.X, bodyMin.Y, bodyMax.Z),
-                new(bodyMax.X, bodyMax.Y, bodyMax.Z), new(bodyMin.X, bodyMax.Y, bodyMax.Z),
-            ];
-
             // 写る範囲の枠。傾き × 距離が、その距離での半分の広さになる。
             var half = tangent * FrustumDepth;
 
-            Vector3[] lens =
+            Vector3[] frame =
             [
                 new(-half.X,  half.Y, -FrustumDepth), new( half.X,  half.Y, -FrustumDepth),
                 new( half.X, -half.Y, -FrustumDepth), new(-half.X, -half.Y, -FrustumDepth),
@@ -72,22 +65,18 @@ namespace YMM43D.PreviewTool.Rendering
 
             var lines = new List<Vector3>();
             void Edge(Vector3 a, Vector3 b) { lines.Add(a); lines.Add(b); }
-            void Loop(Vector3[] quad, int offset = 0)
-            {
-                for (var i = 0; i < 4; i++)
-                    Edge(quad[offset + i], quad[offset + (i + 1) % 4]);
-            }
 
-            Loop(body);          // 本体の前面
-            Loop(body, 4);       // 本体の背面
-            for (var i = 0; i < 4; i++)
-                Edge(body[i], body[i + 4]);   // 前面と背面をつなぐ稜線
-
-            // レンズの位置から枠の四隅へ。これが実際に映る角錐になる。
-            foreach (var corner in lens)
+            // レンズの位置から枠の四隅へ。これが実際に映る四角錐になる。
+            foreach (var corner in frame)
                 Edge(Vector3.Zero, corner);
 
-            Loop(lens);          // 写る範囲の枠
+            for (var i = 0; i < 4; i++)
+                Edge(frame[i], frame[(i + 1) % 4]);
+
+            // 枠の上辺に載せた三角形。傾きを付けたときに、どちらが上か分かる。
+            var peak = new Vector3(0f, half.Y * 1.4f, -FrustumDepth);
+            Edge(frame[0], peak);
+            Edge(frame[1], peak);
 
             return [.. lines];
         }
