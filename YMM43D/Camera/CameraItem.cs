@@ -31,15 +31,15 @@ namespace YMM43D.Camera
         private const int FirstOrder = 100;
 
         [Display(GroupName = Place, Name = "X", Description = "カメラを置く位置。右が正", Order = FirstOrder)]
-        [AnimationSlider("F0", "px", -2000, 2000)]
+        [AnimationSlider("F1", "px", -2000, 2000)]
         public Animation X { get; } = new(0, -1000000, 1000000);
 
         [Display(GroupName = Place, Name = "Y", Description = "下が正。画面の座標と同じ向き", Order = FirstOrder + 1)]
-        [AnimationSlider("F0", "px", -2000, 2000)]
+        [AnimationSlider("F1", "px", -2000, 2000)]
         public Animation Y { get; } = new(0, -1000000, 1000000);
 
         [Display(GroupName = Place, Name = "Z", Description = "手前が正。0 の面が、YMM4 が 2D で描く面", Order = FirstOrder + 2)]
-        [AnimationSlider("F0", "px", -5000, 5000)]
+        [AnimationSlider("F1", "px", -5000, 5000)]
         public Animation Z { get; } = new(DefaultZ, -1000000, 1000000);
 
         [Display(GroupName = Place, Name = "向きの決め方",
@@ -63,17 +63,17 @@ namespace YMM43D.Camera
         public Animation Pitch { get; } = new(0, -CameraState.MaxPitch, CameraState.MaxPitch);
 
         [Display(GroupName = Place, Name = "注目X", Description = "見つめる点。右が正", Order = FirstOrder + 6)]
-        [AnimationSlider("F0", "px", -2000, 2000)]
+        [AnimationSlider("F1", "px", -2000, 2000)]
         [ShowPropertyEditorWhen(nameof(AimMode), CameraAim.Target)]
         public Animation TargetX { get; } = new(0, -1000000, 1000000);
 
         [Display(GroupName = Place, Name = "注目Y", Description = "下が正。画面の座標と同じ向き", Order = FirstOrder + 7)]
-        [AnimationSlider("F0", "px", -2000, 2000)]
+        [AnimationSlider("F1", "px", -2000, 2000)]
         [ShowPropertyEditorWhen(nameof(AimMode), CameraAim.Target)]
         public Animation TargetY { get; } = new(0, -1000000, 1000000);
 
         [Display(GroupName = Place, Name = "注目Z", Description = "手前が正。0 の面が、YMM4 が 2D で描く面", Order = FirstOrder + 8)]
-        [AnimationSlider("F0", "px", -5000, 5000)]
+        [AnimationSlider("F1", "px", -5000, 5000)]
         [ShowPropertyEditorWhen(nameof(AimMode), CameraAim.Target)]
         public Animation TargetZ { get; } = new(0, -1000000, 1000000);
 
@@ -177,8 +177,8 @@ namespace YMM43D.Camera
             scope.Nudge(Y, -WorldScale.ToPixels(move.Shift.Y));
             scope.Nudge(Z, WorldScale.ToPixels(move.Shift.Z));
 
-            // 注視点で向きを決めているときは、回転角を書き換えても効かない。位置だけが
-            // 動いて見る先は変わらないので、回すドラッグは注視点まわりの回り込みになる。
+            // 注目点で向きを決めているときは、回転角を書き換えても効かない。位置だけが
+            // 動いて見る先は変わらないので、回すドラッグは注目点まわりの回り込みになる。
             if (AimMode == CameraAim.Target)
                 return;
 
@@ -205,7 +205,7 @@ namespace YMM43D.Camera
         [Display(Name = "回転で指定", Description = "水平・垂直の回転角で向きを決めます")]
         Rotation,
 
-        [Display(Name = "注視点で指定", Description = "決めた点を向き続けます。被写体を追うのに向きます")]
+        [Display(Name = "注目点で指定", Description = "決めた点を向き続けます。被写体を追うのに向きます")]
         Target,
     }
 }

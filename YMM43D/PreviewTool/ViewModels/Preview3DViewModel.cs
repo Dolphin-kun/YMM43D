@@ -15,6 +15,7 @@ using YukkuriMovieMaker.Player.Video;
 using YukkuriMovieMaker.Plugin;
 using YukkuriMovieMaker.Project;
 using YukkuriMovieMaker.Project.Items;
+using YukkuriMovieMaker.Settings;
 
 namespace YMM43D.PreviewTool.ViewModels
 {
@@ -90,6 +91,7 @@ namespace YMM43D.PreviewTool.ViewModels
         public ICommand ViewAllCommand { get; }
         public ICommand LevelRollCommand { get; }
         public ICommand ViewFromCommand { get; }
+        public ICommand AddKeyFrameCommand { get; }
 
         public Preview3DViewModel()
         {
@@ -101,6 +103,11 @@ namespace YMM43D.PreviewTool.ViewModels
             ViewAllCommand = new ActionCommand(_ => true, _ => ViewAll());
             LevelRollCommand = new ActionCommand(_ => true, _ => LevelRoll());
             ViewFromCommand = new ActionCommand(_ => true, p => ViewFrom(p as string));
+            // 使えるかどうかは本体側の選択で決まり、こちらからは追えない。
+            // 常に押せるようにしておき、できないときは何も起きないだけにする。
+            AddKeyFrameCommand = new ActionCommand(
+                _ => true,
+                _ => HostCommands.Execute(CommandType.AddKeyFrameAtCurrentFrame, d3dHost));
         }
 
         public void SetTimelineToolInfo(TimelineToolInfo info)
@@ -466,6 +473,16 @@ namespace YMM43D.PreviewTool.ViewModels
         /// </remarks>
         public bool HandleKey(Key key, ModifierKeys modifiers)
         {
+            // 元に戻す・やり直しは本体の操作。割り当ても本体の設定に合わせる。
+            if (HostCommands.Matches(CommandType.Undo, key, modifiers))
+                return TryUndoRedo(redo: false);
+
+            if (HostCommands.Matches(CommandType.Redo, key, modifiers))
+                return TryUndoRedo(redo: true);
+
+            if (HostCommands.Matches(CommandType.AddKeyFrameAtCurrentFrame, key, modifiers))
+                return HostCommands.Execute(CommandType.AddKeyFrameAtCurrentFrame, d3dHost);
+
             var control = (modifiers & ModifierKeys.Control) != 0;
             var shift = (modifiers & ModifierKeys.Shift) != 0;
 
@@ -510,6 +527,29 @@ namespace YMM43D.PreviewTool.ViewModels
                 default:
                     return false;
             }
+        }
+
+        /// <summary>
+        /// 元に戻す・やり直しを本体に依頼します。
+        /// </summary>
+        /// <remarks>
+        /// 本体のコマンドではなく履歴そのものを直接動かします。コマンドは送り先の
+        /// 要素をたどって処理されるので、子ウィンドウが入力を受けているあいだは
+        /// 届くとは限りません。
+        /// <para>
+        /// できることが無くても受け取ったことにします。ここで見送ると、同じキーで
+        /// 本体側の操作が動いてしまい、効いたり効かなかったりします。
+        /// </para>
+        /// </remarks>
+        private bool TryUndoRedo(bool redo)
+        {
+            if (toolInfo?.UndoRedoManager is not { } manager)
+                return false;
+
+            if (redo ? manager.IsRedoable : manager.IsUndoable)
+                _ = redo ? manager.RedoAsync() : manager.UndoAsync();
+
+            return true;
         }
 
         /// <summary>

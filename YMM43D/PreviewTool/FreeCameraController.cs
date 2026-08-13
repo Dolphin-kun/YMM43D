@@ -30,7 +30,7 @@ namespace YMM43D.PreviewTool
         private const float MinPivotDistance = 0.5f;
         private const float MaxPivotDistance = 200f;
 
-        /// <summary>注視したものが画面に収まるよう、範囲の半径の何倍まで離れるか。</summary>
+        /// <summary>注目したものが画面に収まるよう、範囲の半径の何倍まで離れるか。</summary>
         private const float FocusMargin = 2.5f;
 
         private enum DragMode { None, Rotate, Pan, Roll }

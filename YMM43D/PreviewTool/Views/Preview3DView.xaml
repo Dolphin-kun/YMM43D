@@ -35,11 +35,15 @@
                           InputGestureText="0"
                           ToolTip="入れると、見る位置がカメラアイテムに追従し、ドラッグがそのカメラを直接動かします。外すと見る位置だけが動き、出力は変わりません。"/>
 
-                <MenuItem Header="中間点を打つ"
+                <MenuItem Header="ドラッグで中間点を打つ"
                           IsCheckable="True"
                           IsChecked="{Binding InsertsKeyFrame}"
                           InputGestureText="K"
                           ToolTip="入れると、ドラッグがいまの再生位置に中間点を打ち、そこだけを動かします。外すと、打ってある中間点すべてが同じだけ動きます。カメラにもアイテムにも効きます。"/>
+
+                <MenuItem Header="現在の再生位置に中間点を追加"
+                          Command="{Binding AddKeyFrameCommand}"
+                          ToolTip="YMM4 本体の「現在の再生位置に中間点を追加」を、選んでいるアイテムに対して実行します。"/>
 
                 <MenuItem Header="視点をカメラに戻す"
                           Command="{Binding ResetToSceneCameraCommand}"
@@ -48,7 +52,7 @@
             </MenuItem>
 
             <MenuItem Header="視点">
-                <MenuItem Header="選んだものを注視"
+                <MenuItem Header="選んだものを注目"
                           Command="{Binding FocusSelectedCommand}"
                           InputGestureText="F"
                           ToolTip="選んでいるアイテムが画面に収まるまで寄ります。以後の回り込みも、そのアイテムを中心に効きます。"/>

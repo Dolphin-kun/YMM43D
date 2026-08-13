@@ -16,7 +16,7 @@ namespace YMM43D.Camera
     /// <param name="Pitch">垂直方向の回転角（度）。</param>
     /// <param name="Roll">視線周りの回転角（度）。</param>
     /// <param name="FieldOfView">
-    /// 垂直画角（度）。0 なら自動で、注視面が画面と1対1になる画角を使います。
+    /// 垂直画角（度）。0 なら自動で、注目している面が画面と1対1になる画角を使います。
     /// </param>
     public readonly record struct CameraState(
         Vector3 Position,

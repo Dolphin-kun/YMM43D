@@ -178,7 +178,7 @@ namespace YMM43D.PreviewTool
         /// 調べたいアイテム。<c>null</c> を渡すと、出ているものすべてを含む範囲を返します。
         /// </param>
         /// <remarks>
-        /// 注視するときに使います。掴む判定と同じ箱から出すので、案内が出ている所と
+        /// 注目するときに使います。掴む判定と同じ箱から出すので、案内が出ている所と
         /// 寄る先がずれません。
         /// </remarks>
         public WorldBounds? GetBounds(IVideoItem? item)

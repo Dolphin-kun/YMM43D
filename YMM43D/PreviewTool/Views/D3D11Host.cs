@@ -133,6 +133,12 @@ namespace YMM43D.PreviewTool.Views
             try
             {
                 var hwnd = CreateWindowEx(0, classPtr, windowPtr, 0x40000000 | 0x10000000, 0, 0, w, h, hwndParent.Handle, nint.Zero, nint.Zero, nint.Zero);
+
+                // 日本語入力を切り離す。付いたままだと、この窓が入力を受けている間の
+                // 英字キーが IME に食われ、WM_KEYDOWN が「変換中」として届く。
+                // ここは文字を打つ場所ではないので、丸ごと外してしまう。
+                ImmAssociateContext(hwnd, nint.Zero);
+
                 return new HandleRef(this, hwnd);
             }
             finally
@@ -237,6 +243,24 @@ namespace YMM43D.PreviewTool.Views
             DepthStencilView = null;
         }
 
+        /// <summary>
+        /// 押されたキーを求めます。
+        /// </summary>
+        /// <remarks>
+        /// IME を切り離していても、外から付け直されることがあります。IME が処理した
+        /// キーは <c>VK_PROCESSKEY</c> として届き、そのままでは何のキーか分かりません。
+        /// その場合だけ IME に元のキーを聞き直します。
+        /// </remarks>
+        private static Key GetKey(nint hwnd, int virtualKey)
+        {
+            const int VirtualKeyProcessKey = 0xE5;
+
+            if (virtualKey == VirtualKeyProcessKey)
+                virtualKey = ImmGetVirtualKey(hwnd);
+
+            return KeyInterop.KeyFromVirtualKey(virtualKey);
+        }
+
         private static Point GetPoint(nint lParam)
         {
             int x = (short)((int)lParam & 0xFFFF);
@@ -302,7 +326,7 @@ namespace YMM43D.PreviewTool.Views
                 case 0x0104:
                     // 受け取ったキーはここで止める。止めないと、同じキーで YMM4 本体の
                     // ショートカットも一緒に動いてしまう。
-                    if (KeyHandler?.Invoke(KeyInterop.KeyFromVirtualKey((int)wParam), CurrentModifiers) == true)
+                    if (KeyHandler?.Invoke(GetKey(hwnd, (int)wParam), CurrentModifiers) == true)
                     {
                         handled = true;
                         return nint.Zero;
@@ -355,6 +379,12 @@ namespace YMM43D.PreviewTool.Views
 
         [LibraryImport("user32.dll")]
         private static partial short GetKeyState(int nVirtKey);
+
+        [LibraryImport("imm32.dll")]
+        private static partial nint ImmAssociateContext(nint hWnd, nint hIMC);
+
+        [LibraryImport("imm32.dll")]
+        private static partial int ImmGetVirtualKey(nint hWnd);
         #endregion
     }
 }
