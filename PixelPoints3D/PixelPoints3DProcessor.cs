@@ -8,19 +8,12 @@ using YukkuriMovieMaker.Commons;
 
 namespace PixelPoints3D
 {
-    internal sealed class PixelPoints3DProcessor : VideoEffect3DProcessorBase
+    internal sealed class PixelPoints3DProcessor(PixelPoints3DEffect effect, IGraphicsDevicesAndContext devices) : VideoEffect3DProcessorBase(effect, devices)
     {
         private const int MaxPoints = 300_000;
 
-        private readonly PixelPoints3DEffect effect;
-        private readonly DeviceResourceCache<GridResources> resources;
-
-        public PixelPoints3DProcessor(PixelPoints3DEffect effect, IGraphicsDevicesAndContext devices)
-            : base(effect, devices)
-        {
-            this.effect = effect;
-            resources = new DeviceResourceCache<GridResources>(device => new GridResources(device));
-        }
+        private readonly PixelPoints3DEffect effect = effect;
+        private readonly DeviceResourceCache<GridResources> resources = new(device => new GridResources(device));
 
         public override bool RequiresMappedTexture => true;
 

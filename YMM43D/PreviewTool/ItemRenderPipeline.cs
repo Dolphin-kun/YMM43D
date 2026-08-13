@@ -35,7 +35,7 @@ namespace YMM43D.PreviewTool
             PreviewEnvironment environment,
             bool needsImage)
         {
-            if (environment.Scene is not { } scene || environment.SourceDescription is not { } sourceDescription)
+            if (environment.Scene is null || environment.SourceDescription is null)
                 return ItemRenderResult.None;
 
             var effects = CollectEffects(item);
@@ -44,14 +44,13 @@ namespace YMM43D.PreviewTool
                 return ItemRenderResult.None;
 
             lock (D2DGate.Sync)
-                return RenderCore(item, time, environment, needsImage, effects);
+                return RenderCore(item, time, environment, effects);
         }
 
         private ItemRenderResult RenderCore(
             IVideoItem item,
             in FrameContext time,
             PreviewEnvironment environment,
-            bool needsImage,
             ImmutableList<IVideoEffect> effects)
         {
             var scene = environment.Scene!;

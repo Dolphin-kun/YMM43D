@@ -116,11 +116,16 @@ YMM43D.Lighting      シーンを照らす光。解決とインターフェー�
       ↓
 YMM43D.Commons       YMM4 のデバイスや画像との橋渡し。
       ↓
-YMM43D.Items         タイムラインに置くアイテム。カメラ・光源・環境。
-YMM43D.Plugin        プラグイン作者が使う公開面。基底クラスとインターフェース。
+YMM43D.Plugin            プラグイン作者が使う公開面。基底クラスとインターフェース。
       ↓
-YMM43D.Effects       同梱のエフェクト（「3D空間に置く」）。
-YMM43D.PreviewTool   3Dプレビューのツールウィンドウ。</pre>
+YMM43D.Project.Items     .ymmp に保存されるアイテム。カメラ・光源・環境。
+YMM43D.Project.Effects   .ymmp に保存されるエフェクト。
+YMM43D.PreviewTool       3Dプレビューのツールウィンドウ。</pre>
+
+<p>
+<code>Project</code> の下は、YMM4 の <code>YukkuriMovieMaker.Project.Items</code> と同じ意味です。
+題材ではなく「<b>.ymmp に保存されるもの</b>」という役割で括っています。
+</p>
 </div>
 
 <p>プラグインを書くときに直接触れるのは、主に <code>YMM43D.Plugin</code> と <code>YMM43D.Scene3D</code>・<code>YMM43D.Camera</code>、
@@ -189,7 +194,7 @@ YMM43D.PreviewTool   3Dプレビューのツールウィンドウ。</pre>
 <tr><td><code>Shape3D</code></td><td>3Dアイテム</td><td>図形</td><td><code>Shape3DSourceBase</code> の最小構成</td></tr>
 <tr><td><code>Extrusion3D</code></td><td>立体化3D</td><td>映像エフェクト</td><td>入力画像をテクスチャに使う。レイマーチングと <code>SV_Depth</code></td></tr>
 <tr><td><code>PixelPoints3D</code></td><td>点群3D</td><td>映像エフェクト</td><td>頂点シェーダーで形を組み立てる。複数の形状を 1 つのシェーダーで描き分ける</td></tr>
-<tr><td><code>YMM43D.Effects</code></td><td>3D空間に置く</td><td>映像エフェクト</td><td>入力画像を板として置く。実寸と回転を自分で扱う（<code>ScalesToInputSize</code> が false）例</td></tr>
+<tr><td><code>YMM43D.Project.Effects.Flat3D</code></td><td>3D空間に置く</td><td>映像エフェクト</td><td>入力画像を板として置く。実寸と回転を自分で扱う（<code>ScalesToInputSize</code> が false）例</td></tr>
 </table>
 
 <p>
@@ -727,7 +732,7 @@ C# 側の構造体の先頭に <code>TransformConstants</code> を埋めれば�
 <tr><td><code>GetCameraPosition()</code></td><td>ワールド空間でのカメラ位置。レイマーチングなどで使う</td></tr>
 </table>
 
-<h3>YMM43D.Items</h3>
+<h3>YMM43D.Project.Items</h3>
 
 <p>
 どれも <code>BaseItem</code> を継承していて、絵を描きません。タイムラインに置いた区間だけ効きます。

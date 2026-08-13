@@ -9,16 +9,10 @@ using YukkuriMovieMaker.Commons;
 
 namespace Shape3D
 {
-    internal sealed class Shape3DSource : Shape3DSourceBase
+    internal sealed class Shape3DSource(IGraphicsDevicesAndContext devices, Shape3DParameter parameter) : Shape3DSourceBase(devices)
     {
-        private readonly Shape3DParameter parameter;
-        private readonly DeviceResourceCache<SolidResources> resources;
-
-        public Shape3DSource(IGraphicsDevicesAndContext devices, Shape3DParameter parameter) : base(devices)
-        {
-            this.parameter = parameter;
-            resources = new DeviceResourceCache<SolidResources>(device => new SolidResources(device));
-        }
+        private readonly Shape3DParameter parameter = parameter;
+        private readonly DeviceResourceCache<SolidResources> resources = new(device => new SolidResources(device));
 
         public override void Draw(in Render3DContext render, DrawContext3D item)
         {

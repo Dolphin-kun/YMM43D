@@ -86,7 +86,7 @@ namespace YMM43D.Scene3D
         public bool IsEnabled => Density > 0f && End > Start;
     }
 
-    public sealed class SceneLighting
+    public sealed class SceneLighting(IReadOnlyList<SceneLight> lights, Vector3 ambient, SceneFog fog)
     {
         public const int MaxLights = 4;
 
@@ -103,18 +103,11 @@ namespace YMM43D.Scene3D
             new Vector3(DefaultAmbient),
             SceneFog.None);
 
-        public IReadOnlyList<SceneLight> Lights { get; }
+        public IReadOnlyList<SceneLight> Lights { get; } = lights.Count > MaxLights ? [.. lights.Take(MaxLights)] : lights;
 
-        public Vector3 Ambient { get; }
+        public Vector3 Ambient { get; } = ambient;
 
-        public SceneFog Fog { get; }
-
-        public SceneLighting(IReadOnlyList<SceneLight> lights, Vector3 ambient, SceneFog fog)
-        {
-            Lights = lights.Count > MaxLights ? [.. lights.Take(MaxLights)] : lights;
-            Ambient = ambient;
-            Fog = fog;
-        }
+        public SceneFog Fog { get; } = fog;
 
         public bool NearlyEquals(SceneLighting other)
         {

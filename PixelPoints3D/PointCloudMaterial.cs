@@ -43,7 +43,7 @@ namespace PixelPoints3D
 
         public float PointIsRound;
 
-        private float padding;
+        private readonly float padding;
 
         public Vector3 DeformAxis;
 

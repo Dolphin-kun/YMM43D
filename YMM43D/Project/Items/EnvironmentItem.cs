@@ -9,7 +9,7 @@ using YukkuriMovieMaker.Exo;
 using YukkuriMovieMaker.ItemEditor.CustomVisibilityAttributes;
 using YukkuriMovieMaker.Project.Items;
 
-namespace YMM43D.Items
+namespace YMM43D.Project.Items
 {
     public sealed class EnvironmentItem : BaseItem, ISceneEnvironment
     {

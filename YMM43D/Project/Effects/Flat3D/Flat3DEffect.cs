@@ -6,7 +6,7 @@ using YukkuriMovieMaker.Exo;
 using YukkuriMovieMaker.Player.Video;
 using YukkuriMovieMaker.Plugin.Effects;
 
-namespace YMM43D.Effects
+namespace YMM43D.Project.Effects.Flat3D
 {
     [VideoEffect("3D空間に置く", ["3D"], [])]
     public class Flat3DEffect : VideoEffect3DBase

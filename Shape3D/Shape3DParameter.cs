@@ -108,7 +108,7 @@ namespace Shape3D
             }
 
             var current = FaceColors.Count > 0
-                ? FaceColors.Select(f => f.Color).ToImmutableList()
+                ? [.. FaceColors.Select(f => f.Color)]
                 : StoredFaceColors;
             var wanted = Resize(FaceCount, current);
 

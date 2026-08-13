@@ -5,7 +5,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using Vortice.Direct3D11;
 using YMM43D.Camera;
-using YMM43D.Items;
+using YMM43D.Project.Items;
 using YMM43D.Lighting;
 using YMM43D.Commons;
 using YMM43D.Plugin;
@@ -370,8 +370,7 @@ namespace YMM43D.PreviewTool.ViewModels
 
             selected = picked.Item;
 
-            if (timeline is not null)
-                timeline.SelectedItems = [picked.Item];
+            timeline?.SelectedItems = [picked.Item];
 
             return itemDrag.Begin(
                 picked.Item, picked.World.Translation, GizmoHandle.Free, ray, freeCamera.State.Forward,

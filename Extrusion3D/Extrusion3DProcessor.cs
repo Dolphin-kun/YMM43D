@@ -7,22 +7,14 @@ using YukkuriMovieMaker.Commons;
 
 namespace Extrusion3D
 {
-    internal sealed class Extrusion3DProcessor : VideoEffect3DProcessorBase
+    internal sealed class Extrusion3DProcessor(Extrusion3DEffect effect, IGraphicsDevicesAndContext devices) : VideoEffect3DProcessorBase(effect, devices)
     {
-        private readonly Extrusion3DEffect effect;
-        private readonly DeviceResourceCache<RenderPipeline<ExtrusionConstants>> pipelines;
-
-        public Extrusion3DProcessor(Extrusion3DEffect effect, IGraphicsDevicesAndContext devices)
-            : base(effect, devices)
-        {
-            this.effect = effect;
-
-            pipelines = new DeviceResourceCache<RenderPipeline<ExtrusionConstants>>(
+        private readonly Extrusion3DEffect effect = effect;
+        private readonly DeviceResourceCache<RenderPipeline<ExtrusionConstants>> pipelines = new(
                 device => new RenderPipeline<ExtrusionConstants>(
                     device,
                     BoxMesh.CreateExtrusionBox(device),
                     new ExtrusionMaterial(device)));
-        }
 
         public override void Draw(in Render3DContext render, DrawContext3D item)
         {

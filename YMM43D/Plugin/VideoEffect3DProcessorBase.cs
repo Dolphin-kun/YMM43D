@@ -9,10 +9,10 @@ using YukkuriMovieMaker.Player.Video;
 
 namespace YMM43D.Plugin
 {
-    public abstract class VideoEffect3DProcessorBase
-        : IVideoEffectProcessor, I3DVideoEffect, I3DSizeProvider, I3DLocalTransform, I3DBounds
+    public abstract class VideoEffect3DProcessorBase(VideoEffect3DBase? owner, IGraphicsDevicesAndContext devices)
+                : IVideoEffectProcessor, I3DVideoEffect, I3DSizeProvider, I3DLocalTransform, I3DBounds
     {
-        private readonly VideoEffect3DBase? owner;
+        private readonly VideoEffect3DBase? owner = owner;
         private readonly D2DTextureBridge textureBridge = new();
         private readonly Output3DRenderer renderer = new();
 
@@ -25,17 +25,11 @@ namespace YMM43D.Plugin
         private nint bakedDeviceKey;
         private bool isDisposed;
 
-        protected IGraphicsDevicesAndContext Devices { get; }
+        protected IGraphicsDevicesAndContext Devices { get; } = devices;
 
         protected ID2D1Image? Input { get; private set; }
 
         public EffectDescription? EffectDescription { get; private set; }
-
-        protected VideoEffect3DProcessorBase(VideoEffect3DBase? owner, IGraphicsDevicesAndContext devices)
-        {
-            this.owner = owner;
-            Devices = devices;
-        }
 
         public ID2D1Image Output => output ?? throw new InvalidOperationException(
             "まだ画像が生成されていません。Update を先に呼んでください。");

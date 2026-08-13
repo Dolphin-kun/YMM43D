@@ -80,25 +80,18 @@ namespace YMM43D.PreviewTool.Rendering
 
         public void Dispose() => resources.Dispose();
 
-        private sealed class GizmoResources : IDisposable
+        private sealed class GizmoResources(ID3D11Device device) : IDisposable
         {
-            public RenderPipeline<TransformConstants> Pipeline { get; }
-
-            public (GizmoHandle Handle, LineMesh Mesh)[] Parts { get; }
-
-            public GizmoResources(ID3D11Device device)
-            {
-                Pipeline = new RenderPipeline<TransformConstants>(
+            public RenderPipeline<TransformConstants> Pipeline { get; } = new RenderPipeline<TransformConstants>(
                     device, Vertex.InputElements, new VertexColorMaterial(device));
 
-                Parts =
+            public (GizmoHandle Handle, LineMesh Mesh)[] Parts { get; } =
                 [
                     (GizmoHandle.MoveX, new LineMesh(device, BuildArrow(Vector3.UnitX), AxisXColor)),
                     (GizmoHandle.MoveY, new LineMesh(device, BuildArrow(Vector3.UnitY), AxisYColor)),
                     (GizmoHandle.MoveZ, new LineMesh(device, BuildArrow(Vector3.UnitZ), AxisZColor)),
                     (GizmoHandle.RotateZ, new LineMesh(device, BuildRing(), RingColor)),
                 ];
-            }
 
             public void Dispose()
             {

@@ -42,18 +42,18 @@ namespace YMM43D.Commons
                 .Select(item => (Item: item, Time: new FrameContext(frame - item.Frame, item.Length, fps)))
                 .ToArray();
 
-            var owner = alive.FirstOrDefault(x => x.Item.Layer == description.Layer);
-            if (owner.Item is null)
+            var (owner, ownerTime) = alive.FirstOrDefault(x => x.Item.Layer == description.Layer);
+            if (owner is null)
                 return SceneView.None;
 
-            var ownerPlacement = ItemPlacement.GetWorldMatrix(owner.Item, owner.Time, Matrix4x4.Identity);
-            var ownerScreen = ItemPlacement.GetScreenPlacement(owner.Item, owner.Time);
+            var ownerPlacement = ItemPlacement.GetWorldMatrix(owner, ownerTime, Matrix4x4.Identity);
+            var ownerScreen = ItemPlacement.GetScreenPlacement(owner, ownerTime);
 
             var occluders = new List<Occluder>();
 
             foreach (var (item, itemTime) in alive)
             {
-                if (ReferenceEquals(item, owner.Item))
+                if (ReferenceEquals(item, owner))
                     continue;
 
                 var placement = ItemPlacement.GetWorldMatrix(item, itemTime, Matrix4x4.Identity);
@@ -62,7 +62,7 @@ namespace YMM43D.Commons
                     occluders.Add(new Occluder(provider, GetLocalMatrix(provider) * placement, itemTime));
             }
 
-            return new SceneView(owner.Item, owner.Time, ownerPlacement, ownerScreen, occluders);
+            return new SceneView(owner, ownerTime, ownerPlacement, ownerScreen, occluders);
         }
 
         private static IEnumerable<I3DProvider> FindProviders(IVideoItem item)

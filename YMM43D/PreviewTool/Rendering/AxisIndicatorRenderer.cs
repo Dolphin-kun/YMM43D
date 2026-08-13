@@ -105,24 +105,17 @@ namespace YMM43D.PreviewTool.Rendering
 
         public void Dispose() => resources.Dispose();
 
-        private sealed class IndicatorResources : IDisposable
+        private sealed class IndicatorResources(ID3D11Device device) : IDisposable
         {
-            public RenderPipeline<TransformConstants> Pipeline { get; }
-
-            public LineMesh[] Axes { get; }
-
-            public IndicatorResources(ID3D11Device device)
-            {
-                Pipeline = new RenderPipeline<TransformConstants>(
+            public RenderPipeline<TransformConstants> Pipeline { get; } = new RenderPipeline<TransformConstants>(
                     device, Vertex.InputElements, new VertexColorMaterial(device));
 
-                Axes =
+            public LineMesh[] Axes { get; } =
                 [
                     new LineMesh(device, BuildAxis(Vector3.UnitX), AxisXColor),
                     new LineMesh(device, BuildAxis(Vector3.UnitY), AxisYColor),
                     new LineMesh(device, BuildAxis(Vector3.UnitZ), AxisZColor),
                 ];
-            }
 
             public void Dispose()
             {

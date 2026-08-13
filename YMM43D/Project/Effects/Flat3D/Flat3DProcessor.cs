@@ -6,9 +6,9 @@ using YMM43D.Plugin;
 using YMM43D.Scene3D;
 using YukkuriMovieMaker.Commons;
 
-namespace YMM43D.Effects
+namespace YMM43D.Project.Effects.Flat3D
 {
-    internal sealed class Flat3DProcessor : VideoEffect3DProcessorBase
+    internal sealed class Flat3DProcessor(Flat3DEffect effect, IGraphicsDevicesAndContext devices) : VideoEffect3DProcessorBase(effect, devices)
     {
         private static readonly Vector3[] Corners =
         [
@@ -18,20 +18,12 @@ namespace YMM43D.Effects
             new(0.5f, 0.5f, 0f),
         ];
 
-        private readonly Flat3DEffect effect;
-        private readonly DeviceResourceCache<RenderPipeline<TransformConstants>> pipelines;
-
-        public Flat3DProcessor(Flat3DEffect effect, IGraphicsDevicesAndContext devices)
-            : base(effect, devices)
-        {
-            this.effect = effect;
-
-            pipelines = new DeviceResourceCache<RenderPipeline<TransformConstants>>(
+        private readonly Flat3DEffect effect = effect;
+        private readonly DeviceResourceCache<RenderPipeline<TransformConstants>> pipelines = new(
                 device => new RenderPipeline<TransformConstants>(
                     device,
                     new PlaneMesh(device),
                     new TextureMaterial(device)));
-        }
 
         public override bool ScalesToInputSize => false;
 

@@ -6,17 +6,12 @@ using YukkuriMovieMaker.Player.Video;
 
 namespace YMM43D.Plugin
 {
-    public abstract class Shape3DSourceBase : IShapeSource2, I3DProvider, I3DBounds
+    public abstract class Shape3DSourceBase(IGraphicsDevicesAndContext devices) : IShapeSource2, I3DProvider, I3DBounds
     {
         private readonly Output3DRenderer renderer = new();
         private ID2D1Image? output;
 
-        protected IGraphicsDevicesAndContext Devices { get; }
-
-        protected Shape3DSourceBase(IGraphicsDevicesAndContext devices)
-        {
-            Devices = devices;
-        }
+        protected IGraphicsDevicesAndContext Devices { get; } = devices;
 
         public ID2D1Image Output => output ?? throw new InvalidOperationException(
             "まだ画像が生成されていません。Update を先に呼んでください。");
