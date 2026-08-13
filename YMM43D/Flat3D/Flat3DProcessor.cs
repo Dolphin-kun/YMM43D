@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using YMM43D.Graphics;
 using YMM43D.Graphics.Materials;
 using YMM43D.Graphics.Meshes;
@@ -47,8 +47,7 @@ namespace YMM43D.Flat3D
 
             var world = GetLocalMatrix(time) * item.World;
 
-            var constants = TransformConstants.Create(
-                render.GetWorldViewProjection(world), item.Opacity);
+            var constants = render.CreateConstants(world, item.Opacity, effect.IsUnlit);
 
             var settings = item.ToDrawSettings(FaceCulling.None, texture) with
             {

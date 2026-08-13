@@ -5,27 +5,28 @@ namespace YMM43D.Camera
     internal sealed class CameraChangeTracker
     {
         private bool hasSnapshot;
-        private CameraState last;
+        private CameraState lastCamera;
+        private SceneLighting lastLighting = SceneLighting.Default;
 
-        public bool HasChanged(in CameraState current)
+        public bool HasChanged(in CameraState camera, SceneLighting lighting)
         {
             if (!hasSnapshot)
             {
-                hasSnapshot = true;
-                last = current;
+                Sync(camera, lighting);
                 return false;
             }
 
-            if (current.NearlyEquals(last))
+            if (camera.NearlyEquals(lastCamera) && lighting.NearlyEquals(lastLighting))
                 return false;
 
-            last = current;
+            Sync(camera, lighting);
             return true;
         }
 
-        public void Sync(in CameraState current)
+        public void Sync(in CameraState camera, SceneLighting lighting)
         {
-            last = current;
+            lastCamera = camera;
+            lastLighting = lighting;
             hasSnapshot = true;
         }
     }

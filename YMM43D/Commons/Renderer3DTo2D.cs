@@ -28,6 +28,7 @@ namespace YMM43D.Commons
             Matrix4x4 view,
             Matrix4x4 projection,
             Vector2 offset,
+            Scene3D.SceneLighting? lighting,
             Action<Render3DContext> draw)
         {
             if (width <= 0 || height <= 0)
@@ -66,7 +67,7 @@ namespace YMM43D.Commons
 
                     context.RSSetViewport(new Viewport(0, 0, width, height));
 
-                    draw(new Render3DContext(lease.Device, context, view, projection));
+                    draw(new Render3DContext(lease.Device, context, view, projection, lighting));
 
                     context.Flush();
                 }

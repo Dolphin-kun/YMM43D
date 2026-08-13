@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using YMM43D.Camera;
 using YMM43D.Plugin;
 using YMM43D.Scene3D;
@@ -23,7 +23,7 @@ namespace YMM43D.Commons
 
         public bool RefreshIfCameraChanged(Timeline timeline)
         {
-            if (tracker.HasChanged(SceneCameraResolver.Resolve(timeline)))
+            if (tracker.HasChanged(SceneCameraResolver.Resolve(timeline), Resolve(timeline)))
                 isPending = true;
 
             return Apply(timeline);
@@ -36,10 +36,13 @@ namespace YMM43D.Commons
             if (!IsDue)
                 return;
 
-            tracker.Sync(SceneCameraResolver.Resolve(timeline));
+            tracker.Sync(SceneCameraResolver.Resolve(timeline), Resolve(timeline));
 
             Apply(timeline);
         }
+
+        private static SceneLighting Resolve(Timeline timeline)
+            => Lighting.SceneLightingResolver.Resolve(timeline);
 
         private bool IsDue => Environment.TickCount64 - lastRefreshAt >= MinIntervalMs;
 

@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using YMM43D.Graphics;
 using YMM43D.Graphics.Meshes;
 using YMM43D.Plugin;
@@ -46,10 +46,9 @@ namespace Extrusion3D
             var sideColor = effect.SideColor;
             var constants = new ExtrusionConstants
             {
-                WorldViewProjection = Matrix4x4.Transpose(render.GetWorldViewProjection(world)),
+                Transform = render.CreateConstants(world, item.Opacity, effect.IsUnlit),
                 SideColor = new Vector4(sideColor.R, sideColor.G, sideColor.B, sideColor.A) / 255f,
                 CameraLocalPos = cameraLocalPos,
-                Opacity = item.Opacity,
                 ExtrusionType = (int)effect.ExtrusionType,
                 Attenuation = effect.Attenuation.GetFloat(time) / 100f,
             };

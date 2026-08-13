@@ -1,7 +1,8 @@
-using System.Numerics;
+﻿using System.Numerics;
 using System.Runtime.InteropServices;
 using Vortice.Direct3D11;
 using YMM43D.Graphics;
+using YMM43D.Graphics.Materials;
 using YukkuriMovieMaker.Commons;
 
 namespace Extrusion3D
@@ -9,18 +10,17 @@ namespace Extrusion3D
     [StructLayout(LayoutKind.Sequential)]
     internal struct ExtrusionConstants
     {
-        public Matrix4x4 WorldViewProjection;
+        public TransformConstants Transform;
+
         public Vector4 SideColor;
 
         public Vector3 CameraLocalPos;
 
-        public float Opacity;
+        public float Attenuation;
 
         public int ExtrusionType;
 
-        public float Attenuation;
-
-        private Vector2 padding;
+        private Vector3 padding;
     }
 
     internal sealed class ExtrusionMaterial : IMaterial
@@ -31,23 +31,29 @@ namespace Extrusion3D
         public ID3D11PixelShader PixelShader { get; }
         public byte[] VertexShaderBytecode { get; }
 
-        private const string SharedDeclarations = """
+        private static readonly string SharedDeclarations = $$"""
+            {{ShaderSource.LightStruct}}
+
             cbuffer ExtrusionConstants : register(b0)
             {
-                matrix WorldViewProjection;
+            {{ShaderSource.TransformFields}}
                 float4 SideColor;
                 float3 CameraLocalPos;
-                float  Opacity;
-                int    ExtrusionType;
                 float  Attenuation;
-                float2 Padding;
+                int    ExtrusionType;
+                float3 Padding;
             };
+
+            {{ShaderSource.TransformNames}}
+
+            {{ShaderSource.LightingFunctions}}
 
             struct VS_INPUT
             {
                 float3 Position : POSITION;
                 float4 Color    : COLOR;
                 float2 TexCoord : TEXCOORD;
+                float3 Normal   : NORMAL;
             };
 
             struct PS_INPUT
@@ -96,6 +102,13 @@ namespace Extrusion3D
             float SampleAlpha(float2 uv)
             {
                 return txDiffuse.SampleLevel(samLinear, uv, 0).a;
+            }
+
+            float3 Shade3D(float3 color, float3 localNormal, float3 worldPos)
+            {
+                float3 normal = mul(float4(localNormal, 0.0), WorldInverse).xyz;
+
+                return ApplyFog(ApplyLight(color, normal, worldPos), worldPos);
             }
 
             PS_OUTPUT main(PS_INPUT input)
@@ -155,39 +168,37 @@ namespace Extrusion3D
                 float4 clipPos = mul(float4(hitPos, 1.0), WorldViewProjection);
                 output.Depth = clipPos.z / clipPos.w;
 
+                float3 worldPos = mul(float4(hitPos, 1.0), World).xyz;
+
                 bool isFrontFace = abs(hitPos.z - 0.0) < FaceEpsilon;
                 bool isBackFace  = abs(hitPos.z - 1.0) < FaceEpsilon;
 
                 if (isFrontFace || isBackFace)
                 {
                     float4 texColor = txDiffuse.SampleLevel(samLinear, hitUV, 0);
-                    output.Color = float4(texColor.rgb, texColor.a * Opacity);
+                    float3 faceNormal = float3(0.0, 0.0, isFrontFace ? -1.0 : 1.0);
+
+                    output.Color = float4(
+                        Shade3D(texColor.rgb, faceNormal, worldPos), texColor.a * Opacity);
                     return output;
                 }
 
-                // 側面。画像のアルファ勾配から法線を求めて陰影を付ける
-                float3 color;
-                float shade = 1.0;
+                // 側面。画像のアルファ勾配から、輪郭がどちらを向いているかを出す
+                float eps = 0.01;
+                float right = SampleAlpha(hitUV + float2(eps, 0));
+                float left  = SampleAlpha(hitUV - float2(eps, 0));
+                float up    = SampleAlpha(hitUV + float2(0, eps));
+                float down  = SampleAlpha(hitUV - float2(0, eps));
+                float3 sideNormal = normalize(float3(left - right, up - down, FaceEpsilon));
 
-                if (ExtrusionType == TypeImage)
-                {
-                    float eps = 0.01;
-                    float right = SampleAlpha(hitUV + float2(eps, 0));
-                    float left  = SampleAlpha(hitUV - float2(eps, 0));
-                    float up    = SampleAlpha(hitUV + float2(0, eps));
-                    float down  = SampleAlpha(hitUV - float2(0, eps));
-                    float3 normal = normalize(float3(left - right, up - down, FaceEpsilon));
+                float3 color = ExtrusionType == TypeImage
+                    ? txDiffuse.SampleLevel(samLinear, hitUV, 0).rgb
+                    : SideColor.rgb;
 
-                    color = txDiffuse.SampleLevel(samLinear, hitUV, 0).rgb;
-                    float light = max(0.3, dot(normal, normalize(float3(0.5, 0.8, -0.5))));
-                    shade = lerp(1.0, light, Attenuation);
-                }
-                else
-                {
-                    color = SideColor.rgb;
-                }
+                // 減衰は、光源とは別に側面だけを暗く落とす昔ながらの効き方
+                float fade = lerp(1.0, max(0.3, dot(sideNormal, normalize(float3(0.5, 0.8, -0.5)))), Attenuation);
 
-                output.Color = float4(color * shade, Opacity);
+                output.Color = float4(Shade3D(color * fade, sideNormal, worldPos), Opacity);
                 return output;
             }
             """;

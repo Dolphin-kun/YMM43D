@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using Vortice.Direct3D11;
 using Vortice.Mathematics;
 using YMM43D.Camera;
@@ -64,7 +64,7 @@ namespace YMM43D.PreviewTool.Rendering
                 new Viewport(width - size - Margin, height - size - Margin, size, size));
 
             foreach (var mesh in shared.Axes)
-                shared.Pipeline.Draw(render.Context, TransformConstants.Create(transform, 1f), settings, mesh);
+                shared.Pipeline.Draw(render.Context, TransformConstants.CreateUnlit(transform, 1f), settings, mesh);
 
             render.Context.RSSetViewport(new Viewport(0, 0, width, height));
         }

@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using System.Windows.Media;
 using Vortice.Direct3D11;
 using YMM43D.Graphics;
@@ -23,7 +23,7 @@ namespace Shape3D
         public override void Draw(in Render3DContext render, DrawContext3D item)
         {
             var world = GetLocalMatrix(item.Time) * item.World;
-            var constants = TransformConstants.Create(render.GetWorldViewProjection(world), item.Opacity);
+            var constants = render.CreateConstants(world, item.Opacity, parameter.IsUnlit);
 
             var shared = resources.Get(render.Device);
             var mesh = shared.GetMesh(parameter.Solid, parameter.ResolvedColors);

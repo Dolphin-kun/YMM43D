@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using Vortice.Direct3D11;
 using Vortice.Mathematics;
 using YMM43D.Camera;
@@ -64,7 +64,8 @@ namespace YMM43D.PreviewTool
             var projection = SceneProjection.GetProjectionMatrix(
                 (float)width / Math.Max(1, height), scene.ScreenHeight, pixelsPerTangent);
 
-            var render = new Render3DContext(device, context, viewPose.ViewMatrix, projection);
+            var render = new Render3DContext(
+                device, context, viewPose.ViewMatrix, projection, scene.Lighting);
 
             grid.Draw(render, viewPose.Position);
             cameraGizmo.Draw(render, scene.SceneCameraPose, scene.GetScreenTangent(pixelsPerTangent));
@@ -253,6 +254,8 @@ namespace YMM43D.PreviewTool
         public required CameraPose ViewPose { get; init; }
 
         public required CameraState SceneCamera { get; init; }
+
+        public SceneLighting Lighting { get; init; } = SceneLighting.Default;
 
         public CameraPose SceneCameraPose => SceneCamera.GetPose();
 

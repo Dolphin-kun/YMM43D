@@ -36,6 +36,7 @@ namespace YMM43D.Plugin
                 camera, description.ScreenSize.Height);
 
             var scene = SceneDepthCollector.Collect(description, self);
+            var lighting = Lighting.SceneLightingResolver.Resolve(description);
 
             var placedWorld = world * (placement ?? scene.OwnerPlacement);
 
@@ -68,7 +69,7 @@ namespace YMM43D.Plugin
                 tangentToImage, target.Origin, target.Width, target.Height);
 
             return renderer.Render(
-                devices, target.Width, target.Height, view, projection, target.Origin,
+                devices, target.Width, target.Height, view, projection, target.Origin, lighting,
                 render =>
                 {
                     DrawOccluders(render, scene.Occluders);

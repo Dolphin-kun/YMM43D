@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using Vortice.Direct3D11;
 using Vortice.Mathematics;
 using YMM43D.Camera;
@@ -24,7 +24,7 @@ namespace YMM43D.PreviewTool.Rendering
 
         public void Draw(in Render3DContext render, in CameraPose pose, Vector2 tangent)
         {
-            var constants = TransformConstants.Create(render.GetWorldViewProjection(pose.WorldMatrix), 1f);
+            var constants = TransformConstants.CreateUnlit(render.GetWorldViewProjection(pose.WorldMatrix), 1f);
 
             resources.Get(render.Device).Draw(render.Context, constants, tangent);
         }

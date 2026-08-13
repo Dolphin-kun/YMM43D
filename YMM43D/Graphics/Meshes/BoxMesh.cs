@@ -8,11 +8,21 @@ namespace YMM43D.Graphics.Meshes
 {
     public sealed class BoxMesh : IMesh
     {
+        private static readonly ushort[] Corners =
+        [
+            0, 1, 2,  1, 3, 2,
+            5, 4, 7,  4, 6, 7,
+            4, 0, 6,  0, 2, 6,
+            1, 5, 3,  5, 7, 3,
+            4, 5, 0,  5, 1, 0,
+            2, 3, 6,  3, 7, 6,
+        ];
+
         private readonly DisposeCollector disposer = new();
 
         public ID3D11Buffer VertexBuffer { get; }
-        public ID3D11Buffer? IndexBuffer { get; }
-        public int DrawCount => 36;
+        public ID3D11Buffer? IndexBuffer => null;
+        public int DrawCount => Corners.Length;
         public int VertexStride => Vertex.Stride;
         public InputElementDescription[] InputElements => Vertex.InputElements;
         public PrimitiveTopology Topology => PrimitiveTopology.TriangleList;
@@ -25,33 +35,39 @@ namespace YMM43D.Graphics.Meshes
         {
             var white = new Color4(1f, 1f, 1f, 1f);
 
-            var vertices = new[]
-            {
-                new Vertex(new Vector3(-0.5f,  0.5f, zNear), white, new Vector2(0f, 0f)),
-                new Vertex(new Vector3( 0.5f,  0.5f, zNear), white, new Vector2(1f, 0f)),
-                new Vertex(new Vector3(-0.5f, -0.5f, zNear), white, new Vector2(0f, 1f)),
-                new Vertex(new Vector3( 0.5f, -0.5f, zNear), white, new Vector2(1f, 1f)),
-                new Vertex(new Vector3(-0.5f,  0.5f, zFar),  white, new Vector2(0f, 0f)),
-                new Vertex(new Vector3( 0.5f,  0.5f, zFar),  white, new Vector2(1f, 0f)),
-                new Vertex(new Vector3(-0.5f, -0.5f, zFar),  white, new Vector2(0f, 1f)),
-                new Vertex(new Vector3( 0.5f, -0.5f, zFar),  white, new Vector2(1f, 1f)),
-            };
-
-            ushort[] indices =
+            Vector3[] positions =
             [
-                0, 1, 2,  1, 3, 2,
-                5, 4, 7,  4, 6, 7,
-                4, 0, 6,  0, 2, 6,
-                1, 5, 3,  5, 7, 3,
-                4, 5, 0,  5, 1, 0,
-                2, 3, 6,  3, 7, 6,
+                new(-0.5f,  0.5f, zNear),
+                new( 0.5f,  0.5f, zNear),
+                new(-0.5f, -0.5f, zNear),
+                new( 0.5f, -0.5f, zNear),
+                new(-0.5f,  0.5f, zFar),
+                new( 0.5f,  0.5f, zFar),
+                new(-0.5f, -0.5f, zFar),
+                new( 0.5f, -0.5f, zFar),
             ];
+
+            var vertices = new Vertex[Corners.Length];
+
+            for (var i = 0; i < Corners.Length; i += 3)
+            {
+                var a = positions[Corners[i]];
+                var b = positions[Corners[i + 1]];
+                var c = positions[Corners[i + 2]];
+
+                var normal = Vertex.GetNormal(a, b, c);
+
+                vertices[i] = new Vertex(a, white, ToTexCoord(a), normal);
+                vertices[i + 1] = new Vertex(b, white, ToTexCoord(b), normal);
+                vertices[i + 2] = new Vertex(c, white, ToTexCoord(c), normal);
+            }
 
             VertexBuffer = D3D11Buffers.Create(device, vertices, BindFlags.VertexBuffer);
             disposer.Collect(VertexBuffer);
-            IndexBuffer = D3D11Buffers.Create(device, indices, BindFlags.IndexBuffer);
-            disposer.Collect(IndexBuffer);
         }
+
+        private static Vector2 ToTexCoord(in Vector3 position)
+            => new(position.X + 0.5f, 0.5f - position.Y);
 
         public void Dispose() => disposer.Dispose();
     }

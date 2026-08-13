@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 using System.Windows.Media;
 using YMM43D.Plugin;
 using YukkuriMovieMaker.Commons;
@@ -32,6 +32,12 @@ namespace Extrusion3D
         [AnimationSlider("F0", "%", 0, 100)]
         [ShowPropertyEditorWhen(nameof(ExtrusionType), ExtrusionType.Image)]
         public Animation Attenuation { get; } = new(0, 0, 100);
+
+        [Display(GroupName = "立体化3D", Name = "陰影をつけない",
+            Description = "光源を無視して、元の色のまま塗ります")]
+        [ToggleSlider]
+        public bool IsUnlit { get => isUnlit; set => Set(ref isUnlit, value); }
+        private bool isUnlit;
 
         [Display(GroupName = "立体化3D", Name = "色", Description = "側面の塗りつぶし色を設定します")]
         [ColorPicker]

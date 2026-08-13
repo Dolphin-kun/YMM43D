@@ -1,4 +1,4 @@
-using Vortice.Direct3D11;
+﻿using Vortice.Direct3D11;
 using YukkuriMovieMaker.Commons;
 
 namespace YMM43D.Graphics.Materials
@@ -16,9 +16,7 @@ namespace YMM43D.Graphics.Materials
             var source = ShaderSource.StandardPrologue + """
                 float4 PSMain(PS_IN input) : SV_TARGET
                 {
-                    float4 col = input.Col;
-                    col.a *= Opacity;
-                    return col;
+                    return Shade(input.Col, input);
                 }
                 """;
 

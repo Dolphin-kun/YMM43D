@@ -1,4 +1,4 @@
-using YMM43D.Graphics.Materials;
+﻿using YMM43D.Graphics.Materials;
 using YMM43D.Graphics.Meshes;
 using YMM43D.Graphics;
 using YMM43D.Plugin;
@@ -26,8 +26,7 @@ namespace YMM43D.PreviewTool.Rendering
             if (item.Texture is null)
                 return;
 
-            var constants = TransformConstants.Create(
-                render.GetWorldViewProjection(item.World), item.Opacity);
+            var constants = render.CreateConstants(item.World, item.Opacity);
 
             var settings = item.ToDrawSettings(FaceCulling.None) with { SkipDepthWrite = true };
 

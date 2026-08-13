@@ -34,9 +34,15 @@ namespace Shape3D
 
                 for (var i = 1; i + 1 < indices.Length; i++)
                 {
-                    vertices.Add(new Vertex(solid.Vertices[indices[0]], color, new Vector2(0.5f, 0f)));
-                    vertices.Add(new Vertex(solid.Vertices[indices[i]], color, new Vector2(1f, 1f)));
-                    vertices.Add(new Vertex(solid.Vertices[indices[i + 1]], color, new Vector2(0f, 1f)));
+                    var a = solid.Vertices[indices[0]];
+                    var b = solid.Vertices[indices[i]];
+                    var c = solid.Vertices[indices[i + 1]];
+
+                    var normal = Vertex.GetNormal(a, b, c);
+
+                    vertices.Add(new Vertex(a, color, new Vector2(0.5f, 0f), normal));
+                    vertices.Add(new Vertex(b, color, new Vector2(1f, 1f), normal));
+                    vertices.Add(new Vertex(c, color, new Vector2(0f, 1f), normal));
                 }
             }
 

@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using Vortice.Direct3D11;
 using Vortice.Mathematics;
 using YMM43D.Graphics;
@@ -39,7 +39,7 @@ namespace YMM43D.PreviewTool.Rendering
                 var opacity = active == GizmoHandle.None || active == handle ? 1f : IdleOpacity;
 
                 shared.Pipeline.Draw(
-                    render.Context, TransformConstants.Create(transform, opacity), settings, mesh);
+                    render.Context, TransformConstants.CreateUnlit(transform, opacity), settings, mesh);
             }
         }
 

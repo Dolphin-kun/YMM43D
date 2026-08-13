@@ -20,12 +20,14 @@ namespace YMM43D.Graphics.Meshes
         public PlaneMesh(ID3D11Device device)
         {
             var white = new Color4(1f, 1f, 1f, 1f);
+            var normal = new Vector3(0f, 0f, -1f);
+
             var vertices = new[]
             {
-                new Vertex(new Vector3(-0.5f,  0.5f, 0f), white, new Vector2(0f, 0f)),
-                new Vertex(new Vector3( 0.5f,  0.5f, 0f), white, new Vector2(1f, 0f)),
-                new Vertex(new Vector3(-0.5f, -0.5f, 0f), white, new Vector2(0f, 1f)),
-                new Vertex(new Vector3( 0.5f, -0.5f, 0f), white, new Vector2(1f, 1f)),
+                new Vertex(new Vector3(-0.5f,  0.5f, 0f), white, new Vector2(0f, 0f), normal),
+                new Vertex(new Vector3( 0.5f,  0.5f, 0f), white, new Vector2(1f, 0f), normal),
+                new Vertex(new Vector3(-0.5f, -0.5f, 0f), white, new Vector2(0f, 1f), normal),
+                new Vertex(new Vector3( 0.5f, -0.5f, 0f), white, new Vector2(1f, 1f), normal),
             };
 
             ushort[] indices = [0, 1, 2, 1, 3, 2];

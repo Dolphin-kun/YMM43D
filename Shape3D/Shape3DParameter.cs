@@ -1,4 +1,4 @@
-using System.Collections.Immutable;
+﻿using System.Collections.Immutable;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Windows.Media;
@@ -51,6 +51,12 @@ namespace Shape3D
         [EnumComboBox]
         public CubeFill Fill { get => fill; set => Set(ref fill, value); }
         private CubeFill fill = CubeFill.Solid;
+
+        [Display(GroupName = Paint, Name = "陰影をつけない",
+            Description = "光源を無視して、指定した色のまま塗ります")]
+        [ToggleSlider]
+        public bool IsUnlit { get => isUnlit; set => Set(ref isUnlit, value); }
+        private bool isUnlit;
 
         [Display(GroupName = Paint, Name = "色")]
         [ColorPicker]

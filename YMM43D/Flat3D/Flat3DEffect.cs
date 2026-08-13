@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 using YMM43D.Plugin;
 using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Controls;
@@ -27,10 +27,16 @@ namespace YMM43D.Flat3D
         [AnimationSlider("F1", "°", -180, 180)]
         public Animation RotationZ { get; } = new(0, -100000, 100000);
 
+        [Display(GroupName = Group, Name = "陰影をつけない",
+            Description = "光源を無視して、元の絵のまま置きます", Order = 3)]
+        [ToggleSlider]
+        public bool IsUnlit { get => isUnlit; set => Set(ref isUnlit, value); }
+        private bool isUnlit;
+
         [Display(GroupName = Group, Name = "他のものを隠す",
             Description = "入れると板が奥行きを持ち、後ろにあるものを隠します。"
                 + "同じ面に並べたり半透明にしたりすると、境目がちらつくことがあります",
-            Order = 3)]
+            Order = 4)]
         [ToggleSlider]
         public bool WritesDepth
         {

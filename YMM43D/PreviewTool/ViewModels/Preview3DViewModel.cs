@@ -1,10 +1,12 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Numerics;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
 using Vortice.Direct3D11;
 using YMM43D.Camera;
+using YMM43D.Items;
+using YMM43D.Lighting;
 using YMM43D.Commons;
 using YMM43D.Plugin;
 using YMM43D.PreviewTool.Views;
@@ -284,6 +286,7 @@ namespace YMM43D.PreviewTool.ViewModels
             {
                 ViewPose = freeCamera.GetPose(),
                 SceneCamera = camera,
+                Lighting = SceneLightingResolver.Resolve(timeline),
                 Time = time,
                 Environment = new PreviewEnvironment(
                     device, sourceAndDevices.Devices, scene, sceneBuilder.SourceDescription),
