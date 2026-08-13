@@ -1,7 +1,6 @@
 ﻿using System.Collections.Concurrent;
-using YMM43D.Camera;
-using YMM43D.Plugin;
 using YMM43D.Scene3D;
+using YMM43D.Plugin;
 using YukkuriMovieMaker.Project;
 using YukkuriMovieMaker.Project.Items;
 
@@ -42,7 +41,7 @@ namespace YMM43D.Commons
         }
 
         private static SceneLighting Resolve(Timeline timeline)
-            => Lighting.SceneLightingResolver.Resolve(timeline);
+            => SceneLightingResolver.Resolve(timeline);
 
         private bool IsDue => Environment.TickCount64 - lastRefreshAt >= MinIntervalMs;
 

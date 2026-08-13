@@ -1,10 +1,10 @@
 ﻿using System.Numerics;
 using Vortice.Direct3D11;
 using Vortice.Mathematics;
-using YMM43D.Camera;
+using YMM43D.Scene3D;
+using YMM43D.Commons;
 using YMM43D.Plugin;
 using YMM43D.PreviewTool.Rendering;
-using YMM43D.Scene3D;
 using YukkuriMovieMaker.Project.Items;
 
 namespace YMM43D.PreviewTool
@@ -13,14 +13,18 @@ namespace YMM43D.PreviewTool
     {
         private static readonly Color4 BackgroundColor = new(0.15f, 0.15f, 0.15f, 1f);
 
+        private const float MarkerGrabThreshold = 16f;
+
         private readonly GridRenderer grid = new();
         private readonly CameraGizmoRenderer cameraGizmo = new();
+        private readonly MarkerRenderer markers = new();
         private readonly TransformGizmoRenderer transformGizmo = new();
         private readonly AxisIndicatorRenderer axisIndicator = new();
         private readonly FlatItemProvider flatItemProvider = new();
         private readonly ItemDrawContextBuilder contextBuilder = new();
 
         private PickTarget[] pickTargets = [];
+        private IReadOnlyList<SceneMarkerResolver.PlacedMarker> pickMarkers = [];
         private TransformGizmo? lastGizmo;
         private Matrix4x4 lastViewProjection = Matrix4x4.Identity;
         private float lastWidth;
@@ -70,6 +74,9 @@ namespace YMM43D.PreviewTool
             grid.Draw(render, viewPose.Position);
             cameraGizmo.Draw(render, scene.SceneCameraPose, scene.GetScreenTangent(pixelsPerTangent));
 
+            pickMarkers = scene.Markers;
+            markers.Draw(render, scene.Markers, scene.SelectedMarker);
+
             for (var i = 0; i < scene.Items.Count; i++)
                 scene.Items[i].Provider.Draw(render, drawContexts[i]);
 
@@ -112,6 +119,27 @@ namespace YMM43D.PreviewTool
             }
 
             return null;
+        }
+
+        public SceneMarkerResolver.PlacedMarker? PickMarker(Vector2 position)
+        {
+            SceneMarkerResolver.PlacedMarker? found = null;
+            var nearest = MarkerGrabThreshold;
+
+            foreach (var placed in pickMarkers)
+            {
+                if (ToScreen(placed.Marker.Position) is not { } spot)
+                    continue;
+
+                var distance = Vector2.Distance(position, spot);
+                if (distance >= nearest)
+                    continue;
+
+                nearest = distance;
+                found = placed;
+            }
+
+            return found;
         }
 
         public PickRay? CreateRay(Vector2 position)
@@ -242,6 +270,7 @@ namespace YMM43D.PreviewTool
         {
             grid.Dispose();
             cameraGizmo.Dispose();
+            markers.Dispose();
             transformGizmo.Dispose();
             axisIndicator.Dispose();
             flatItemProvider.Dispose();
@@ -280,6 +309,10 @@ namespace YMM43D.PreviewTool
         public required IReadOnlyList<PreviewItem> Items { get; init; }
 
         public IVideoItem? Selected { get; init; }
+
+        public IReadOnlyList<SceneMarkerResolver.PlacedMarker> Markers { get; init; } = [];
+
+        public IItem? SelectedMarker { get; init; }
 
         public GizmoHandle ActiveHandle { get; init; }
     }

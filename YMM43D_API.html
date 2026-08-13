@@ -104,21 +104,21 @@ SharpGen.Runtime だけです。リフレクションも使用していません
 
 <h2 id="overview">1. 全体像</h2>
 
-<p>ライブラリは 9 つの名前空間に分かれています。依存は上から下への一方向で、逆流しません。</p>
+<p>ライブラリは 7 つの名前空間に分かれています。依存は上から下への一方向で、逆流しません。</p>
 
 <div class="wide">
-<pre>YMM43D.Graphics      D3D11 の薄い包み。YMM4 を知らない。
+<pre>YMM43D.Graphics      D3D11 の薄い包み。YMM4 を知らない。形の作り方もここ。
       ↓
-YMM43D.Scene3D       時間・座標・描画コンテキストなど、3D シーンの語彙。
+YMM43D.Scene3D       3D シーンの語彙。時間・座標・カメラ・光・掴む判定。
+                     タイムラインを知らないので、YMM4 なしで動かして確かめられる。
       ↓
-YMM43D.Camera        シーンを撮るカメラ。設定値・射影・解決。
-YMM43D.Lighting      シーンを照らす光。解決とインターフェース。
-      ↓
-YMM43D.Commons       YMM4 のデバイスや画像との橋渡し。
+YMM43D.Commons       YMM4 との橋渡し。デバイスや画像の受け渡しと、
+                     タイムラインを走査してカメラ・光・目印を見つける係。
       ↓
 YMM43D.Plugin            プラグイン作者が使う公開面。基底クラスとインターフェース。
       ↓
 YMM43D.Project.Items     .ymmp に保存されるアイテム。カメラ・光源・環境。
+YMM43D.Project.Shape     .ymmp に保存される図形パラメータ。「3Dアイテム」。
 YMM43D.Project.Effects   .ymmp に保存されるエフェクト。
 YMM43D.PreviewTool       3Dプレビューのツールウィンドウ。</pre>
 
@@ -126,9 +126,16 @@ YMM43D.PreviewTool       3Dプレビューのツールウィンドウ。</pre>
 <code>Project</code> の下は、YMM4 の <code>YukkuriMovieMaker.Project.Items</code> と同じ意味です。
 題材ではなく「<b>.ymmp に保存されるもの</b>」という役割で括っています。
 </p>
+
+<p>
+<code>Scene3D</code> と <code>Commons</code> の境目も同じ考え方で、題材ではなく
+「<b>YMM4 の <code>Timeline</code> を知っているか</b>」で分けています。
+<code>CameraState</code> や <code>SceneLight</code> は値でしかないので <code>Scene3D</code> に、
+それをタイムラインから探し出す <code>SceneCameraResolver</code> などは <code>Commons</code> に置きます。
+</p>
 </div>
 
-<p>プラグインを書くときに直接触れるのは、主に <code>YMM43D.Plugin</code> と <code>YMM43D.Scene3D</code>・<code>YMM43D.Camera</code>、
+<p>プラグインを書くときに直接触れるのは、主に <code>YMM43D.Plugin</code> と <code>YMM43D.Scene3D</code>、
 そして描画部品の <code>YMM43D.Graphics</code> です。</p>
 
 <h3>2つの描画経路</h3>
@@ -187,13 +194,13 @@ YMM43D.PreviewTool       3Dプレビューのツールウィンドウ。</pre>
 
 <h2 id="setup">2. 導入</h2>
 
-<p>同梱のプラグインが、そのまま実装例になります。</p>
+<p>同梱の実装が、そのまま例になります。上2つは別アセンブリ、下2つは YMM43D.dll 自身が持っています。</p>
 
 <table>
 <tr><th>プロジェクト</th><th>表示名</th><th>種別</th><th>実装例として</th></tr>
-<tr><td><code>Shape3D</code></td><td>3Dアイテム</td><td>図形</td><td><code>Shape3DSourceBase</code> の最小構成</td></tr>
 <tr><td><code>Extrusion3D</code></td><td>立体化3D</td><td>映像エフェクト</td><td>入力画像をテクスチャに使う。レイマーチングと <code>SV_Depth</code></td></tr>
 <tr><td><code>PixelPoints3D</code></td><td>点群3D</td><td>映像エフェクト</td><td>頂点シェーダーで形を組み立てる。複数の形状を 1 つのシェーダーで描き分ける</td></tr>
+<tr><td><code>YMM43D.Project.Shape</code></td><td>3Dアイテム</td><td>図形</td><td>平面・正多面体・球・円柱・円錐・ドーナツを描く例</td></tr>
 <tr><td><code>YMM43D.Project.Effects.Flat3D</code></td><td>3D空間に置く</td><td>映像エフェクト</td><td>入力画像を板として置く。実寸と回転を自分で扱う（<code>ScalesToInputSize</code> が false）例</td></tr>
 </table>
 
@@ -582,9 +589,58 @@ HLSL の 16 バイト境界の詰め方に合わせてください。
 <tr><td><code>BoxMesh.CreateExtrusionBox</code></td><td>押し出し用の箱（z が 0〜1、白）</td></tr>
 <tr><td><code>PlaneMesh</code></td><td>1×1 の板</td></tr>
 <tr><td><code>LineMesh</code></td><td>線分の並び</td></tr>
+<tr><td><code>SurfaceMesh</code></td><td><code>SurfaceGeometry</code> から作る、面の並びのメッシュ</td></tr>
 <tr><td rowspan="2">マテリアル</td><td><code>VertexColorMaterial</code></td><td>頂点色をそのまま出す</td></tr>
 <tr><td><code>TextureMaterial</code></td><td>テクスチャを貼る</td></tr>
 </table>
+
+<h3>面の並びから形を作る</h3>
+
+<p>
+多角形の面を並べた形は <code>SurfaceGeometry</code> で表します。頂点の配列と、面ごとの
+「どの頂点をどの順に結ぶか」を持ちます。<code>SurfaceMesh</code> に渡すと三角形に割って
+頂点バッファになります。
+</p>
+
+<table>
+<tr><th>メンバー</th><th>説明</th></tr>
+<tr><td><code>Vertices</code></td><td>頂点の位置</td></tr>
+<tr><td><code>Normals</code></td><td>頂点ごとの外向き。なめらかに繋ぐ面だけが使う</td></tr>
+<tr><td><code>Faces</code></td><td>面の並び。<code>Indices</code>・<code>Group</code>・<code>IsSmooth</code></td></tr>
+<tr><td><code>GroupCount</code></td><td>色を塗り分ける単位の数。球は 1、円柱は 3（側面・上面・底面）</td></tr>
+<tr><td><code>ScaledToUnit()</code></td><td>いちばん長い差し渡しが 1 になるよう拡大縮小する</td></tr>
+<tr><td><code>FacingOutward()</code></td><td>面の並び順を、外を向くほうへ揃え直す</td></tr>
+</table>
+
+<p>
+<code>IsSmooth</code> が false の面は、その面自身の向きを法線に使います（角が立つ）。true の面は
+<code>Normals</code> をそのまま使うので、隣り合う面が繋がって見えます。円柱のように
+側面だけなめらかにして蓋は角を立てたい場合は、面ごとに分けて指定します。
+</p>
+
+<div class="wide">
+<pre>// 一辺 1 の四面体。面ごとに色を変えられるよう、面の数だけグループを振る。
+var solid = SurfaceGeometry.Faceted(
+    [new(1, 1, 1), new(1, -1, -1), new(-1, 1, -1), new(-1, -1, 1)],
+    [[0, 1, 2], [0, 3, 1], [0, 2, 3], [1, 3, 2]]).ScaledToUnit();
+
+using var mesh = new SurfaceMesh(device, solid, [new Color4(1f, 1f, 1f, 1f)]);</pre>
+</div>
+
+<p>
+よく使う形は <code>Primitives</code> にあります。<code>Plane</code> / <code>Tetrahedron</code> /
+<code>Cube</code> / <code>Octahedron</code> / <code>Dodecahedron</code> / <code>Icosahedron</code> /
+<code>Sphere(分割数)</code> / <code>Cylinder(分割数)</code> / <code>Cone(分割数)</code> /
+<code>Torus(分割数, 太さ)</code>。どれも差し渡し 1 に揃えてあります。
+</p>
+
+<div class="note">
+<p>
+法線の向きは、絵には出ません。シェーダーが必ずカメラ側へ向け直してから陰影を計算するためです。
+それでも <code>Normals</code> は外向きで揃えてあります。裏返っていると、面の並び順を揃える
+<code>FacingOutward()</code> が逆に働くためです。
+</p>
+</div>
 
 <h3>シェーダーの記述</h3>
 
@@ -747,16 +803,56 @@ C# 側の構造体の先頭に <code>TransformConstants</code> を埋めれば�
 <tr><td><code>EnvironmentItem</code></td><td>class</td><td>「3D環境」。環境光と霧。レイヤー番号がいちばん大きいものが使われる</td></tr>
 </table>
 
-<h3>YMM43D.Lighting</h3>
+<h4>3Dプレビューの目印</h4>
+
+<p>
+絵を描かないアイテムは、そのままでは 3Dプレビュー上のどこにあるのか分かりません。
+<code>ISceneMarkerSource</code> を実装すると、線画の目印が出て、掴んで動かせるようになります。
+</p>
+
+<div class="wide">
+<pre>public SceneMarker GetMarker(in FrameContext itemTime)
+    =&gt; SceneMarker.ForPointLight(GetPosition(itemTime), WorldScale.ToWorld(Reach.GetFloat(itemTime)));
+
+public void MoveMarker(in Vector3 shift, in FrameContext itemTime, in EditScope scope)
+{
+    scope.Nudge(X, WorldScale.ToPixels(shift.X));
+    scope.Nudge(Y, -WorldScale.ToPixels(shift.Y));
+    scope.Nudge(Z, WorldScale.ToPixels(shift.Z));
+}</pre>
+</div>
+
+<p>
+<code>shift</code> はワールド単位の差分で、視線に垂直な面の上を動いた分です。
+<code>scope</code> をそのまま <code>Nudge</code> に渡せば、「ドラッグで中間点を打つ」の設定に従います。
+</p>
+
+<table>
+<tr><th>作り方</th><th>見た目</th><th>掴んだとき</th></tr>
+<tr><td><code>SceneMarker.ForDirectionalLight(向き)</code></td><td>原点から一定の距離に浮かぶ太陽。原点へ線が伸びる</td><td>動かした先の向きに回る</td></tr>
+<tr><td><code>SceneMarker.ForPointLight(位置, 届く距離)</code></td><td>小さな球と、届く距離を表す大きな球</td><td>その位置へ移る</td></tr>
+<tr><td><code>SceneMarker.ForEnvironment()</code></td><td>原点に置いた箱</td><td>選ぶだけ（<code>IsMovable</code> が false）</td></tr>
+</table>
+
+<div class="note">
+<p>
+環境アイテムはシーン全体に効くもので、置き場所がありません。目印は「そこにある」ことを
+示すための原点の印で、動かしても意味が無いため <code>IsMovable</code> を false にしてあります。
+掴むとタイムライン上で選択されるので、設定を開く手がかりとしては働きます。
+</p>
+</div>
+
+<h3>YMM43D.Project.Shape</h3>
 
 <table>
 <tr><th>型</th><th>種別</th><th>説明</th></tr>
-<tr><td><code>ISceneLightSource</code></td><td>interface</td><td>光源として振る舞うアイテム</td></tr>
-<tr><td><code>ISceneEnvironment</code></td><td>interface</td><td>環境光と霧を決めるアイテム</td></tr>
-<tr><td><code>SceneLightingResolver</code></td><td>static class</td><td>その時刻に効いている光を集めて <code>SceneLighting</code> を作る</td></tr>
+<tr><td><code>Shape3DPlugin</code></td><td>class</td><td>YMM4 の図形として「3Dアイテム」を登録する</td></tr>
+<tr><td><code>SolidKind</code></td><td>enum</td><td>描く形。平面・正多面体5種・球・円柱・円錐・ドーナツ</td></tr>
+<tr><td><code>Solids</code></td><td>static class</td><td><code>SolidKind</code> から <code>SurfaceGeometry</code> を作る。作った形は使い回す</td></tr>
+<tr><td><code>CubeFill</code></td><td>enum</td><td>単色で塗るか、面グループごとに塗り分けるか</td></tr>
 </table>
 
-<h3>YMM43D.Camera</h3>
+<h3>YMM43D.Scene3D</h3>
 
 <table>
 <tr><th>型</th><th>種別</th><th>説明</th></tr>
@@ -765,14 +861,12 @@ C# 側の構造体の先頭に <code>TransformConstants</code> を埋めれば�
 <tr><td><code>CameraMove</code></td><td>struct</td><td>カメラをどれだけ動かすかの差分。ドラッグ操作を伝えるのに使う</td></tr>
 <tr><td><code>CameraPose</code></td><td>struct</td><td>ある時点でのカメラの位置・注視点・上方向</td></tr>
 <tr><td><code>SceneProjection</code></td><td>static class</td><td>シーンを画面に写す射影。クリップ面と画角の決め方</td></tr>
-<tr><td><code>SceneCameraResolver</code></td><td>static class</td><td>その時刻に効いているカメラアイテムを探し、設定値を返す</td></tr>
 <tr><td><code>ICameraSync</code> / <code>CameraSync</code></td><td>interface / class</td><td>カメラの変化を YMM4 に伝える</td></tr>
-</table>
-
-<h3>YMM43D.Scene3D</h3>
-
-<table>
-<tr><th>型</th><th>種別</th><th>説明</th></tr>
+<tr><td><code>ISceneLightSource</code></td><td>interface</td><td>光源として振る舞うアイテム</td></tr>
+<tr><td><code>ISceneEnvironment</code></td><td>interface</td><td>環境光と霧を決めるアイテム</td></tr>
+<tr><td><code>ISceneMarkerSource</code></td><td>interface</td><td>3Dプレビューに目印を出すアイテム。掴んで動かされたら差分を受け取る</td></tr>
+<tr><td><code>SceneMarker</code></td><td>struct</td><td>目印の見た目と場所。動かせないものは掴んで選ぶだけになる</td></tr>
+<tr><td><code>MarkerKind</code></td><td>enum</td><td>目印の絵柄。平行光・点光源・環境</td></tr>
 <tr><td><code>WorldBounds</code></td><td>struct</td><td>描くものがワールド空間で占める範囲。出力画像の大きさを決めるのに使う</td></tr>
 <tr><td><code>PickRay</code></td><td>struct</td><td>画面上の1点から伸ばす半直線。3Dプレビューでアイテムを掴むのに使う</td></tr>
 <tr><td><code>TransformGizmo</code></td><td>struct</td><td>アイテムを動かす向きの案内。矢印と輪の当たり判定</td></tr>
@@ -790,7 +884,7 @@ C# 側の構造体の先頭に <code>TransformConstants</code> を埋めれば�
 <tr><td><code>FrameContext</code></td><td>struct</td><td>フレーム位置・長さ・FPS の組</td></tr>
 <tr><td><code>AnimationExtensions</code></td><td>static class</td><td><code>Animation</code> を <code>FrameContext</code> で評価する。差分で動かす <code>Nudge</code> / <code>NudgeAt</code> も持つ</td></tr>
 <tr><td><code>EditScope</code></td><td>struct</td><td>ドラッグの結果をアニメーションのどこに書き込むか（全体か、中間点か）</td></tr>
-<tr><td><code>Rotation3D</code></td><td>static class</td><td>度からの回転行列の生成</td></tr>
+<tr><td><code>Rotation3D</code></td><td>static class</td><td>度からの回転行列の生成と、角度の折り返し</td></tr>
 </table>
 
 <h4>DrawContext3D</h4>
@@ -830,7 +924,11 @@ double raw = parameter.Size.GetValue(item.Time);</pre>
 <tr><td><code>DrawSettings</code></td><td>struct</td><td>1 回の描画ごとに変わる設定</td></tr>
 <tr><td><code>RenderStates</code></td><td>class</td><td>デバイス上で共有される描画ステート一式</td></tr>
 <tr><td><code>IMesh</code> / <code>IMaterial</code></td><td>interface</td><td>形状とシェーダー。頂点が 65536 個を超える形状は <code>IndexFormat</code> に <code>R32_UInt</code> を返す</td></tr>
-<tr><td><code>Vertex</code></td><td>struct</td><td>位置・色・UV を持つ標準頂点</td></tr>
+<tr><td><code>Vertex</code></td><td>struct</td><td>位置・色・UV・法線を持つ標準頂点。法線が 0 の頂点は陰影を付けない</td></tr>
+<tr><td><code>SurfaceGeometry</code></td><td>record</td><td>面の並びで表した形。頂点・法線・面・面グループ数</td></tr>
+<tr><td><code>SurfaceFace</code></td><td>struct</td><td>面 1 枚。頂点の並び・色を塗るグループ番号・なめらかに繋ぐかどうか</td></tr>
+<tr><td><code>Primitives</code></td><td>static class</td><td>基本の形を作る。平面・正多面体5種・球・円柱・円錐・ドーナツ</td></tr>
+<tr><td><code>SurfaceMesh</code></td><td>class</td><td><code>SurfaceGeometry</code> を GPU の頂点バッファにする</td></tr>
 <tr><td><code>TransformConstants</code></td><td>struct</td><td>変換行列と不透明度を持つ標準定数バッファ</td></tr>
 <tr><td><code>ShaderCompiler</code></td><td>static class</td><td>HLSL の実行時コンパイル</td></tr>
 <tr><td><code>DeviceResourceCache&lt;T&gt;</code></td><td>class</td><td>デバイスごとの資源を保持する</td></tr>
@@ -852,6 +950,9 @@ double raw = parameter.Size.GetValue(item.Time);</pre>
 <tr><td><code>D2DGate</code></td><td>Direct2D の操作をプラグイン全体で 1 本に直列化する鍵</td></tr>
 <tr><td><code>D2DImageBounds</code></td><td>画像の描画範囲を調べる</td></tr>
 <tr><td><code>ItemPlacement</code></td><td>アイテムの設定から 3D の配置行列と <code>ScreenPlacement</code> を作る</td></tr>
+<tr><td><code>SceneCameraResolver</code></td><td>その時刻に効いているカメラアイテムを探し、設定値を返す</td></tr>
+<tr><td><code>SceneLightingResolver</code></td><td>その時刻に効いている光を集めて <code>SceneLighting</code> を作る</td></tr>
+<tr><td><code>SceneMarkerResolver</code></td><td>その時刻に効いている目印を集める。3Dプレビューで掴むのに使う</td></tr>
 <tr><td><code>SceneDepthCollector</code></td><td>シーン内の他の 3D 物体を集める。アイテムをまたいだ前後関係に使う</td></tr>
 <tr><td><code>TimelineRefresher</code></td><td>カメラが動いたときに標準プレビューの再描画を促す</td></tr>
 </table>

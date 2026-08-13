@@ -1,7 +1,6 @@
 ﻿using System.Numerics;
-using YMM43D.Camera;
-using YMM43D.Plugin;
 using YMM43D.Scene3D;
+using YMM43D.Plugin;
 using YukkuriMovieMaker.Player.Video;
 using YukkuriMovieMaker.Project;
 using YukkuriMovieMaker.Project.Items;

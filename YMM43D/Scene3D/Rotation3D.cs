@@ -8,6 +8,8 @@ namespace YMM43D.Scene3D
 
         public static float ToDegrees(float radians) => radians * 180f / MathF.PI;
 
+        public static float Wrap(float degrees) => degrees - 360f * MathF.Round(degrees / 360f);
+
         public static Matrix4x4 ForCamera(float yaw, float pitch, float roll)
             => Matrix4x4.CreateRotationZ(ToRadians(roll))
              * Matrix4x4.CreateRotationX(ToRadians(pitch))

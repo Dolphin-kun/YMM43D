@@ -1,7 +1,6 @@
 using System.Numerics;
-using YMM43D.Scene3D;
 
-namespace YMM43D.Camera
+namespace YMM43D.Scene3D
 {
     public readonly record struct CameraState(
         Vector3 Position,

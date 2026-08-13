@@ -1,6 +1,6 @@
 using YukkuriMovieMaker.Commons;
 
-namespace YMM43D.Camera
+namespace YMM43D.Scene3D
 {
     public interface ICameraSync
     {

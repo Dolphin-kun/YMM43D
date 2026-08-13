@@ -1,8 +1,7 @@
 ﻿using System.Numerics;
 using Vortice.Direct2D1;
-using YMM43D.Camera;
-using YMM43D.Commons;
 using YMM43D.Scene3D;
+using YMM43D.Commons;
 using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Player.Video;
 
@@ -36,7 +35,7 @@ namespace YMM43D.Plugin
                 camera, description.ScreenSize.Height);
 
             var scene = SceneDepthCollector.Collect(description, self);
-            var lighting = Lighting.SceneLightingResolver.Resolve(description);
+            var lighting = SceneLightingResolver.Resolve(description);
 
             var placedWorld = world * (placement ?? scene.OwnerPlacement);
 

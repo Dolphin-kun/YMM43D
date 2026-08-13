@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace YMM43D.Camera
+namespace YMM43D.Scene3D
 {
     public readonly record struct CameraMove(float Yaw, float Pitch, float Roll, Vector3 Shift)
     {

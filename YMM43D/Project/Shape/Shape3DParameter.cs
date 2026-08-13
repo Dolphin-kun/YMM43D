@@ -1,7 +1,8 @@
-﻿using System.Collections.Immutable;
+using System.Collections.Immutable;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Windows.Media;
+using YMM43D.Graphics.Meshes;
 using YMM43D.Plugin;
 using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Controls;
@@ -10,7 +11,7 @@ using YukkuriMovieMaker.ItemEditor.CustomVisibilityAttributes;
 using YukkuriMovieMaker.Plugin.Shape;
 using YukkuriMovieMaker.Project;
 
-namespace Shape3D
+namespace YMM43D.Project.Shape
 {
     internal sealed class Shape3DParameter : ShapeParameter3DBase
     {
@@ -18,7 +19,7 @@ namespace Shape3D
         private const string Rotation = "3D回転";
         private const string Paint = "色";
 
-        [Display(GroupName = Body, Name = "形", Description = "何面体を描くか")]
+        [Display(GroupName = Body, Name = "形", Description = "何を描くか")]
         [EnumComboBox]
         public SolidKind Solid
         {
@@ -26,7 +27,9 @@ namespace Shape3D
             set
             {
                 Set(ref solid, value);
-                OnPropertyChanged(nameof(FaceCount));
+                OnPropertyChanged(nameof(GroupCount));
+                OnPropertyChanged(nameof(IsCurved));
+                OnPropertyChanged(nameof(IsTorus));
             }
         }
         private SolidKind solid = SolidKind.Cube;
@@ -34,6 +37,27 @@ namespace Shape3D
         [Display(GroupName = Body, Name = "サイズ", Description = "いちばん長い差し渡し。六面体では一辺の長さ")]
         [AnimationSlider("F1", "px", 0, 500)]
         public Animation Size { get; } = new(100, 0, 100000);
+
+        [Display(GroupName = Body, Name = "分割の細かさ",
+            Description = "丸い形を何枚の面で作るか。大きいほど滑らかで、そのぶん重くなります")]
+        [TextBoxSlider("F0", "", Primitives.MinSegments, 64)]
+        [ShowPropertyEditorWhen(nameof(IsCurved), true)]
+        public int Segments
+        {
+            get => segments;
+            set => Set(ref segments, Math.Clamp(value, Primitives.MinSegments, Primitives.MaxSegments));
+        }
+        private int segments = Solids.DefaultSegments;
+
+        [Display(GroupName = Body, Name = "太さ", Description = "輪の太さ。100 にすると穴が無くなります")]
+        [TextBoxSlider("F0", "%", 5, 100)]
+        [ShowPropertyEditorWhen(nameof(IsTorus), true)]
+        public int Thickness
+        {
+            get => thickness;
+            set => Set(ref thickness, Math.Clamp(value, 1, 100));
+        }
+        private int thickness = Solids.DefaultThickness;
 
         [Display(GroupName = Rotation, Name = "X")]
         [AnimationSlider("F1", "°", -360, 360)]
@@ -73,7 +97,15 @@ namespace Shape3D
         public ImmutableList<Color> StoredFaceColors { get => storedFaceColors; set => Set(ref storedFaceColors, value); }
         private ImmutableList<Color> storedFaceColors = [];
 
-        internal int FaceCount => Polyhedron.FaceCountOf(Solid);
+        [Browsable(false)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public bool IsCurved => Solids.IsCurved(Solid);
+
+        [Browsable(false)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public bool IsTorus => Solid == SolidKind.Torus;
+
+        internal int GroupCount => Solids.GroupCountOf(Solid);
 
         internal IReadOnlyList<Color> ResolvedColors => Fill == CubeFill.Solid
             ? [Color]
@@ -110,7 +142,7 @@ namespace Shape3D
             var current = FaceColors.Count > 0
                 ? [.. FaceColors.Select(f => f.Color)]
                 : StoredFaceColors;
-            var wanted = Resize(FaceCount, current);
+            var wanted = Resize(GroupCount, current);
 
             if (!wanted.SequenceEqual(FaceColors.Select(f => f.Color)))
                 FaceColors = [.. wanted.Select(c => new FaceColor { Color = c })];
@@ -166,6 +198,8 @@ namespace Shape3D
             public Animation RotationY { get; } = new(0, -100000, 100000);
             public Animation RotationZ { get; } = new(0, -100000, 100000);
             public SolidKind Solid { get; set; }
+            public int Segments { get; set; }
+            public int Thickness { get; set; }
             public CubeFill Fill { get; set; }
             public Color Color { get; set; }
             public ImmutableList<Color> FaceColors { get; set; } = [];
@@ -178,6 +212,8 @@ namespace Shape3D
                 RotationY.CopyFrom(parameter.RotationY);
                 RotationZ.CopyFrom(parameter.RotationZ);
                 Solid = parameter.Solid;
+                Segments = parameter.Segments;
+                Thickness = parameter.Thickness;
                 Fill = parameter.Fill;
                 Color = parameter.Color;
                 FaceColors = [.. parameter.FaceColors.Select(f => f.Color)];
@@ -191,6 +227,8 @@ namespace Shape3D
                 parameter.RotationY.CopyFrom(RotationY);
                 parameter.RotationZ.CopyFrom(RotationZ);
                 parameter.Solid = Solid;
+                parameter.Segments = Segments;
+                parameter.Thickness = Thickness;
                 parameter.Fill = Fill;
                 parameter.Color = Color;
                 parameter.FaceColors = [.. FaceColors.Select(c => new FaceColor { Color = c })];

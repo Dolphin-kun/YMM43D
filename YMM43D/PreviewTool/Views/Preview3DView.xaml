@@ -53,7 +53,8 @@
 
                 <MenuItem Header="現在の再生位置に中間点を追加"
                           Command="{Binding AddKeyFrameCommand}"
-                          ToolTip="YMM4 本体の「現在の再生位置に中間点を追加」を、選んでいるアイテムに対して実行します。"/>
+                          IsEnabled="{Binding HasSelectedItem}"
+                          ToolTip="YMM4 本体の「現在の再生位置に中間点を追加」を、選んでいるアイテムに対して実行します。アイテムを選んでいないときは押せません。"/>
 
                 <MenuItem Header="視点をカメラに戻す"
                           Command="{Binding ResetToSceneCameraCommand}"

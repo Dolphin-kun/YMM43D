@@ -1,9 +1,8 @@
 using System.Numerics;
 using System.Windows;
 using System.Windows.Input;
-using YMM43D.Camera;
-using YMM43D.PreviewTool.Views;
 using YMM43D.Scene3D;
+using YMM43D.PreviewTool.Views;
 
 namespace YMM43D.PreviewTool
 {

@@ -7,6 +7,8 @@ namespace YMM43D.PreviewTool
     internal sealed class ItemDragController
     {
         private IVideoItem? target;
+        private ISceneMarkerSource? marker;
+        private FrameContext markerTime;
         private GizmoHandle handle;
         private EditScope scope;
 
@@ -23,7 +25,27 @@ namespace YMM43D.PreviewTool
 
         public GizmoHandle Handle => handle;
 
-        public bool IsDragging => target is not null;
+        public bool IsDragging => target is not null || marker is not null;
+
+        public bool BeginMarker(
+            ISceneMarkerSource source,
+            in FrameContext itemTime,
+            in Vector3 origin,
+            in PickRay ray,
+            in Vector3 viewDirection,
+            in EditScope edit)
+        {
+            planePoint = origin;
+            planeNormal = -viewDirection;
+            anchor = ray.IntersectPlane(planePoint, planeNormal) ?? planePoint;
+
+            marker = source;
+            markerTime = itemTime;
+            handle = GizmoHandle.Free;
+            scope = edit;
+
+            return true;
+        }
 
         public bool Begin(
             IVideoItem item,
@@ -69,6 +91,9 @@ namespace YMM43D.PreviewTool
 
         public bool Update(in PickRay ray)
         {
+            if (marker is { } source)
+                return MoveMarker(source, ray);
+
             if (target is not { } item)
                 return false;
 
@@ -83,7 +108,23 @@ namespace YMM43D.PreviewTool
         public void End()
         {
             target = null;
+            marker = null;
             handle = GizmoHandle.None;
+        }
+
+        private bool MoveMarker(ISceneMarkerSource source, in PickRay ray)
+        {
+            if (ray.IntersectPlane(planePoint, planeNormal) is not { } hit)
+                return false;
+
+            var shift = hit - anchor;
+            if (shift == Vector3.Zero)
+                return false;
+
+            anchor = hit;
+            source.MoveMarker(shift, markerTime, scope);
+
+            return true;
         }
 
         private bool MoveAlongAxis(IVideoItem item, in PickRay ray)

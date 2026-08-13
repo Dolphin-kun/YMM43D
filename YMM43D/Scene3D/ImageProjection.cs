@@ -1,5 +1,5 @@
 ﻿using System.Numerics;
-using YMM43D.Camera;
+using YMM43D.Scene3D;
 
 namespace YMM43D.Scene3D
 {

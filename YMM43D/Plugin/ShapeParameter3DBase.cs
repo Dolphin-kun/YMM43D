@@ -1,5 +1,5 @@
 using System.ComponentModel;
-using YMM43D.Camera;
+using YMM43D.Scene3D;
 using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Player.Video;
 using YukkuriMovieMaker.Plugin.Shape;

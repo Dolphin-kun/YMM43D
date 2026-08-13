@@ -4,13 +4,11 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
 using Vortice.Direct3D11;
-using YMM43D.Camera;
+using YMM43D.Scene3D;
 using YMM43D.Project.Items;
-using YMM43D.Lighting;
 using YMM43D.Commons;
 using YMM43D.Plugin;
 using YMM43D.PreviewTool.Views;
-using YMM43D.Scene3D;
 using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.ItemEditor;
 using YukkuriMovieMaker.Player.Video;
@@ -38,9 +36,11 @@ namespace YMM43D.PreviewTool.ViewModels
         private Scene? scene;
         private TimelineSourceAndDevices? sourceAndDevices;
         private IVideoItem? selected;
+        private IItem? selectedMarker;
 
         private bool drivesSceneCamera;
         private bool insertsKeyFrame;
+        private bool hadSelectedItem;
         private bool isDisposed;
 
         public D3D11Host? D3DHost
@@ -69,6 +69,8 @@ namespace YMM43D.PreviewTool.ViewModels
 
         public bool CanAddItem => timeline is not null;
 
+        public bool HasSelectedItem => timeline?.SelectedItems?.Any() == true;
+
         public ICommand ResetToSceneCameraCommand { get; }
         public ICommand AddCameraCommand { get; }
         public ICommand AddLightCommand { get; }
@@ -77,7 +79,7 @@ namespace YMM43D.PreviewTool.ViewModels
         public ICommand ViewAllCommand { get; }
         public ICommand LevelRollCommand { get; }
         public ICommand ViewFromCommand { get; }
-        public ICommand AddKeyFrameCommand { get; }
+        public ActionCommand AddKeyFrameCommand { get; }
 
         public Preview3DViewModel()
         {
@@ -93,7 +95,7 @@ namespace YMM43D.PreviewTool.ViewModels
             LevelRollCommand = new ActionCommand(_ => true, _ => LevelRoll());
             ViewFromCommand = new ActionCommand(_ => true, p => ViewFrom(p as string));
             AddKeyFrameCommand = new ActionCommand(
-                _ => true,
+                _ => HasSelectedItem,
                 _ => HostCommands.Execute(CommandType.AddKeyFrameAtCurrentFrame, d3dHost));
         }
 
@@ -265,6 +267,7 @@ namespace YMM43D.PreviewTool.ViewModels
 
             refresher?.RefreshIfCameraChanged(timeline);
 
+            SyncSelectionState();
             UpdateSourceDescription();
             UpdatePreviewItems();
             d3dHost.RenderFrame();
@@ -295,6 +298,8 @@ namespace YMM43D.PreviewTool.ViewModels
                     device, sourceAndDevices.Devices, scene, sceneBuilder.SourceDescription),
                 Items = sceneBuilder.Items,
                 Selected = selected,
+                Markers = SceneMarkerResolver.Resolve(timeline),
+                SelectedMarker = selectedMarker,
                 ActiveHandle = itemDrag.Handle,
             });
         }
@@ -362,13 +367,29 @@ namespace YMM43D.PreviewTool.ViewModels
                     GetEditScope(selected));
             }
 
+            if (renderer.PickMarker(screen) is { } placed && renderer.CreateRay(screen) is { } markerRay)
+            {
+                selected = null;
+                selectedMarker = placed.Item;
+                timeline?.SelectedItems = [placed.Item];
+
+                if (!placed.Marker.IsMovable)
+                    return true;
+
+                return itemDrag.BeginMarker(
+                    placed.Source, placed.ItemTime, placed.Marker.Position, markerRay,
+                    freeCamera.State.Forward, GetEditScope(placed.Item));
+            }
+
             if (renderer.Pick(screen, out var ray) is not { } picked)
             {
                 selected = null;
+                selectedMarker = null;
                 return false;
             }
 
             selected = picked.Item;
+            selectedMarker = null;
 
             timeline?.SelectedItems = [picked.Item];
 
@@ -447,6 +468,18 @@ namespace YMM43D.PreviewTool.ViewModels
                 _ = redo ? manager.RedoAsync() : manager.UndoAsync();
 
             return true;
+        }
+
+        private void SyncSelectionState()
+        {
+            var has = HasSelectedItem;
+
+            if (has == hadSelectedItem)
+                return;
+
+            hadSelectedItem = has;
+            OnPropertyChanged(nameof(HasSelectedItem));
+            AddKeyFrameCommand.RaiseCanExecuteChanged();
         }
 
         private void UpdateSourceDescription()

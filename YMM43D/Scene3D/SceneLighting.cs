@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using System.Numerics;
 using YMM43D.Graphics;
 
@@ -46,7 +47,10 @@ namespace YMM43D.Scene3D
 
     public enum LightKind
     {
+        [Display(Name = "平行光", Description = "太陽のように、どこでも同じ向きから当たります")]
         Directional,
+
+        [Display(Name = "点光源", Description = "電球のように、置いた場所から周りへ広がります")]
         Point,
     }
 
@@ -70,6 +74,18 @@ namespace YMM43D.Scene3D
             var flat = MathF.Cos(p);
 
             return new Vector3(-flat * MathF.Sin(y), MathF.Sin(p), flat * MathF.Cos(y));
+        }
+
+        public static (float Yaw, float Pitch) ToAngles(in Vector3 direction)
+        {
+            var flat = new Vector2(direction.X, direction.Z);
+
+            if (flat.LengthSquared() < 1e-12f)
+                return (0f, direction.Y >= 0f ? 90f : -90f);
+
+            return (
+                Rotation3D.ToDegrees(MathF.Atan2(-direction.X, direction.Z)),
+                Rotation3D.ToDegrees(MathF.Atan2(direction.Y, flat.Length())));
         }
 
         public static SceneLight Point(Vector3 position, Vector3 color, float reach)

@@ -1,7 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Numerics;
 using System.Windows.Media;
-using YMM43D.Lighting;
 using YMM43D.Scene3D;
 using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Controls;
@@ -11,7 +10,7 @@ using YukkuriMovieMaker.Project.Items;
 
 namespace YMM43D.Project.Items
 {
-    public sealed class EnvironmentItem : BaseItem, ISceneEnvironment
+    public sealed class EnvironmentItem : BaseItem, ISceneEnvironment, ISceneMarkerSource
     {
         private const string Ambient = "環境光";
 
@@ -89,6 +88,12 @@ namespace YMM43D.Project.Items
                 FogDensity.GetFloat(itemTime) / 100f,
                 start,
                 MathF.Max(end, start + 1e-3f));
+        }
+
+        public SceneMarker GetMarker(in FrameContext itemTime) => SceneMarker.ForEnvironment();
+
+        public void MoveMarker(in Vector3 shift, in FrameContext itemTime, in EditScope scope)
+        {
         }
 
         private static Vector3 ToLinear(Color color)

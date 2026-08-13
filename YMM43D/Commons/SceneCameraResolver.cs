@@ -1,11 +1,10 @@
-using YMM43D.Commons;
 using YMM43D.Plugin;
 using YMM43D.Scene3D;
 using YukkuriMovieMaker.Player.Video;
 using YukkuriMovieMaker.Project;
 using YukkuriMovieMaker.Project.Items;
 
-namespace YMM43D.Camera
+namespace YMM43D.Commons
 {
     public static class SceneCameraResolver
     {

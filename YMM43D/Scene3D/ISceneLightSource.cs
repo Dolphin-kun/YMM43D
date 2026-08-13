@@ -1,6 +1,5 @@
-using YMM43D.Scene3D;
 
-namespace YMM43D.Lighting
+namespace YMM43D.Scene3D
 {
     public interface ISceneLightSource
     {

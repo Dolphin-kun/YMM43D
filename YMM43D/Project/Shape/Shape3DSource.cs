@@ -1,15 +1,18 @@
-﻿using System.Numerics;
+using System.Numerics;
 using System.Windows.Media;
 using Vortice.Direct3D11;
 using YMM43D.Graphics;
 using YMM43D.Graphics.Materials;
+using YMM43D.Graphics.Meshes;
 using YMM43D.Plugin;
 using YMM43D.Scene3D;
 using YukkuriMovieMaker.Commons;
+using Color4 = Vortice.Mathematics.Color4;
 
-namespace Shape3D
+namespace YMM43D.Project.Shape
 {
-    internal sealed class Shape3DSource(IGraphicsDevicesAndContext devices, Shape3DParameter parameter) : Shape3DSourceBase(devices)
+    internal sealed class Shape3DSource(IGraphicsDevicesAndContext devices, Shape3DParameter parameter)
+        : Shape3DSourceBase(devices)
     {
         private readonly Shape3DParameter parameter = parameter;
         private readonly DeviceResourceCache<SolidResources> resources = new(device => new SolidResources(device));
@@ -20,11 +23,13 @@ namespace Shape3D
             var constants = render.CreateConstants(world, item.Opacity, parameter.IsUnlit);
 
             var shared = resources.Get(render.Device);
-            var mesh = shared.GetMesh(parameter.Solid, parameter.ResolvedColors);
+            var mesh = shared.GetMesh(Shape(), parameter.ResolvedColors);
 
             shared.Pipeline.Draw(render.Context, constants, item.ToDrawSettings(FaceCulling.Front), mesh);
             shared.Pipeline.Draw(render.Context, constants, item.ToDrawSettings(FaceCulling.Back), mesh);
         }
+
+        private SolidShape Shape() => new(parameter.Solid, parameter.Segments, parameter.Thickness);
 
         private float GetSize(in FrameContext itemTime)
             => WorldScale.ToWorld(parameter.Size.GetFloat(itemTime));
@@ -37,7 +42,13 @@ namespace Shape3D
                    parameter.RotationZ.GetFloat(itemTime));
 
         protected override WorldBounds GetWorldBounds(in FrameContext itemTime)
-            => WorldBounds.FromPoints(Polyhedron.Get(parameter.Solid).Vertices, GetLocalMatrix(itemTime));
+        {
+            var shape = Shape();
+
+            return WorldBounds.FromPoints(
+                Solids.Get(shape.Kind, shape.Segments, shape.Thickness).Vertices,
+                GetLocalMatrix(itemTime));
+        }
 
         public override void Dispose()
         {
@@ -45,24 +56,34 @@ namespace Shape3D
             base.Dispose();
         }
 
+        private readonly record struct SolidShape(SolidKind Kind, int Segments, int Thickness);
+
         private sealed class SolidResources(ID3D11Device device) : IDisposable
         {
-            private PolyhedronMesh? mesh;
+            private SurfaceMesh? mesh;
+            private SolidShape builtShape;
             private Color[] builtColors = [];
 
             public RenderPipeline<TransformConstants> Pipeline { get; } = new(
                 device, Vertex.InputElements, new VertexColorMaterial(device));
 
-            public PolyhedronMesh GetMesh(SolidKind kind, IReadOnlyList<Color> colors)
+            public SurfaceMesh GetMesh(in SolidShape shape, IReadOnlyList<Color> colors)
             {
-                if (mesh is { } existing && existing.Kind == kind && builtColors.SequenceEqual(colors))
+                if (mesh is { } existing && builtShape == shape && builtColors.SequenceEqual(colors))
                     return existing;
 
                 mesh?.Dispose();
+                builtShape = shape;
                 builtColors = [.. colors];
 
-                return mesh = new PolyhedronMesh(device, kind, colors);
+                return mesh = new SurfaceMesh(
+                    device,
+                    Solids.Get(shape.Kind, shape.Segments, shape.Thickness),
+                    [.. colors.Select(ToColor4)]);
             }
+
+            private static Color4 ToColor4(Color color)
+                => new(color.R / 255f, color.G / 255f, color.B / 255f, color.A / 255f);
 
             public void Dispose()
             {
