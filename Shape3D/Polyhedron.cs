@@ -22,17 +22,8 @@ namespace Shape3D
         Icosahedron,
     }
 
-    /// <summary>
-    /// 正多面体の頂点と面。
-    /// </summary>
-    /// <remarks>
-    /// 面の頂点は「外から見て」の並び順で書いていません。書き下すと符号を間違えて
-    /// 面が内側を向くので、<see cref="Create"/> が中心からの向きで判定して直します。
-    /// </remarks>
     internal sealed record Polyhedron(Vector3[] Vertices, int[][] Faces)
     {
-        // 形は種類ごとに1つあれば足りる。毎フレーム組み直さないよう取っておく。
-        // 取り出したものは読むだけにすること。
         private static readonly ConcurrentDictionary<SolidKind, Polyhedron> cache = new();
 
         public static Polyhedron Get(SolidKind kind) => cache.GetOrAdd(kind, Create);
@@ -65,13 +56,6 @@ namespace Shape3D
             return new Polyhedron(vertices, faces);
         }
 
-        /// <summary>
-        /// いちばん長い差し渡しが 1 になるように縮めます。
-        /// </summary>
-        /// <remarks>
-        /// 「サイズ」を差し渡しとして扱えるようにするためです。立方体では一辺と
-        /// 同じ意味になるので、多面体を切り替えても大きさの感覚が揃います。
-        /// </remarks>
         private static void Normalize(Vector3[] vertices)
         {
             var extent = 0f;
@@ -86,13 +70,6 @@ namespace Shape3D
                 vertices[i] *= scale;
         }
 
-        /// <summary>
-        /// 面が外を向くように、必要なら頂点の並びを裏返します。
-        /// </summary>
-        /// <remarks>
-        /// 正多面体は原点が中心なので、面の重心がそのまま外向きになります。
-        /// 面の法線が重心と逆を向いていたら、その面は内側を向いています。
-        /// </remarks>
         private static void FaceOutward(Vector3[] vertices, int[] face)
         {
             var centroid = Vector3.Zero;
@@ -104,8 +81,6 @@ namespace Shape3D
                 vertices[face[1]] - vertices[face[0]],
                 vertices[face[2]] - vertices[face[0]]);
 
-            // D3D は既定で時計回りを表とする。左手回りに見える並びが、右手系の
-            // 外積では内向きに出るので、外を向かせるには外積が重心と逆であること。
             if (Vector3.Dot(normal, centroid) < 0f)
                 return;
 
@@ -126,12 +101,12 @@ namespace Shape3D
                 new(-1, 1, -1), new(1, 1, -1), new(1, -1, -1), new(-1, -1, -1),
             ],
             [
-                [0, 1, 2, 3], // 前面 (+Z)
-                [5, 4, 7, 6], // 背面 (-Z)
-                [4, 0, 3, 7], // 左面 (-X)
-                [1, 5, 6, 2], // 右面 (+X)
-                [4, 5, 1, 0], // 上面 (+Y)
-                [3, 2, 6, 7], // 下面 (-Y)
+                [0, 1, 2, 3],
+                [5, 4, 7, 6],
+                [4, 0, 3, 7],
+                [1, 5, 6, 2],
+                [4, 5, 1, 0],
+                [3, 2, 6, 7],
             ]);
 
         private static (Vector3[], int[][]) Octahedron() => (

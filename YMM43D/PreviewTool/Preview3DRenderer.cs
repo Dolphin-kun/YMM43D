@@ -20,8 +20,6 @@ namespace YMM43D.PreviewTool
         private readonly FlatItemProvider flatItemProvider = new();
         private readonly ItemDrawContextBuilder contextBuilder = new();
 
-        // 掴む判定は、最後に描いたときの見え方を使う。描く側と別に組み立て直すと、
-        // 画面に出ているものと掴めるものがずれる。
         private PickTarget[] pickTargets = [];
         private TransformGizmo? lastGizmo;
         private Matrix4x4 lastViewProjection = Matrix4x4.Identity;
@@ -30,8 +28,6 @@ namespace YMM43D.PreviewTool
 
         public I3DProvider DefaultProvider => flatItemProvider;
 
-        /// <summary>掴める見た目を1つ分。</summary>
-        /// <param name="Bounds">描くものが占める範囲（<paramref name="World"/> を掛ける前）。</param>
         internal readonly record struct PickTarget(IVideoItem Item, Matrix4x4 World, WorldBounds Bounds);
 
         public void Draw(
@@ -43,10 +39,6 @@ namespace YMM43D.PreviewTool
             int height,
             PreviewScene scene)
         {
-            // 描画情報の組み立ては、アイテムの 2D 描画やエフェクトの評価を伴い、
-            // その過程で同じコンテキストに別の 3D 描画が走ることがある。
-            // パスを開いた後に呼ぶと描画先やビューポートが入れ替わってしまうため、
-            // 必要な情報をすべて先に揃えてから描き始める。
             var drawContexts = new DrawContext3D[scene.Items.Count];
             for (var i = 0; i < scene.Items.Count; i++)
             {
@@ -67,8 +59,6 @@ namespace YMM43D.PreviewTool
 
             var viewPose = scene.ViewPose;
 
-            // 画角はシーンカメラの設定と動画の画面の高さで決まる。プレビュー用の
-            // 視点をどこへ動かしても、写り方の縮尺は出力と揃う。
             var pixelsPerTangent = SceneProjection.GetPixelsPerTangent(scene.SceneCamera, scene.ScreenHeight);
 
             var projection = SceneProjection.GetProjectionMatrix(
@@ -92,7 +82,6 @@ namespace YMM43D.PreviewTool
             if (lastGizmo is { } gizmo)
                 transformGizmo.Draw(render, gizmo, scene.ActiveHandle);
 
-            // 描画先を別の枠に切り替えるので、最後に描く。
             axisIndicator.Draw(render, viewPose, width, height);
 
             lastViewProjection = viewPose.ViewMatrix * projection;
@@ -100,13 +89,6 @@ namespace YMM43D.PreviewTool
             lastHeight = height;
         }
 
-        /// <summary>
-        /// 描くものが占める範囲。答えられないプロバイダーは、アイテム本来の大きさで見ます。
-        /// </summary>
-        /// <remarks>
-        /// 掴む判定に使います。立体化したアイテムのように、描かれる範囲が 2D の
-        /// 大きさより広いものは、これが無いとはみ出した部分を掴めません。
-        /// </remarks>
         private static WorldBounds GetLocalBounds(PreviewItem item, in FrameContext itemTime)
         {
             if (item.Provider is not I3DBounds provider)
@@ -119,7 +101,6 @@ namespace YMM43D.PreviewTool
 
         private TransformGizmo? FindGizmo(IVideoItem? selected, in Vector3 cameraPosition)
         {
-            // ロックしているあいだは動かせないので、案内も出さない。
             if (selected is null || selected.IsLocked)
                 return null;
 
@@ -132,21 +113,11 @@ namespace YMM43D.PreviewTool
             return null;
         }
 
-        /// <summary>画面上の位置から、ワールド空間へ伸ばした視線を作ります。</summary>
-        /// <param name="position">描画先の左上を原点としたピクセル位置。</param>
         public PickRay? CreateRay(Vector2 position)
             => PickRay.FromScreen(position, lastWidth, lastHeight, lastViewProjection);
 
-        /// <summary>いま出ている案内。出ていなければ <c>null</c>。</summary>
         public TransformGizmo? Gizmo => lastGizmo;
 
-        /// <summary>
-        /// 画面上の位置で、動かす向きの案内を掴めるかどうかを調べます。
-        /// </summary>
-        /// <remarks>
-        /// 3D の当たり判定ではなく、画面に投影した線との距離で見ます。細い線を
-        /// 3D で掴もうとすると、寄り引きで掴みやすさが変わってしまいます。
-        /// </remarks>
         public GizmoHandle PickGizmo(Vector2 position)
         {
             if (lastGizmo is not { } gizmo)
@@ -190,16 +161,6 @@ namespace YMM43D.PreviewTool
             return found;
         }
 
-        /// <summary>
-        /// 掴めるものが占めている範囲を返します。
-        /// </summary>
-        /// <param name="item">
-        /// 調べたいアイテム。<c>null</c> を渡すと、出ているものすべてを含む範囲を返します。
-        /// </param>
-        /// <remarks>
-        /// 注目するときに使います。掴む判定と同じ箱から出すので、案内が出ている所と
-        /// 寄る先がずれません。
-        /// </remarks>
         public WorldBounds? GetBounds(IVideoItem? item)
         {
             var min = new Vector3(float.MaxValue);
@@ -221,7 +182,6 @@ namespace YMM43D.PreviewTool
             return found ? new WorldBounds(min, max) : null;
         }
 
-        /// <summary>ワールド空間の点を、描画先のピクセル位置に戻します。</summary>
         public Vector2? ToScreen(in Vector3 point)
         {
             if (lastWidth <= 0f || lastHeight <= 0f)
@@ -229,7 +189,6 @@ namespace YMM43D.PreviewTool
 
             var clip = Vector4.Transform(new Vector4(point, 1f), lastViewProjection);
 
-            // カメラの後ろにある点は画面に置けない。
             if (clip.W <= 1e-6f)
                 return null;
 
@@ -251,11 +210,6 @@ namespace YMM43D.PreviewTool
             return Vector2.Distance(point, from + span * rate);
         }
 
-        /// <summary>
-        /// 画面上の位置にあるアイテムのうち、いちばん手前のものを返します。
-        /// </summary>
-        /// <param name="position">描画先の左上を原点としたピクセル位置。</param>
-        /// <param name="ray">その位置から伸ばした視線。掴んだ後の移動に使います。</param>
         public PickTarget? Pick(Vector2 position, out PickRay ray)
         {
             ray = default;
@@ -270,8 +224,6 @@ namespace YMM43D.PreviewTool
 
             foreach (var target in pickTargets)
             {
-                // ロックしたアイテムは動かせない。掴めてしまうと、手前にある大きな
-                // アイテムが邪魔でその奥のものを選べなくなる。
                 if (target.Item.IsLocked)
                     continue;
 
@@ -310,13 +262,6 @@ namespace YMM43D.PreviewTool
         public float ScreenHeight
             => Environment.SourceDescription?.ScreenSize.Height ?? 0f;
 
-        /// <summary>
-        /// 画面の右端・下端が、視線からどれだけ傾いているか（正接）。
-        /// </summary>
-        /// <remarks>
-        /// カメラの枠を動画と同じ縦横比・同じ画角で描くのに使います。画面の大きさが
-        /// 分からない場面では、16:9 に見立てておきます。
-        /// </remarks>
         public Vector2 GetScreenTangent(float pixelsPerTangent)
         {
             if (ScreenWidth <= 0f || ScreenHeight <= 0f || pixelsPerTangent <= 0f)
@@ -331,10 +276,8 @@ namespace YMM43D.PreviewTool
 
         public required IReadOnlyList<PreviewItem> Items { get; init; }
 
-        /// <summary>案内を出すアイテム。無ければ <c>null</c>。</summary>
         public IVideoItem? Selected { get; init; }
 
-        /// <summary>いま掴んでいる案内の部分。</summary>
         public GizmoHandle ActiveHandle { get; init; }
     }
 }

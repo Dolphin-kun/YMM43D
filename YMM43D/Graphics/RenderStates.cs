@@ -4,24 +4,10 @@ using YukkuriMovieMaker.Commons;
 
 namespace YMM43D.Graphics
 {
-    /// <summary>
-    /// 1つのデバイス上で共有される描画ステート一式。
-    /// </summary>
-    /// <remarks>
-    /// ステートはデバイス単位で使い回せる不変オブジェクトなので、
-    /// <see cref="DeviceResourceCache{T}"/> と組み合わせて1箇所で持ちます。
-    /// </remarks>
     public sealed class RenderStates : IDisposable
     {
         private static readonly DeviceResourceCache<RenderStates> shared = new(device => new RenderStates(device));
 
-        /// <summary>
-        /// デバイスに対応する共有のステート一式を取得します。
-        /// </summary>
-        /// <remarks>
-        /// ステートは不変なので、同じデバイスを使う描画すべてで1つを使い回せます。
-        /// デバイスが破棄されるときに <see cref="GraphicsDevicePool"/> がまとめて解放します。
-        /// </remarks>
         public static RenderStates For(ID3D11Device device) => shared.Get(device);
 
         private readonly DisposeCollector disposer = new();
@@ -33,22 +19,16 @@ namespace YMM43D.Graphics
         private readonly ID3D11BlendState multiply;
         private readonly ID3D11BlendState screen;
 
-        /// <summary>深度テスト・深度書き込みを行う既定のステート。</summary>
         public ID3D11DepthStencilState DepthDefault { get; }
 
-        /// <summary>深度を無視して常に描画するステート（最前面表示用）。</summary>
         public ID3D11DepthStencilState DepthDisabled { get; }
 
-        /// <summary>深度テストは行うが、深度バッファには書き込まないステート。</summary>
         public ID3D11DepthStencilState DepthTestOnly { get; }
 
-        /// <summary>カリングなし（両面を描画）。</summary>
         public ID3D11RasterizerState CullNone { get; }
 
-        /// <summary>背面カリング（前面のみ描画）。</summary>
         public ID3D11RasterizerState CullBack { get; }
 
-        /// <summary>前面カリング（背面のみ描画）。</summary>
         public ID3D11RasterizerState CullFront { get; }
 
         public ID3D11SamplerState LinearSampler { get; }
@@ -63,7 +43,6 @@ namespace YMM43D.Graphics
             multiply = CreateBlend(device, D3DBlend.DestinationColor, D3DBlend.InverseSourceAlpha, BlendOperation.Add);
             screen = CreateBlend(device, D3DBlend.One, D3DBlend.InverseSourceColor, BlendOperation.Add);
 
-            // 色を一切書かないステート。深度だけを埋めたいときに使う。
             noColorWrite = Collect(device.CreateBlendState(new BlendDescription
             {
                 RenderTarget =
@@ -105,12 +84,8 @@ namespace YMM43D.Graphics
             PointSampler = CreateSampler(device, Filter.MinMagMipPoint);
         }
 
-        /// <summary>色を書かず、深度だけを書き込むステート。</summary>
         public ID3D11BlendState NoColorWrite => noColorWrite;
 
-        /// <summary>
-        /// <see cref="BlendMode"/> に対応するブレンドステートを返します。
-        /// </summary>
         public ID3D11BlendState GetBlend(BlendMode mode) => mode switch
         {
             BlendMode.Add => add,

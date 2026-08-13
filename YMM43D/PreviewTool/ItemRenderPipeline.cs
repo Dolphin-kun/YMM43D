@@ -40,13 +40,9 @@ namespace YMM43D.PreviewTool
 
             var effects = CollectEffects(item);
 
-            // 画像も要らず、変換を生むエフェクトも無いなら、描画元を作る必要はない。
             if (!needsImage && effects.IsEmpty)
                 return ItemRenderResult.None;
 
-            // ここから先は YMM4 本体の描画を回す。本体の描画スレッドと同じ
-            // Direct2D デバイスを使うため、鍵の中で行う。
-            // （このメソッドは 3Dプレビューのスレッドから呼ばれる）
             lock (D2DGate.Sync)
                 return RenderCore(item, time, environment, needsImage, effects);
         }
@@ -90,8 +86,6 @@ namespace YMM43D.PreviewTool
                 {
                     if (!sources.TryGetValue(item, out source))
                     {
-                        // ここで作る描画元はプレビュー専用の写しなので、アイテムが
-                        // 本来持っているプロバイダーの登録を奪わないようにする。
                         using (Provider3DRegistry.SuppressRegistration())
                             source = item.CreateVideoSource(environment.Devices, scene);
 
@@ -114,8 +108,6 @@ namespace YMM43D.PreviewTool
             }
             catch
             {
-                // 図形のサイズが 0 のときなど、アイテムが一時的に描画できない状態に
-                // なることがある。しばらく間を空けてから試し直す。
                 sourceRetryAt[item] = System.Environment.TickCount64 + SourceRetryDelayMs;
             }
 
@@ -144,8 +136,6 @@ namespace YMM43D.PreviewTool
             }
             catch
             {
-                // YMM4 本来の駆動を経ていない状態に耐えられないエフェクトがある。
-                // このアイテムは以降エフェクトを通さず、素の画像で表示する。
                 ReleaseChain(item);
                 effectsUnsupported.Add(item);
                 return new ItemRenderResult(sourceImage, Matrix4x4.Identity);
@@ -162,8 +152,6 @@ namespace YMM43D.PreviewTool
 
         public void RetainOnly(IReadOnlySet<IVideoItem> aliveItems)
         {
-            // 破棄はこの鍵の外で行う。描画元の Dispose は Direct2D の鍵を取ることが
-            // あり、鍵を握ったまま呼ぶと取得順序が逆になって詰まる余地ができる。
             var retired = new List<ISource>();
 
             lock (gate)
@@ -232,11 +220,8 @@ namespace YMM43D.PreviewTool
 
                 foreach (var processor in processors)
                 {
-                    // YMM4 本体と同じ順序。入力を繋いでから Update を呼ばないと、
-                    // エフェクトが組む D2D グラフが未完成のまま評価されてしまう。
                     processor.SetInput(image);
 
-                    // 入力は1つ、グループ分けもしない単純な構成として評価する。
                     draw = processor.Update(new EffectDescription(
                         description, draw, inputIndex: 0, inputCount: 1, groupIndex: 0, groupCount: 1));
 
@@ -261,7 +246,6 @@ namespace YMM43D.PreviewTool
             {
                 foreach (var processor in processors)
                 {
-                    // 入力を握ったまま破棄すると、参照先の画像より長生きしてしまう。
                     try { processor.ClearInput(); } catch { }
                     processor.Dispose();
                 }

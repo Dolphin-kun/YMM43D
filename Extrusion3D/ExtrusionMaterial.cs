@@ -71,7 +71,6 @@ namespace Extrusion3D
             }
             """;
 
-        // 側面の種類。C# 側の ExtrusionType 列挙と一致させること。
         private const string PixelShaderSource = """
             Texture2D    txDiffuse : register(t0);
             SamplerState samLinear : register(s0);

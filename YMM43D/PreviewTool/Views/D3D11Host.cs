@@ -24,23 +24,9 @@ namespace YMM43D.PreviewTool.Views
         public event Action<ID3D11Device, ID3D11DeviceContext, int, int>? Render;
         public event Action<Point, MouseEventKind, int>? MouseAction;
 
-        /// <summary>
-        /// キー入力の受け取り先。受け取ったら <c>true</c> を返してください。
-        /// </summary>
-        /// <remarks>
-        /// 戻り値を見て、受け取ったキーは YMM4 本体に流さないようにします。イベントでは
-        /// 戻り値を扱えないので、デリゲートを直接持ちます。
-        /// </remarks>
         public Func<Key, ModifierKeys, bool>? KeyHandler { get; set; }
         public enum MouseEventKind { Down, Move, Up, Wheel, RightDown, RightUp, MiddleDown, MiddleUp }
 
-        /// <summary>
-        /// いま押されている修飾キー。
-        /// </summary>
-        /// <remarks>
-        /// 入力を受けているのは子ウィンドウなので、WPF の <c>Keyboard.Modifiers</c> は
-        /// 更新されません。OS に直接聞きます。
-        /// </remarks>
         public static ModifierKeys CurrentModifiers
         {
             get
@@ -88,8 +74,6 @@ namespace YMM43D.PreviewTool.Views
         {
             if (device == null || deviceContext == null || swapChain == null) return;
 
-            // このフレームの途中で YMM4 本体の描画を回すため、Direct2D の鍵も取る。
-            // 順序は「Direct2D の鍵 → 3D デバイス」で固定。
             lock (D2DGate.Sync)
             lock (device)
             {
@@ -250,58 +234,54 @@ namespace YMM43D.PreviewTool.Views
         {
             switch (msg)
             {
-                case 0x0201: // LBUTTONDOWN
+                case 0x0201:
                     SetFocus(hwnd);
                     this.Focus();
                     SetCapture(hwnd);
                     MouseAction?.Invoke(GetPoint(lParam), MouseEventKind.Down, 0);
                     handled = true;
                     break;
-                case 0x0202: // LBUTTONUP
+                case 0x0202:
                     ReleaseCapture();
                     MouseAction?.Invoke(GetPoint(lParam), MouseEventKind.Up, 0);
                     handled = true;
                     break;
-                case 0x0204: // RBUTTONDOWN
+                case 0x0204:
                     SetFocus(hwnd);
                     this.Focus();
                     SetCapture(hwnd);
                     MouseAction?.Invoke(GetPoint(lParam), MouseEventKind.RightDown, 0);
                     handled = true;
                     break;
-                case 0x0205: // RBUTTONUP
+                case 0x0205:
                     ReleaseCapture();
                     MouseAction?.Invoke(GetPoint(lParam), MouseEventKind.RightUp, 0);
                     handled = true;
                     break;
-                case 0x0207: // MBUTTONDOWN
+                case 0x0207:
                     SetFocus(hwnd);
                     this.Focus();
                     SetCapture(hwnd);
                     MouseAction?.Invoke(GetPoint(lParam), MouseEventKind.MiddleDown, 0);
                     handled = true;
                     break;
-                case 0x0208: // MBUTTONUP
+                case 0x0208:
                     ReleaseCapture();
                     MouseAction?.Invoke(GetPoint(lParam), MouseEventKind.MiddleUp, 0);
                     handled = true;
                     break;
-                case 0x0200: // MOUSEMOVE
+                case 0x0200:
                     MouseAction?.Invoke(GetPoint(lParam), MouseEventKind.Move, 0);
                     handled = true;
                     break;
-                case 0x020A: // MOUSEWHEEL
+                case 0x020A:
                     short delta = (short)((long)wParam >> 16);
                     MouseAction?.Invoke(new Point(0, 0), MouseEventKind.Wheel, delta);
                     handled = true;
                     break;
 
-                // KEYDOWN / SYSKEYDOWN。子ウィンドウが入力を受けている間、WPF の
-                // キー入力は流れてこないので、ここで拾って伝える。
                 case 0x0100:
                 case 0x0104:
-                    // 受け取ったキーはここで止める。止めないと、同じキーで YMM4 本体の
-                    // ショートカットも一緒に動いてしまう。
                     if (KeyHandler?.Invoke(KeyInterop.KeyFromVirtualKey((int)wParam), CurrentModifiers) == true)
                     {
                         handled = true;

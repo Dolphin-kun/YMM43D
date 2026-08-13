@@ -84,6 +84,10 @@ Direct3D 11 で描いた結果を YMM4 の動画出力に流し込めます。�
 SharpGen.Runtime だけです。リフレクションも使用していません。
 </p>
 
+<p>
+ソースコードにコメントは置いていません。仕様と、そうしている理由はこの文書にまとめてあります。
+</p>
+
 <nav>
 <h2>目次</h2>
 <ol>
@@ -100,7 +104,7 @@ SharpGen.Runtime だけです。リフレクションも使用していません
 
 <h2 id="overview">1. 全体像</h2>
 
-<p>ライブラリは 5 つの名前空間に分かれています。依存は上から下への一方向で、逆流しません。</p>
+<p>ライブラリは 7 つの名前空間に分かれています。依存は上から下への一方向で、逆流しません。</p>
 
 <div class="wide">
 <pre>YMM43D.Graphics      D3D11 の薄い包み。YMM4 を知らない。
@@ -113,6 +117,7 @@ YMM43D.Commons       YMM4 のデバイスや画像との橋渡し。
       ↓
 YMM43D.Plugin        プラグイン作者が使う公開面。基底クラスとインターフェース。
       ↓
+YMM43D.Flat3D        「3D空間に置く」エフェクト。
 YMM43D.PreviewTool   3Dプレビューのツールウィンドウ。</pre>
 </div>
 
@@ -641,6 +646,7 @@ var pipeline = pipelines.Get(render.Device);</pre>
 <tr><td><code>I3DTextureProvider</code></td><td>interface</td><td>自前で用意したテクスチャを 3D 描画に提供できる</td></tr>
 <tr><td><code>I3DSizeProvider</code></td><td>interface</td><td>描画される内容の実寸と原点からのずれ、およびそれをワールド行列に取り込んでよいか（<code>ScalesToInputSize</code>）を伝えられる</td></tr>
 <tr><td><code>I3DLocalTransform</code></td><td>interface</td><td>自分が使っているワールド行列を伝えられる。アイテムをまたいだ前後関係に使う</td></tr>
+<tr><td><code>I3DBounds</code></td><td>interface</td><td>描くものが占める範囲を伝えられる。3Dプレビューで掴む範囲に使う</td></tr>
 <tr><td><code>I3DVideoEffect</code></td><td>interface</td><td><code>I3DProvider</code> と <code>I3DTextureProvider</code> の両方</td></tr>
 <tr><td><code>Shape3DSourceBase</code></td><td>abstract class</td><td>3D 図形アイテムの描画元。プレビューと出力の両経路を受け持つ</td></tr>
 <tr><td><code>ShapeParameter3DBase</code></td><td>abstract class</td><td>3D 図形アイテムの設定値</td></tr>
@@ -664,6 +670,20 @@ var pipeline = pipelines.Get(render.Device);</pre>
 }</pre>
 </div>
 
+<h4>I3DBounds</h4>
+
+<p>
+3Dプレビューでアイテムを掴む範囲は、これで決まります。実装していないプロバイダーは
+アイテム本来の 2D の大きさで判定されるため、立体化した部分や 2D より大きな図形は
+見えているのに掴めません。
+</p>
+
+<p>
+基底クラスを使っていれば実装済みです。<code>Shape3DSourceBase.GetWorldBounds</code> と
+<code>VideoEffect3DProcessorBase.GetLocalBounds</code> がそのまま使われるので、
+出力画像の大きさを決めるのに返している範囲がそのまま掴む範囲になります。
+</p>
+
 <h4>Render3DContext</h4>
 
 <table>
@@ -680,7 +700,7 @@ var pipeline = pipelines.Get(render.Device);</pre>
 <table>
 <tr><th>型</th><th>種別</th><th>説明</th></tr>
 <tr><td><code>CameraItem</code></td><td>class</td><td>タイムラインに置く「3Dカメラ」アイテム。<code>BaseItem</code> を継承する</td></tr>
-<tr><td><code>ISceneCamera</code></td><td>interface</td><td>カメラとして振る舞うアイテム。設定値を返し、ドラッグの差分を受け取る</td></tr>
+<tr><td><code>ISceneCamera</code></td><td>interface</td><td>カメラとして振る舞うアイテム。設定値を返し、ドラッグの差分を <code>EditScope</code> とともに受け取る</td></tr>
 <tr><td><code>CameraAim</code></td><td>enum</td><td>向きの決め方。回転角で指定するか、注目点を向き続けるか</td></tr>
 <tr><td><code>CameraState</code></td><td>struct</td><td>ある瞬間のカメラの設定値（位置・向き・視野角）</td></tr>
 <tr><td><code>CameraMove</code></td><td>struct</td><td>カメラをどれだけ動かすかの差分。ドラッグ操作を伝えるのに使う</td></tr>

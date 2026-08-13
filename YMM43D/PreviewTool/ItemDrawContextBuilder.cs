@@ -22,7 +22,6 @@ namespace YMM43D.PreviewTool
             PreviewEnvironment environment,
             I3DProvider provider)
         {
-            // プロバイダーが自前のテクスチャを持つ場合、アイテムの画像は要らない。
             var providerTexture = provider is I3DTextureProvider textureProvider
                 ? textureProvider.GetTexture(environment.Device)
                 : null;
@@ -57,8 +56,6 @@ namespace YMM43D.PreviewTool
         {
             pipeline.RetainOnly(aliveItems);
 
-            // テクスチャの鍵もアイテム。手放さないと、消したアイテムのぶんが
-            // 画像1枚ぶんずつ残り続ける。
             textureBridge.RetainOnly(aliveItems.Cast<object>().ToHashSet());
         }
 
@@ -70,11 +67,8 @@ namespace YMM43D.PreviewTool
 
         private static Matrix4x4 BuildSizeMatrix(I3DProvider provider, RawRectF? imageBounds)
         {
-            // プロバイダーが実寸を知っている場合はそちらを優先する。
             if (provider is I3DSizeProvider sizeProvider)
             {
-                // 実寸を自分で扱うプロバイダーには掛けない。掛けると出力経路と
-                // 大きさが食い違う（点群3D が画像の大きさぶん余計に広がっていた）。
                 if (!sizeProvider.ScalesToInputSize)
                     return Matrix4x4.Identity;
 

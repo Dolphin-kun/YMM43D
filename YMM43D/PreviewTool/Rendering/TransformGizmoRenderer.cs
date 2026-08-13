@@ -9,13 +9,6 @@ using YMM43D.Scene3D;
 
 namespace YMM43D.PreviewTool.Rendering
 {
-    /// <summary>
-    /// 掴んでいるアイテムに、動かす向きの案内を描きます。
-    /// </summary>
-    /// <remarks>
-    /// 矢印を掴めばその軸だけに沿って動き、輪を掴めば画面と平行に回ります。
-    /// 案内が無いと、動かしたい向き以外にも動いてしまいます。
-    /// </remarks>
     internal sealed class TransformGizmoRenderer : IDisposable
     {
         private static readonly Color4 AxisXColor = new(1f, 0.25f, 0.3f, 1f);
@@ -23,7 +16,6 @@ namespace YMM43D.PreviewTool.Rendering
         private static readonly Color4 AxisZColor = new(0.3f, 0.55f, 1f, 1f);
         private static readonly Color4 RingColor = new(0.9f, 0.85f, 0.35f, 1f);
 
-        /// <summary>掴んでいない部分の薄さ。掴んでいる部分だけがはっきり出る。</summary>
         private const float IdleOpacity = 0.4f;
 
         private readonly DeviceResourceCache<GizmoResources> resources;
@@ -33,18 +25,11 @@ namespace YMM43D.PreviewTool.Rendering
             resources = new DeviceResourceCache<GizmoResources>(device => new GizmoResources(device));
         }
 
-        /// <summary>
-        /// 案内を描きます。
-        /// </summary>
-        /// <param name="gizmo">アイテムの位置と大きさ。</param>
-        /// <param name="active">いま掴んでいる部分。<see cref="GizmoHandle.None"/> なら全部を薄く描きます。</param>
         public void Draw(in Render3DContext render, in TransformGizmo gizmo, GizmoHandle active)
         {
-            // 形は原点まわりの一定の大きさで作っておき、置く場所と大きさは行列で与える。
             var world = Matrix4x4.CreateScale(gizmo.Scale) * Matrix4x4.CreateTranslation(gizmo.Origin);
             var transform = render.GetWorldViewProjection(world);
 
-            // 他のアイテムに隠されると掴めているのか分からなくなる。深度は見ない。
             var settings = new DrawSettings { IgnoreDepth = true };
 
             var shared = resources.Get(render.Device);
@@ -58,10 +43,8 @@ namespace YMM43D.PreviewTool.Rendering
             }
         }
 
-        /// <summary>矢印1本。原点から軸の向きへ伸ばし、先に羽を付ける。</summary>
         private static Vector3[] BuildArrow(Vector3 axis)
         {
-            // 羽を開く向きは、軸に垂直な2方向であればどれでもよい。
             var side = new Vector3(axis.Y, axis.Z, axis.X);
             var other = Vector3.Cross(axis, side);
 
@@ -79,7 +62,6 @@ namespace YMM43D.PreviewTool.Rendering
             ];
         }
 
-        /// <summary>Z 軸のまわりを回る輪。</summary>
         private static Vector3[] BuildRing()
         {
             var points = new List<Vector3>();
@@ -102,7 +84,6 @@ namespace YMM43D.PreviewTool.Rendering
         {
             public RenderPipeline<TransformConstants> Pipeline { get; }
 
-            /// <summary>掴める部分と、その形。</summary>
             public (GizmoHandle Handle, LineMesh Mesh)[] Parts { get; }
 
             public GizmoResources(ID3D11Device device)

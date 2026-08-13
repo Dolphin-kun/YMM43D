@@ -7,34 +7,12 @@ using YukkuriMovieMaker.Commons;
 
 namespace YMM43D.Commons
 {
-    /// <summary>
-    /// YMM4 が描いた <see cref="ID2D1Image"/> を、3D描画用デバイス上の
-    /// テクスチャに変換して供給します。
-    /// </summary>
-    /// <remarks>
-    /// 3D描画は独立したデバイスで行うため、YMM4 本体のデバイスにある画像を
-    /// そのままテクスチャとして使うことはできません。共有リソースを介して
-    /// GPU 上でコピーします。
-    /// <para>
-    /// 生成したテクスチャは鍵ごとにキャッシュし、このクラスが所有します。
-    /// 呼び出し側が寿命を気にする必要はありません。
-    /// </para>
-    /// </remarks>
     public sealed class D2DTextureBridge : IDisposable
     {
         private readonly Lock gate = new();
         private readonly Dictionary<object, SharedItemTexture> cache = [];
         private readonly PrivateD2DContext privateContext = new();
 
-        /// <summary>
-        /// 画像を <paramref name="targetDevice"/> 上のテクスチャに焼き込み、その参照を返します。
-        /// </summary>
-        /// <param name="targetDevice">テクスチャを使う側（3D描画用）のデバイス。</param>
-        /// <param name="key">キャッシュの鍵。通常はアイテムのインスタンス。</param>
-        /// <param name="bounds">
-        /// 画像の描画範囲。大きさだけでなく、原点からのずれを知るのにも使えます。
-        /// </param>
-        /// <returns>テクスチャの参照。変換できなかった場合は <c>null</c>。</returns>
         public ID3D11ShaderResourceView? GetTexture(
             ID3D11Device targetDevice,
             IGraphicsDevicesAndContext ymmDevices,
@@ -44,12 +22,8 @@ namespace YMM43D.Commons
         {
             bounds = new RawRectF(0, 0, 1, 1);
 
-            // 範囲の問い合わせから焼き込みまでを一続きにする。途中で他のスレッドが
-            // 同じコンテキストを使うと、調べた範囲と焼いた内容が食い違うだけでなく、
-            // コンテキストの内部状態そのものが壊れる。
             lock (D2DGate.Sync)
             {
-                // 描画先を差し替えるので、本体のコンテキストは使えない。
                 var deviceContext = privateContext.For(ymmDevices);
                 if (deviceContext.NativePointer == nint.Zero)
                     return null;
@@ -57,8 +31,6 @@ namespace YMM43D.Commons
                 bounds = D2DImageBounds.Get(deviceContext, image);
                 var (width, height) = D2DImageBounds.ToPixelSize(bounds);
 
-                // 極端に大きな画像は、縮めて焼き込む。テクスチャが覆う範囲は変わらない
-                // ので、シェーダー側の UV はそのまま使える。落ちるよりは粗いほうがよい。
                 var scale = GetFittingScale(width, height);
                 if (scale < 1f)
                 {
@@ -111,8 +83,6 @@ namespace YMM43D.Commons
                     }
                     catch
                     {
-                        // 極端に大きな画像などで確保に失敗することがある。
-                        // 落とさず、テクスチャ無しとして扱う。
                         cache.Remove(key);
                         return null;
                     }
@@ -123,13 +93,6 @@ namespace YMM43D.Commons
             }
         }
 
-        /// <summary>
-        /// 指定した鍵に対応しないテクスチャを破棄します。
-        /// </summary>
-        /// <remarks>
-        /// テクスチャは画像1枚ぶんの大きさを占めます。鍵をアイテムにしている呼び出し側は、
-        /// タイムライン上から消えたアイテムのぶんをここで手放してください。
-        /// </remarks>
         public void RetainOnly(IReadOnlySet<object> keys)
         {
             lock (gate)
@@ -142,7 +105,6 @@ namespace YMM43D.Commons
             }
         }
 
-        /// <summary>キャッシュしているテクスチャをすべて破棄します。</summary>
         public void Clear()
         {
             lock (gate)
@@ -202,7 +164,6 @@ namespace YMM43D.Commons
                     SampleDescription = new SampleDescription(1, 0),
                     Usage = ResourceUsage.Default,
                     BindFlags = BindFlags.RenderTarget | BindFlags.ShaderResource,
-                    // 両デバイスの読み書きを取り違えないよう、鍵付きで共有する。
                     MiscFlags = ResourceOptionFlags.SharedKeyedMutex,
                 }));
 
@@ -230,7 +191,6 @@ namespace YMM43D.Commons
                 in RawRectF bounds,
                 float scale)
             {
-                // 前フレームの描画で握ったままの鍵を返す。
                 ReleaseReadLock();
 
                 if (isBroken || !TryAcquire(writeMutex, WriteKey))
@@ -246,7 +206,6 @@ namespace YMM43D.Commons
                         deviceContext.Target = targetBitmap;
                         deviceContext.BeginDraw();
                         deviceContext.Clear(null);
-                        // 描画範囲の左上がテクスチャの原点に来るようにずらす。
                         deviceContext.Transform =
                             Matrix3x2.CreateTranslation(-bounds.Left, -bounds.Top)
                             * Matrix3x2.CreateScale(scale);
@@ -256,7 +215,6 @@ namespace YMM43D.Commons
                         deviceContext.Transform = previousTransform;
                         deviceContext.Target = previousTarget;
 
-                        // 鍵を手放す前に、溜まっている描画命令を GPU に送り出す。
                         ymmDevices.D3D.Device.ImmediateContext.Flush();
                     }
                 }
@@ -265,7 +223,6 @@ namespace YMM43D.Commons
                     writeMutex.ReleaseSync(ReadKey);
                 }
 
-                // 3D 側が読み終えるまで握り続ける。返すのは次に書き込む直前。
                 holdsReadLock = TryAcquire(readMutex, ReadKey);
             }
 
@@ -287,8 +244,6 @@ namespace YMM43D.Commons
                 }
                 catch
                 {
-                    // 待ち時間を超えたか、相手が鍵を持ったまま消えた。どちらの場合も
-                    // 鍵の持ち主が分からなくなるため、このテクスチャは作り直す。
                     isBroken = true;
                     return false;
                 }

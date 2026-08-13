@@ -21,7 +21,6 @@ namespace YMM43D.PreviewTool.ViewModels
 {
     public class Preview3DViewModel : Bindable, ITimelineToolViewModel, IDisposable
     {
-        /// <summary>カメラアイテムを置くときの既定の長さ（フレーム）。</summary>
         private const int DefaultCameraLength = 300;
 
         private readonly DisposeCollector disposer = new();
@@ -36,8 +35,6 @@ namespace YMM43D.PreviewTool.ViewModels
         private D3D11Host? d3dHost;
         private Scene? scene;
         private TimelineSourceAndDevices? sourceAndDevices;
-        // 案内を出しているアイテム。タイムライン側の選択とは別に持つ。プレビューで
-        // 掴んだものだけに案内を出したいので、他の経路で選んだものには反応させない。
         private IVideoItem? selected;
 
         private bool drivesSceneCamera;
@@ -50,10 +47,6 @@ namespace YMM43D.PreviewTool.ViewModels
             private set => Set(ref d3dHost, value, nameof(D3DHost));
         }
 
-        /// <summary>
-        /// <c>true</c> のとき、プレビュー上のドラッグがカメラアイテムを直接動かします。
-        /// <c>false</c> のときは見る位置だけが動き、出力には影響しません。
-        /// </summary>
         public bool DrivesSceneCamera
         {
             get => drivesSceneCamera;
@@ -66,21 +59,12 @@ namespace YMM43D.PreviewTool.ViewModels
             }
         }
 
-        /// <summary>
-        /// <c>true</c> のとき、ドラッグがいまの再生位置に中間点を打ち、そこだけを動かします。
-        /// </summary>
-        /// <remarks>
-        /// 切ってあるあいだは、打ってあるキーフレームすべてが同じだけ動きます。動きを
-        /// 壊さずに置き直せますが、それだけでは動きを作れません。入れると、止めた位置で
-        /// 少しずつ形を決めていく作り方ができます。
-        /// </remarks>
         public bool InsertsKeyFrame
         {
             get => insertsKeyFrame;
             set => Set(ref insertsKeyFrame, value, nameof(InsertsKeyFrame));
         }
 
-        /// <summary>カメラアイテムを置ける状態かどうか。</summary>
         public bool CanAddCamera => timeline is not null;
 
         public ICommand ResetToSceneCameraCommand { get; }
@@ -102,8 +86,6 @@ namespace YMM43D.PreviewTool.ViewModels
             ViewAllCommand = new ActionCommand(_ => true, _ => ViewAll());
             LevelRollCommand = new ActionCommand(_ => true, _ => LevelRoll());
             ViewFromCommand = new ActionCommand(_ => true, p => ViewFrom(p as string));
-            // 使えるかどうかは本体側の選択で決まり、こちらからは追えない。
-            // 常に押せるようにしておき、できないときは何も起きないだけにする。
             AddKeyFrameCommand = new ActionCommand(
                 _ => true,
                 _ => HostCommands.Execute(CommandType.AddKeyFrameAtCurrentFrame, d3dHost));
@@ -138,7 +120,6 @@ namespace YMM43D.PreviewTool.ViewModels
                 }
                 catch (Exception)
                 {
-                    // 描画元を用意できない場合でも、カメラ操作だけは行えるようにする。
                     sourceAndDevices = null;
                 }
             }
@@ -166,20 +147,12 @@ namespace YMM43D.PreviewTool.ViewModels
             UpdatePreviewItems();
         }
 
-        /// <summary>見る位置を、いまシーンを撮っているカメラに戻します。</summary>
         public void ResetToSceneCamera()
         {
             freeCamera.Reset();
             freeCamera.EnsureInitialized(ResolveCamera());
         }
 
-        /// <summary>
-        /// 選んでいるアイテムが画面に収まるまで寄ります。
-        /// </summary>
-        /// <remarks>
-        /// プレビューで掴んだものを優先し、無ければタイムラインで選んでいるものを見ます。
-        /// どちらも無いときは何もしません。見当違いの所へ飛ぶより、動かない方が分かります。
-        /// </remarks>
         public void FocusSelected()
         {
             var item = selected ?? timeline?.SelectedItems.OfType<IVideoItem>().FirstOrDefault();
@@ -188,7 +161,6 @@ namespace YMM43D.PreviewTool.ViewModels
                 Focus(item);
         }
 
-        /// <summary>出ているものが全部入るまで引きます。</summary>
         public void ViewAll() => Focus(null);
 
         private void Focus(IVideoItem? item)
@@ -199,18 +171,14 @@ namespace YMM43D.PreviewTool.ViewModels
             ApplyCameraMove(basis => freeCamera.Focus(bounds, basis));
         }
 
-        /// <summary>傾きを 0 に戻します。</summary>
         public void LevelRoll() => ApplyCameraMove(basis => FreeCameraController.LevelRoll(basis));
 
-        /// <summary>決まった向きから見ます。</summary>
-        /// <param name="name"><see cref="ViewDirection"/> の名前。</param>
         public void ViewFrom(string? name)
         {
             if (Enum.TryParse<ViewDirection>(name, out var direction))
                 ViewFrom(direction);
         }
 
-        /// <summary>決まった向きから見ます。</summary>
         internal void ViewFrom(ViewDirection direction)
         {
             var (yaw, pitch) = ViewDirections.GetAngles(direction);
@@ -218,14 +186,6 @@ namespace YMM43D.PreviewTool.ViewModels
             ApplyCameraMove(basis => freeCamera.ViewFrom(yaw, pitch, basis));
         }
 
-        /// <summary>
-        /// カメラの動きを、いま動かすべき相手に効かせます。
-        /// </summary>
-        /// <remarks>
-        /// 「カメラ追従」が入っていればタイムラインのカメラアイテムを、そうでなければ
-        /// プレビュー専用の視点を動かします。動かす量はどちらの場合も相手の現在値から
-        /// 決めるので、<paramref name="make"/> にはその値が渡ります。
-        /// </remarks>
         private void ApplyCameraMove(Func<CameraState, CameraMove> make)
         {
             if (timeline is null)
@@ -249,31 +209,15 @@ namespace YMM43D.PreviewTool.ViewModels
             target.Source.Move(move, GetEditScope(target.Item));
             refresher?.ForceRefresh(timeline);
 
-            // ドラッグの区切りはマウスを離したときに入れる。キーやホイールのように
-            // 1回で終わる操作は、ここで区切らないと履歴に残らない。
             if (!freeCamera.IsDragging)
                 SeparateHistory();
         }
 
-        /// <summary>
-        /// そのアイテムを動かした結果を、アニメーションのどこに書き込むか。
-        /// </summary>
-        /// <remarks>
-        /// キーフレームはアイテムの先頭からの位置で打たれるので、タイムライン上の
-        /// 再生位置をアイテム内の位置に直します。
-        /// </remarks>
         private EditScope GetEditScope(IItem item)
             => insertsKeyFrame && timeline is not null
                 ? EditScope.AtFrame(timeline.CurrentFrame - item.Frame)
                 : EditScope.Whole;
 
-        /// <summary>
-        /// いまの再生位置に、3Dカメラのアイテムを置きます。
-        /// </summary>
-        /// <remarks>
-        /// 空いているレイヤーを下から探します。<c>TryAddItems</c> は他のアイテムと
-        /// 重なると失敗するので、置けるまで順に試します。
-        /// </remarks>
         public void AddCamera()
         {
             if (timeline is null)
@@ -295,7 +239,6 @@ namespace YMM43D.PreviewTool.ViewModels
             }
         }
 
-        /// <summary>いまシーンを撮っているカメラ。アイテムが無ければ既定のカメラ。</summary>
         private CameraState ResolveCamera()
             => timeline is null ? CameraState.Default : SceneCameraResolver.Resolve(timeline);
 
@@ -312,16 +255,11 @@ namespace YMM43D.PreviewTool.ViewModels
             if (d3dHost is null || timeline is null)
                 return;
 
-            // カメラアイテムを動かしているあいだは、見る位置もそのカメラに追従させる。
-            // アイテムが無いときまで追従させると、自由に見て回るための視点が
-            // 毎フレーム既定の位置へ戻され、ドラッグしても動かなくなる。
             if (drivesSceneCamera && SceneCameraResolver.Find(timeline) is not null)
                 freeCamera.Invalidate();
 
             refresher?.RefreshIfCameraChanged(timeline);
 
-            // 画面の大きさは編集中に変えられる。カメラの枠の縦横比がそれで決まるので、
-            // フレームが進んでいなくても追いかける。
             UpdateSourceDescription();
             UpdatePreviewItems();
             d3dHost.RenderFrame();
@@ -355,26 +293,11 @@ namespace YMM43D.PreviewTool.ViewModels
             });
         }
 
-        /// <summary>
-        /// マウス操作を振り分けます。
-        /// </summary>
-        /// <remarks>
-        /// 左ドラッグは、アイテムの上から始めればそのアイテムを動かし、何も無い所から
-        /// 始めればカメラを回します。同じボタンで両方できるのは、掴む物があるかどうかが
-        /// 押した瞬間に決まるからです。アイテムの上でもカメラを回したいときは
-        /// Alt を押しながらドラッグしてください。中ドラッグ・右ドラッグ・ホイールは
-        /// 常にカメラです。
-        /// <para>
-        /// 左と中は修飾キーで意味が変わります。Shift で平行移動、Ctrl で傾きです。
-        /// </para>
-        /// </remarks>
         private void OnMouseAction(Point position, D3D11Host.MouseEventKind kind, int delta)
         {
             if (timeline is null)
                 return;
 
-            // 押した所と離した所で、元に戻す履歴を区切る。動かしている最中は区切らない
-            // ので、ドラッグ1回ぶんが 1 手にまとまる。
             var boundary = kind is not D3D11Host.MouseEventKind.Move;
 
             if (boundary)
@@ -384,8 +307,6 @@ namespace YMM43D.PreviewTool.ViewModels
             {
                 var modifiers = D3D11Host.CurrentModifiers;
 
-                // 押した瞬間はドラッグの種類を覚えるだけで、動く量は返ってこない。
-                // その場合に相手を探しに行っても無駄なので、差分が出てから振り分ける。
                 ApplyCameraMove(basis =>
                     freeCamera.HandleMouse(position, kind, delta, modifiers, basis) ?? CameraMove.None);
             }
@@ -394,21 +315,8 @@ namespace YMM43D.PreviewTool.ViewModels
                 SeparateHistory();
         }
 
-        /// <summary>
-        /// 元に戻す履歴に区切りを入れます。
-        /// </summary>
-        /// <remarks>
-        /// YMM4 は変更を積み上げておき、区切ったところまでを 1 手として覚えます。
-        /// 区切らないまま変更すると、その変更は履歴に入らず、直前の 1 手を戻したときに
-        /// 一緒に巻き戻ってしまいます（アイテムを足して動かした後に戻すと、移動ではなく
-        /// アイテムごと消える、という形で出ます）。
-        /// </remarks>
         private void SeparateHistory() => toolInfo?.UndoRedoManager?.Record();
 
-        /// <summary>
-        /// アイテムを掴む・動かす・離すを処理します。
-        /// </summary>
-        /// <returns>アイテムの操作として扱ったら <c>true</c>。カメラには渡しません。</returns>
         private bool HandleItemDrag(Point position, D3D11Host.MouseEventKind kind)
         {
             switch (kind)
@@ -434,13 +342,6 @@ namespace YMM43D.PreviewTool.ViewModels
             }
         }
 
-        /// <summary>
-        /// 押した所にあるものを掴みます。
-        /// </summary>
-        /// <remarks>
-        /// 案内の矢印や輪を先に見ます。アイテムより手前に出ているので、重なって
-        /// いるときは案内の方を掴めた方が扱いやすいためです。
-        /// </remarks>
         private bool TryGrab(Point position)
         {
             var screen = ToVector(position);
@@ -463,7 +364,6 @@ namespace YMM43D.PreviewTool.ViewModels
 
             selected = picked.Item;
 
-            // 掴んだものを選択しておくと、右のプロパティ欄がそのアイテムに切り替わる。
             if (timeline is not null)
                 timeline.SelectedItems = [picked.Item];
 
@@ -474,18 +374,6 @@ namespace YMM43D.PreviewTool.ViewModels
 
         private static Vector2 ToVector(Point position) => new((float)position.X, (float)position.Y);
 
-        /// <summary>
-        /// プレビュー上のキー操作。
-        /// </summary>
-        /// <returns>受け取ったキーなら <c>true</c>。呼び出し側はそこで止めてください。</returns>
-        /// <remarks>
-        /// 3D表示は子ウィンドウなので、WPF のキー入力はそのままでは届きません。
-        /// <see cref="D3D11Host"/> が拾ったものと、枠の側で拾ったものの両方がここに来ます。
-        /// <para>
-        /// 数字はテンキーと本体側のどちらでも効くようにしています。テンキーの無い
-        /// キーボードでも同じように使えます。
-        /// </para>
-        /// </remarks>
         public bool HandleKey(Key key, ModifierKeys modifiers)
         {
             var control = (modifiers & ModifierKeys.Control) != 0;
@@ -530,15 +418,10 @@ namespace YMM43D.PreviewTool.ViewModels
                     return true;
 
                 default:
-                    // 割り当ての決まっていないキーだけ、本体の操作に回す。先に回すと、
-                    // 本体側で同じキーを使っている操作にプレビューの割り当てが負ける。
                     return TryHostKey(key, modifiers);
             }
         }
 
-        /// <summary>
-        /// 本体に割り当てられている操作のうち、プレビュー上でも効かせたいもの。
-        /// </summary>
         private bool TryHostKey(Key key, ModifierKeys modifiers)
         {
             if (HostCommands.Matches(CommandType.Undo, key, modifiers))
@@ -550,18 +433,6 @@ namespace YMM43D.PreviewTool.ViewModels
             return false;
         }
 
-        /// <summary>
-        /// 元に戻す・やり直しを本体に依頼します。
-        /// </summary>
-        /// <remarks>
-        /// 本体のコマンドではなく履歴そのものを直接動かします。コマンドは送り先の
-        /// 要素をたどって処理されるので、子ウィンドウが入力を受けているあいだは
-        /// 届くとは限りません。
-        /// <para>
-        /// できることが無くても受け取ったことにします。ここで見送ると、同じキーで
-        /// 本体側の操作が動いてしまい、効いたり効かなかったりします。
-        /// </para>
-        /// </remarks>
         private bool TryUndoRedo(bool redo)
         {
             if (toolInfo?.UndoRedoManager is not { } manager)

@@ -3,11 +3,6 @@ using YukkuriMovieMaker.Commons;
 
 namespace YMM43D.Graphics.Materials
 {
-    /// <summary>
-    /// スロット 0 のテクスチャを頂点カラーと乗算して出力するシェーダー。
-    /// YMM4 のアイテム画像を 3D 空間に貼り付けるのに使います。
-    /// 定数バッファは <see cref="TransformConstants"/> です。
-    /// </summary>
     public sealed class TextureMaterial : IMaterial
     {
         private readonly DisposeCollector disposer = new();

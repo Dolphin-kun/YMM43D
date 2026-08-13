@@ -3,11 +3,6 @@ using YukkuriMovieMaker.Commons;
 
 namespace YMM43D.Graphics.Materials
 {
-    /// <summary>
-    /// 頂点カラーをそのまま出力し、不透明度だけを掛けるシェーダー。
-    /// テクスチャを持たない形状（3D図形やガイド表示）に使います。
-    /// 定数バッファは <see cref="TransformConstants"/> です。
-    /// </summary>
     public sealed class VertexColorMaterial : IMaterial
     {
         private readonly DisposeCollector disposer = new();

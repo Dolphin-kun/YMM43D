@@ -6,16 +6,6 @@ using YukkuriMovieMaker.Commons;
 
 namespace YMM43D.Commons
 {
-    /// <summary>
-    /// 3D描画用のレンダーターゲットと深度バッファを持ち、その結果を
-    /// YMM4 側のデバイスから <see cref="ID2D1Bitmap1"/> として参照できるようにします。
-    /// </summary>
-    /// <remarks>
-    /// 3D描画は独立デバイスで行うため、共有リソースとして作ったテクスチャを本体側で
-    /// 開き直しています。書き込みの途中を読まれないよう鍵付きミューテックスで受け渡すので、
-    /// <see cref="BeginWrite"/> と <see cref="EndWrite"/> で描画を挟んでください。
-    /// 読み出し側の鍵は、YMM4 が再生し終える時期が分からないため次に書き込むまで握ります。
-    /// </remarks>
     public sealed class RenderSurface3D : IDisposable
     {
         private const ulong WriteKey = 0;
@@ -42,25 +32,14 @@ namespace YMM43D.Commons
 
         public ID3D11DepthStencilView? DepthStencilView { get; private set; }
 
-        /// <summary>YMM4 のデバイスコンテキストで描画できる、3D描画結果のビットマップ。</summary>
         public ID2D1Bitmap1? Bitmap { get; private set; }
 
-        /// <summary>現在確保しているサイズ。未確保なら (0, 0)。</summary>
         public (int Width, int Height) Size { get; private set; }
 
-        /// <summary>
-        /// 指定サイズで確保し直します。同じサイズかつ同じデバイスなら何もしません。
-        /// </summary>
-        /// <param name="deviceContext">
-        /// 共有テクスチャを YMM4 側のビットマップとして開くのに使うコンテキスト。
-        /// 本体のものではなく、プラグイン専用のものを渡してください。
-        /// </param>
         public void Resize(IGraphicsDevicesAndContext ymmDevices, ID2D1DeviceContext deviceContext, int width, int height)
         {
             var ymmDevice = ymmDevices.D3D.Device;
 
-            // デバイスが作り直された場合、開き直したテクスチャは古いデバイスに
-            // 属したままなので、大きさが同じでも作り直す。
             if (!isBroken
                 && RenderTargetView is not null
                 && ymmDeviceKey == ymmDevice.NativePointer
@@ -91,7 +70,6 @@ namespace YMM43D.Commons
                 SampleDescription = new SampleDescription(1, 0),
                 Usage = ResourceUsage.Default,
                 BindFlags = BindFlags.RenderTarget | BindFlags.ShaderResource,
-                // YMM4 側のデバイスから、読み書きを取り違えずに開けるようにする。
                 MiscFlags = ResourceOptionFlags.SharedKeyedMutex,
             };
 
@@ -130,13 +108,8 @@ namespace YMM43D.Commons
         private static int Quantize(int length)
             => (Math.Max(length, 1) + SizeGranularity - 1) / SizeGranularity * SizeGranularity;
 
-        /// <summary>
-        /// 3D側がこのテクスチャに描き込む権利を取ります。
-        /// </summary>
-        /// <returns>取得できなかった場合は <c>false</c>。描画は行わないでください。</returns>
         public bool BeginWrite()
         {
-            // YMM4 側が前回の結果を読むために握っている鍵を返す。
             ReleaseReadLock();
 
             if (writeMutex is null || isBroken)
@@ -145,9 +118,6 @@ namespace YMM43D.Commons
             return TryAcquire(writeMutex, WriteKey);
         }
 
-        /// <summary>
-        /// 描き込みを終え、YMM4 側が読める状態にします。
-        /// </summary>
         public void EndWrite()
         {
             if (writeMutex is null || isBroken)
@@ -155,8 +125,6 @@ namespace YMM43D.Commons
 
             writeMutex.ReleaseSync(ReadKey);
 
-            // YMM4 がコマンドリストをいつ再生するか分からないため、
-            // 次に書き込む直前まで読み出し側の鍵を握り続ける。
             holdsReadLock = readMutex is not null && TryAcquire(readMutex, ReadKey);
         }
 
@@ -178,8 +146,6 @@ namespace YMM43D.Commons
             }
             catch
             {
-                // 待ち時間を超えたか、相手が鍵を持ったまま消えた。鍵の持ち主が
-                // 分からなくなるため、次の Resize で作り直す。
                 isBroken = true;
                 return false;
             }
@@ -203,7 +169,6 @@ namespace YMM43D.Commons
             readMutex = null;
             ymmDeviceKey = nint.Zero;
 
-            // すぐには解放せず、数世代あとまで持ち回す。
             if (disposer is not null)
                 retired.Add(disposer);
 

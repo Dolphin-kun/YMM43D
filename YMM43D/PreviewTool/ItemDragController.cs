@@ -4,49 +4,27 @@ using YukkuriMovieMaker.Project.Items;
 
 namespace YMM43D.PreviewTool
 {
-    /// <summary>
-    /// 3Dプレビュー上でアイテムを掴んで動かします。
-    /// </summary>
-    /// <remarks>
-    /// 案内の矢印を掴めばその軸だけに沿って動き、輪を掴めば回ります。何も掴まずに
-    /// アイテムそのものをドラッグした場合は、視線に垂直な面の上を滑ります。
-    /// </remarks>
     internal sealed class ItemDragController
     {
         private IVideoItem? target;
         private GizmoHandle handle;
         private EditScope scope;
 
-        // 面に沿って動かすとき用。
         private Vector3 planePoint;
         private Vector3 planeNormal;
         private Vector3 anchor;
 
-        // 軸に沿って動かすとき用。
         private Vector3 axis;
         private float axisPosition;
 
-        // 回すとき用。
         private float lastAngle;
 
-        /// <summary>いま掴んでいるアイテム。掴んでいなければ <c>null</c>。</summary>
         public IVideoItem? Target => target;
 
-        /// <summary>いま掴んでいる案内の部分。</summary>
         public GizmoHandle Handle => handle;
 
         public bool IsDragging => target is not null;
 
-        /// <summary>
-        /// アイテムを掴みます。
-        /// </summary>
-        /// <param name="item">掴むアイテム。</param>
-        /// <param name="origin">アイテムの中心（ワールド空間）。</param>
-        /// <param name="grabbed">掴んだ案内の部分。<see cref="GizmoHandle.Free"/> なら面に沿って動きます。</param>
-        /// <param name="ray">掴んだ位置から伸ばした視線。</param>
-        /// <param name="viewDirection">カメラが向いている方向。</param>
-        /// <param name="edit">動かした結果をアニメーションのどこに書き込むか。</param>
-        /// <returns>掴めたら <c>true</c>。</returns>
         public bool Begin(
             IVideoItem item,
             in Vector3 origin,
@@ -89,10 +67,6 @@ namespace YMM43D.PreviewTool
             return true;
         }
 
-        /// <summary>
-        /// 掴んだ所を、いまの視線の先まで動かします。
-        /// </summary>
-        /// <returns>アイテムを動かしたら <c>true</c>。</returns>
         public bool Update(in PickRay ray)
         {
             if (target is not { } item)
@@ -147,7 +121,6 @@ namespace YMM43D.PreviewTool
             if (GetAngle(ray, planePoint) is not { } angle)
                 return false;
 
-            // 1周をまたぐと角度が跳ぶ。近い方の差を取る。
             var delta = angle - lastAngle;
             delta -= MathF.Tau * MathF.Round(delta / MathF.Tau);
 
@@ -156,7 +129,6 @@ namespace YMM43D.PreviewTool
 
             lastAngle = angle;
 
-            // YMM4 の回転角は時計回りが正。3D 空間の反時計回りとは向きが逆。
             scope.Nudge(item.Rotation, -delta * 180f / MathF.PI);
 
             return true;
@@ -164,13 +136,11 @@ namespace YMM43D.PreviewTool
 
         private void Shift(IVideoItem item, in Vector3 shift)
         {
-            // YMM4 の座標はピクセル。Y は画面と同じく下向きが正。
             scope.Nudge(item.X, WorldScale.ToPixels(shift.X));
             scope.Nudge(item.Y, -WorldScale.ToPixels(shift.Y));
             scope.Nudge(item.Z, WorldScale.ToPixels(shift.Z));
         }
 
-        /// <summary>輪の上で、いまどの向きを指しているか。</summary>
         private static float? GetAngle(in PickRay ray, in Vector3 origin)
         {
             if (ray.IntersectPlane(origin, Vector3.UnitZ) is not { } hit)

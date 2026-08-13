@@ -7,19 +7,6 @@ using YukkuriMovieMaker.Plugin.Effects;
 
 namespace YMM43D.Plugin
 {
-    /// <summary>
-    /// 3D描画を行う映像エフェクトの基底クラス。
-    /// </summary>
-    /// <remarks>
-    /// 派生クラスは <see cref="VideoEffectBase.CreateVideoEffect"/> で
-    /// <see cref="I3DProvider"/> を実装したプロセッサを作り、
-    /// <see cref="AttachProcessor"/> に渡してください。3Dプレビューからの描画要求は
-    /// そのプロセッサに転送されます。
-    /// <para>
-    /// カメラ連動に必要なダミーパラメータは <see cref="CameraSyncAnimation"/> として
-    /// 用意済みです。<c>GetAnimatables()</c> の戻り値に必ず含めてください。
-    /// </para>
-    /// </remarks>
     public abstract class VideoEffect3DBase
         : VideoEffectBase, I3DVideoEffect, ICameraSync, I3DSizeProvider, I3DLocalTransform, I3DBounds
     {
@@ -30,63 +17,37 @@ namespace YMM43D.Plugin
             cameraSync.Changed += () => OnPropertyChanged(nameof(CameraSyncAnimation));
         }
 
-        /// <summary>
-        /// カメラの変化を YMM4 に伝えるためだけのアニメーション。
-        /// エディタには表示されませんが、<c>GetAnimatables()</c> には含める必要があります。
-        /// </summary>
         [Browsable(false)]
         [EditorBrowsable(EditorBrowsableState.Never)]
         public Animation CameraSyncAnimation => cameraSync.Value;
 
-        /// <summary>
-        /// このエフェクトに対応する、現在有効な 3D 描画プロセッサ。
-        /// </summary>
         protected I3DProvider? Processor { get; private set; }
 
-        /// <inheritdoc/>
         public virtual bool RequiresMappedTexture => false;
 
         public void TouchCameraSync() => cameraSync.TouchCameraSync();
 
-        /// <summary>
-        /// 3D描画を担うプロセッサを結び付けます。
-        /// <see cref="VideoEffectBase.CreateVideoEffect"/> の中で呼んでください。
-        /// </summary>
         protected TProcessor AttachProcessor<TProcessor>(TProcessor processor) where TProcessor : I3DProvider
         {
             Processor = processor;
             return processor;
         }
 
-        /// <summary>
-        /// プロセッサが破棄されたことを伝えます。
-        /// 別のプロセッサが既に結び付いている場合は何もしません。
-        /// </summary>
         public void DetachProcessor(I3DProvider processor)
         {
             if (ReferenceEquals(Processor, processor))
                 Processor = null;
         }
 
-        /// <summary>
-        /// 既定では結び付いているプロセッサに描画を委譲します。
-        /// </summary>
         public virtual void Draw(in Render3DContext render, DrawContext3D item)
             => Processor?.Draw(render, item);
 
-        /// <inheritdoc/>
-        /// <remarks>
-        /// 3Dプレビューがアイテムから辿り着くのはプロセッサではなくこちらなので、
-        /// 転送し忘れると掴む範囲がアイテム本来の 2D の大きさに戻ります。
-        /// </remarks>
         public virtual WorldBounds GetLocalBounds(in Scene3D.FrameContext itemTime)
             => Processor is I3DBounds provider ? provider.GetLocalBounds(itemTime) : WorldBounds.Empty;
 
-        /// <inheritdoc/>
         public virtual ID3D11ShaderResourceView? GetTexture(ID3D11Device device)
             => Processor is I3DTextureProvider provider ? provider.GetTexture(device) : null;
 
-        /// <inheritdoc/>
         public virtual bool TryGetLocalMatrix(out System.Numerics.Matrix4x4 matrix)
         {
             if (Processor is I3DLocalTransform provider)
@@ -96,7 +57,6 @@ namespace YMM43D.Plugin
             return false;
         }
 
-        /// <inheritdoc/>
         public virtual bool TryGetSize(out System.Numerics.Vector2 size, out System.Numerics.Vector2 offset)
         {
             if (Processor is I3DSizeProvider provider)
@@ -107,12 +67,6 @@ namespace YMM43D.Plugin
             return false;
         }
 
-        /// <inheritdoc/>
-        /// <remarks>
-        /// 3Dプレビューがアイテムから辿り着くのはプロセッサではなくこちらなので、
-        /// 転送し忘れると既定値の <c>true</c> が返り、実寸を自分で扱うエフェクトでは
-        /// プレビューだけ大きさが二重に掛かります。
-        /// </remarks>
         public virtual bool ScalesToInputSize
             => Processor is not I3DSizeProvider provider || provider.ScalesToInputSize;
     }

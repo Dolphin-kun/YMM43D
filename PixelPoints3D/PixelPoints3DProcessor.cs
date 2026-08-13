@@ -55,7 +55,6 @@ namespace PixelPoints3D
 
             if (effect.Face is { } face && grid.Faces is { } faces)
             {
-                // 不透明度とそのばらつきは面だけに掛ける。
                 var faceConstants = WithColor(constants, face.Color, face.ColorSource) with
                 {
                     ExtraOpacity = Math.Clamp(face.Opacity.GetFloat(time) / 100f, 0f, 1f),
@@ -187,16 +186,12 @@ namespace PixelPoints3D
                 GetThickness(effect.Point?.Size, itemTime),
                 GetThickness(effect.Line?.Width, itemTime));
 
-            // ばらつきは絶対値で見る。乱数は ±1 に散るので負でも散らばる量は同じ。
-            // 符号のまま足すと範囲が縮み、行き過ぎると上下が入れ替わって壊れる。
             var margin = Vector3.Abs(new Vector3(
                 WorldScale.ToWorld(effect.ScatterX.GetFloat(itemTime)),
                 WorldScale.ToWorld(effect.ScatterY.GetFloat(itemTime)),
                 WorldScale.ToWorld(effect.ScatterZ.GetFloat(itemTime))))
                 + new Vector3(thickness / 2f);
 
-            // 変形は格子の位置に掛かるので、ばらつきや太さより先に広げる。
-            // 描画先の大きさはここで決まるため、見落とすと絵の端が切れる。
             var half = PointDeform.Create(effect, itemTime, extent).Expand(extent / 2f) + margin;
 
             return new WorldBounds(-half, half)

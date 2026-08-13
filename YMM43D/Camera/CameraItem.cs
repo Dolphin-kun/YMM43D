@@ -10,24 +10,10 @@ using YukkuriMovieMaker.Project.Items;
 
 namespace YMM43D.Camera
 {
-    /// <summary>
-    /// シーン全体を撮る 3D カメラ。タイムラインに置いて使います。
-    /// </summary>
-    /// <remarks>
-    /// 映像には何も描きません。置いてある区間だけ、3D の描画がこのカメラの視点に
-    /// 切り替わります。図形アイテムではなく独立したアイテムなのは、位置・拡大率・
-    /// 不透明度といった図形の設定がカメラには意味を持たないためです。
-    /// <para>
-    /// 同じ時刻に複数置けます。レイヤー番号がいちばん大きいものが使われるので、
-    /// 時間で並べればカット割りになります。
-    /// </para>
-    /// </remarks>
     public sealed class CameraItem : BaseItem, ISceneCamera
     {
         private const string Place = "カメラ位置";
 
-        // BaseItem の「全般」は 0〜5 を使う。項目の並びはこの値で決まるので、
-        // それより後ろの番号にしないとカメラの設定が上に来てしまう。
         private const int FirstOrder = 100;
 
         [Display(GroupName = Place, Name = "X", Description = "カメラを置く位置。右が正", Order = FirstOrder)]
@@ -105,19 +91,14 @@ namespace YMM43D.Camera
             get => itemColor;
             set => Set(ref itemColor, value);
         }
-        // 3Dプレビューに出るカメラの枠と同じ色にする。どのアイテムがどの枠か分かる。
         private Color itemColor = Color.FromRgb(0xFF, 0x99, 0x00);
 
-        // 中身を持たないアイテムなので、伸ばせる長さに上限は無い。
-        // YMM4 の図形やテキストも同じく TimeSpan.Zero を返す。
         public override TimeSpan OriginalContentLength => TimeSpan.Zero;
 
         public override TimeSpan ContentLength => TimeSpan.Zero;
 
-        /// <summary>Z の初期値。原点を正面から見る位置に置く。</summary>
         private const double DefaultZ = SceneProjection.DefaultFocalDistance * WorldScale.PixelsPerUnit;
 
-        /// <summary>画角を使い始めたときに、見え方があまり変わらない値。</summary>
         private const double DefaultFieldOfView = 57;
 
         public CameraState GetState(in FrameContext itemTime)
@@ -135,26 +116,12 @@ namespace YMM43D.Camera
                 IsFieldOfViewEnabled ? FieldOfView.GetFloat(itemTime) : 0f);
         }
 
-        /// <summary>
-        /// ピクセルで持っている3つの値を、ワールド空間の位置に直します。
-        /// </summary>
-        /// <remarks>
-        /// 位置をピクセルで指定させるのは、3D 空間の単位を意識せずに他のアイテムと
-        /// 同じ感覚で置けるようにするためです。Y は画面と同じく下向きが正。
-        /// </remarks>
         private static Vector3 ToWorld(Animation x, Animation y, Animation z, in FrameContext itemTime)
             => new(
                 WorldScale.ToWorld(x.GetFloat(itemTime)),
                 -WorldScale.ToWorld(y.GetFloat(itemTime)),
                 WorldScale.ToWorld(z.GetFloat(itemTime)));
 
-        /// <summary>
-        /// <paramref name="from"/> から <paramref name="to"/> を見るときの水平・垂直の回転角。
-        /// </summary>
-        /// <remarks>
-        /// <see cref="Rotation3D.ForCamera"/> の順（傾き→垂直→水平）で組み立てた向きを
-        /// 逆に解きます。2点が重なっているときは正面を向いたままにします。
-        /// </remarks>
         private static (float Yaw, float Pitch) GetAngles(in Vector3 from, in Vector3 to)
         {
             var direction = to - from;
@@ -177,8 +144,6 @@ namespace YMM43D.Camera
             scope.Nudge(Y, -WorldScale.ToPixels(move.Shift.Y));
             scope.Nudge(Z, WorldScale.ToPixels(move.Shift.Z));
 
-            // 注目点で向きを決めているときは、回転角を書き換えても効かない。位置だけが
-            // 動いて見る先は変わらないので、回すドラッグは注目点まわりの回り込みになる。
             if (AimMode == CameraAim.Target)
                 return;
 
@@ -199,7 +164,6 @@ namespace YMM43D.Camera
         }
     }
 
-    /// <summary>カメラの向きの決め方。</summary>
     public enum CameraAim
     {
         [Display(Name = "回転で指定", Description = "水平・垂直の回転角で向きを決めます")]

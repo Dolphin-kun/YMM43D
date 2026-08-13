@@ -27,14 +27,10 @@ namespace PixelPoints3D
 
             var amount = kind switch
             {
-                // 端まで進むと 180 度まわる。
                 DeformKind.Twist => strength * MathF.PI,
 
-                // 完全に球へ移しきるのが 100%。
                 DeformKind.Sphere => Math.Clamp(strength, 0f, 1f),
 
-                // 短いほうの辺の半分を 100% とする。絵の大きさに応じて効き方が
-                // 変わらないので、画像を差し替えても見た目が保たれる。
                 _ => strength * MathF.Min(extent.X, extent.Y) / 2f,
             };
 
@@ -50,16 +46,12 @@ namespace PixelPoints3D
         {
             DeformKind.None => half,
 
-            // 押し引きする向きは1つだけだが、余裕を見て全方向に足す。
             DeformKind.Wave => half + new Vector3(MathF.Abs(Amount)),
 
-            // 軸のまわりに回るので、軸に垂直な向きは角まで届く。
             DeformKind.Twist => Along(half) + Across(Vector3.One) * Across(half).Length(),
 
             DeformKind.Bulge => half + Axis * MathF.Abs(Amount),
 
-            // 球に移ると、元の並びの外へ出ることがある。半径は
-            // 「軸に垂直な半分の大きさ」＋「奥行きの層のぶん」まで。
             _ => Vector3.Max(half, new Vector3(SumOf(Across(half)))),
         };
 

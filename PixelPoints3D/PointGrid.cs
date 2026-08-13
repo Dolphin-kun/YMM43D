@@ -42,7 +42,6 @@ namespace PixelPoints3D
                 if (size.PointCount <= maxPoints)
                     return size;
 
-                // 3方向に効くので、立方根ぶんだけ間隔を広げれば1回で収まる見当がつく。
                 scale *= MathF.Max(1.05f, MathF.Cbrt((float)size.PointCount / maxPoints));
             }
 
@@ -59,7 +58,6 @@ namespace PixelPoints3D
             if (!float.IsFinite(size) || !float.IsFinite(spacing) || spacing <= 0f || size <= 0f)
                 return 1;
 
-            // 両端に点を置くので、区画の数より1つ多い。
             return Math.Clamp((int)MathF.Floor(size / spacing) + 1, 1, 4096);
         }
     }
@@ -122,8 +120,6 @@ namespace PixelPoints3D
 
         private static IMesh? BuildLines(ID3D11Device device, GridSize size)
         {
-            // 各点から右・下・奥へ1本ずつ。端の点は伸ばす先が無い。
-            // 対角線は区画ごとに1本。
             var count = (size.X - 1) * size.Y * size.Z
                       + size.X * (size.Y - 1) * size.Z
                       + size.X * size.Y * (size.Z - 1)
@@ -144,8 +140,6 @@ namespace PixelPoints3D
                 var to = new Vector3(x + dx, y + dy, z + dz);
                 var start = (uint)v;
 
-                // 太さの向きは「相手へ向かう方向」から決まるので、相手側の2点は
-                // 符号を入れ替えないと四角形がねじれる。
                 vertices[v++] = new GridVertex(from, new Vector2(-1, 0), to);
                 vertices[v++] = new GridVertex(from, new Vector2(1, 0), to);
                 vertices[v++] = new GridVertex(to, new Vector2(1, 0), from);
@@ -169,7 +163,6 @@ namespace PixelPoints3D
                         if (y + 1 < size.Y) Connect(x, y, z, 0, 1, 0);
                         if (z + 1 < size.Z) Connect(x, y, z, 0, 0, 1);
 
-                        // 面の分割に合わせた対角線（左上 → 右下）。
                         if (x + 1 < size.X && y + 1 < size.Y) Connect(x, y, z, 1, 1, 0);
                     }
                 }

@@ -62,22 +62,13 @@ namespace Shape3D
         public ImmutableList<FaceColor> FaceColors { get => faceColors; set => Set(ref faceColors, value); }
         private ImmutableList<FaceColor> faceColors = [];
 
-        /// <summary>
-        /// 面ごとの色の控え。編集画面には出しません。
-        /// </summary>
-        /// <remarks>
-        /// 単色のあいだは <see cref="FaceColors"/> を空にして一覧ごと隠すため、
-        /// 選んだ色をここに残しておきます。面ごとに戻したときに元の色が復活します。
-        /// </remarks>
         [Browsable(false)]
         [EditorBrowsable(EditorBrowsableState.Never)]
         public ImmutableList<Color> StoredFaceColors { get => storedFaceColors; set => Set(ref storedFaceColors, value); }
         private ImmutableList<Color> storedFaceColors = [];
 
-        /// <summary>いま選んでいる多面体の面の数。</summary>
         internal int FaceCount => Polyhedron.FaceCountOf(Solid);
 
-        /// <summary>面の並び順に並べた、実際に塗る色。</summary>
         internal IReadOnlyList<Color> ResolvedColors => Fill == CubeFill.Solid
             ? [Color]
             : FaceColors.Count > 0 ? [.. FaceColors.Select(f => f.Color)] : StoredFaceColors;
@@ -98,12 +89,8 @@ namespace Shape3D
             SyncFaceColors();
         }
 
-        /// <summary>
-        /// 面ごとの色の一覧を、いまの塗り方と面の数に合わせます。
-        /// </summary>
         private void SyncFaceColors()
         {
-            // 単色のあいだは一覧を空にする。項目が無ければ編集画面にも出ない。
             if (Fill == CubeFill.Solid)
             {
                 if (FaceColors.Count == 0)
@@ -126,13 +113,6 @@ namespace Shape3D
                 StoredFaceColors = wanted;
         }
 
-        /// <summary>
-        /// 面の数に合わせて、色の数を増減します。
-        /// </summary>
-        /// <remarks>
-        /// 減らすときは後ろを落とすだけなので、面の多い形へ戻せば前の色が残ります。
-        /// 増やす分は、向きが読めるよう明るさを散らした無彩色にします。
-        /// </remarks>
         private static ImmutableList<Color> Resize(int count, ImmutableList<Color> current)
         {
             if (current.Count == count)
@@ -150,7 +130,6 @@ namespace Shape3D
 
         private static Color DefaultColorAt(int face, int count)
         {
-            // 面の数が変わっても端が白と暗灰色になるよう、割合で決める。
             var level = (byte)(0x60 + 0x9F * face / Math.Max(1, count - 1));
 
             return Color.FromRgb(level, level, level);
@@ -176,8 +155,6 @@ namespace Shape3D
 
         private sealed class SharedData
         {
-            // 範囲は本体のプロパティと必ず同じにする。狭いと、引き継ぐときに
-            // 値が範囲の端まで丸められて戻ってくる。
             public Animation Size { get; } = new(100, 0, 100000);
             public Animation RotationX { get; } = new(0, -100000, 100000);
             public Animation RotationY { get; } = new(0, -100000, 100000);

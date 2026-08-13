@@ -3,23 +3,12 @@ using Vortice.Direct2D1;
 
 namespace YMM43D.Commons
 {
-    /// <summary>
-    /// <see cref="ID2D1Image"/> の大きさを調べるヘルパー。
-    /// </summary>
     public static class D2DImageBounds
     {
-        /// <summary>テクスチャの一辺の上限（ピクセル）。D3D11 の仕様上の最大値。</summary>
         public const int MaxTextureSize = 16384;
 
         private static readonly RawRectF Unknown = new(0, 0, 1, 1);
 
-        /// <summary>
-        /// 画像の描画範囲を取得します。分からない場合は 1×1 を返します。
-        /// </summary>
-        /// <remarks>
-        /// ビットマップは自分でサイズを持っていますが、エフェクトの出力などは
-        /// デバイスコンテキストに問い合わせないと範囲が分かりません。
-        /// </remarks>
         public static RawRectF Get(ID2D1DeviceContext? deviceContext, ID2D1Image image)
         {
             if (image is ID2D1Bitmap bitmap)
@@ -28,8 +17,6 @@ namespace YMM43D.Commons
                 return new RawRectF(0, 0, size.Width, size.Height);
             }
 
-            // 破棄済みの参照を渡すと、vtable 経由の呼び出しがアクセス違反になる。
-            // これは catch できず、プロセスごと落ちる。
             if (deviceContext is null
                 || deviceContext.NativePointer == nint.Zero
                 || image.NativePointer == nint.Zero)
@@ -37,8 +24,6 @@ namespace YMM43D.Commons
                 return Unknown;
             }
 
-            // コンテキストはスレッド安全ではない。範囲の問い合わせも内部状態を触るため、
-            // 他の Direct2D 操作と重ならないようにする。
             lock (D2DGate.Sync)
             {
                 try
@@ -48,7 +33,6 @@ namespace YMM43D.Commons
                 }
                 catch
                 {
-                    // エフェクトによっては範囲が確定できず例外になる。
                 }
             }
 
@@ -60,12 +44,6 @@ namespace YMM43D.Commons
             && float.IsFinite(bounds.Right) && float.IsFinite(bounds.Bottom)
             && bounds.Right >= bounds.Left && bounds.Bottom >= bounds.Top;
 
-        /// <summary>
-        /// 描画範囲を、テクスチャに必要なピクセル数へ切り上げます。
-        /// </summary>
-        /// <remarks>
-        /// 確保できない大きさを返さないよう、<see cref="MaxTextureSize"/> で頭打ちにします。
-        /// </remarks>
         public static (int Width, int Height) ToPixelSize(in RawRectF bounds) => (
             ToPixels(bounds.Right - bounds.Left),
             ToPixels(bounds.Bottom - bounds.Top));

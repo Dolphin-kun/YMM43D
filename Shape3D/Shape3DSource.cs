@@ -28,8 +28,6 @@ namespace Shape3D
             var shared = resources.Get(render.Device);
             var mesh = shared.GetMesh(parameter.Solid, parameter.ResolvedColors);
 
-            // 半透明でも面の前後関係が正しく見えるよう、内側を向いた面を先に描いてから
-            // 外側を向いた面を重ねる。
             shared.Pipeline.Draw(render.Context, constants, item.ToDrawSettings(FaceCulling.Front), mesh);
             shared.Pipeline.Draw(render.Context, constants, item.ToDrawSettings(FaceCulling.Back), mesh);
         }
@@ -44,9 +42,6 @@ namespace Shape3D
                    parameter.RotationY.GetFloat(itemTime),
                    parameter.RotationZ.GetFloat(itemTime));
 
-        // 頂点そのものを回して範囲を出す。外接立方体を回してから囲み直すと、
-        // 立方体の隅につられて最大で √3 ≒ 1.73 倍まで膨らみ、アイテムの枠が
-        // 見た目より大きくなる。立方体以外の形では隅がまるごと余る。
         protected override WorldBounds GetWorldBounds(in FrameContext itemTime)
             => WorldBounds.FromPoints(Polyhedron.Get(parameter.Solid).Vertices, GetLocalMatrix(itemTime));
 
@@ -56,9 +51,6 @@ namespace Shape3D
             base.Dispose();
         }
 
-        /// <summary>
-        /// デバイス1つ分の資源。形状は、形か色が変わったときだけ作り直します。
-        /// </summary>
         private sealed class SolidResources(ID3D11Device device) : IDisposable
         {
             private PolyhedronMesh? mesh;

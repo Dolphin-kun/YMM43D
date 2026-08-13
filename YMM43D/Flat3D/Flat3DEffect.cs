@@ -8,19 +8,6 @@ using YukkuriMovieMaker.Plugin.Effects;
 
 namespace YMM43D.Flat3D
 {
-    /// <summary>
-    /// アイテムの絵をそのまま 3D 空間の板として置きます。
-    /// </summary>
-    /// <remarks>
-    /// 3D の図形やエフェクトは、もともとシーンカメラの視点で出力されます。ところが
-    /// ふつうのテキストや画像は YMM4 が 2D のまま描くので、カメラを動かしても
-    /// 動きません。このエフェクトを付けたアイテムだけが、他の 3D 物体と同じように
-    /// カメラに従うようになります。
-    /// <para>
-    /// エフェクトアイテムに付けると、下のレイヤーを合成した絵が 1 枚の板になります。
-    /// 2D のアイテムをまとめてカメラに従わせたいときは、そちらが早道です。
-    /// </para>
-    /// </remarks>
     [VideoEffect("3D空間に置く", ["3D"], [])]
     public class Flat3DEffect : VideoEffect3DBase
     {
