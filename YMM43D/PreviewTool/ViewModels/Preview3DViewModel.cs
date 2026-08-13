@@ -23,7 +23,7 @@ namespace YMM43D.PreviewTool.ViewModels
 {
     public class Preview3DViewModel : Bindable, ITimelineToolViewModel, IDisposable
     {
-        private const int DefaultCameraLength = 300;
+        private const int DefaultItemLength = 300;
 
         private readonly DisposeCollector disposer = new();
         private readonly Preview3DRenderer renderer = new();
@@ -67,10 +67,12 @@ namespace YMM43D.PreviewTool.ViewModels
             set => Set(ref insertsKeyFrame, value, nameof(InsertsKeyFrame));
         }
 
-        public bool CanAddCamera => timeline is not null;
+        public bool CanAddItem => timeline is not null;
 
         public ICommand ResetToSceneCameraCommand { get; }
         public ICommand AddCameraCommand { get; }
+        public ICommand AddLightCommand { get; }
+        public ICommand AddEnvironmentCommand { get; }
         public ICommand FocusSelectedCommand { get; }
         public ICommand ViewAllCommand { get; }
         public ICommand LevelRollCommand { get; }
@@ -83,7 +85,9 @@ namespace YMM43D.PreviewTool.ViewModels
             sceneBuilder = new PreviewSceneBuilder(renderer.DefaultProvider);
 
             ResetToSceneCameraCommand = new ActionCommand(_ => true, _ => ResetToSceneCamera());
-            AddCameraCommand = new ActionCommand(_ => CanAddCamera, _ => AddCamera());
+            AddCameraCommand = new ActionCommand(_ => CanAddItem, _ => AddItem(() => new CameraItem()));
+            AddLightCommand = new ActionCommand(_ => CanAddItem, _ => AddItem(() => new LightItem()));
+            AddEnvironmentCommand = new ActionCommand(_ => CanAddItem, _ => AddItem(() => new EnvironmentItem()));
             FocusSelectedCommand = new ActionCommand(_ => true, _ => FocusSelected());
             ViewAllCommand = new ActionCommand(_ => true, _ => ViewAll());
             LevelRollCommand = new ActionCommand(_ => true, _ => LevelRoll());
@@ -104,7 +108,7 @@ namespace YMM43D.PreviewTool.ViewModels
 
             toolInfo = info;
             timeline = info.Timeline;
-            OnPropertyChanged(nameof(CanAddCamera));
+            OnPropertyChanged(nameof(CanAddItem));
 
             if (timeline is null)
                 return;
@@ -220,7 +224,7 @@ namespace YMM43D.PreviewTool.ViewModels
                 ? EditScope.AtFrame(timeline.CurrentFrame - item.Frame)
                 : EditScope.Whole;
 
-        public void AddCamera()
+        public void AddItem(Func<BaseItem> create)
         {
             if (timeline is null)
                 return;
@@ -229,12 +233,11 @@ namespace YMM43D.PreviewTool.ViewModels
 
             for (var layer = 0; layer <= timeline.MaxLayer + 1; layer++)
             {
-                var item = new CameraItem
-                {
-                    Frame = frame,
-                    Length = DefaultCameraLength,
-                    Layer = layer,
-                };
+                var item = create();
+
+                item.Frame = frame;
+                item.Length = DefaultItemLength;
+                item.Layer = layer;
 
                 if (timeline.TryAddItems([item], frame, layer, true))
                     return;

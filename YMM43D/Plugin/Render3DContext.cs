@@ -23,6 +23,6 @@ namespace YMM43D.Plugin
         }
 
         public TransformConstants CreateConstants(in Matrix4x4 world, float opacity, bool unlit = false)
-            => TransformConstants.Create(world, View, Projection, opacity, Lighting, unlit);
+            => SceneConstants.Create(world, View, Projection, opacity, Lighting, unlit);
     }
 }

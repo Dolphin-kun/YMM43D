@@ -6,7 +6,7 @@ using YMM43D.Plugin;
 using YMM43D.Scene3D;
 using YukkuriMovieMaker.Commons;
 
-namespace YMM43D.Flat3D
+namespace YMM43D.Effects
 {
     internal sealed class Flat3DProcessor : VideoEffect3DProcessorBase
     {

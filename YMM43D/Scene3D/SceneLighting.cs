@@ -1,7 +1,49 @@
 using System.Numerics;
+using YMM43D.Graphics;
 
 namespace YMM43D.Scene3D
 {
+    public static class SceneConstants
+    {
+        public static TransformConstants Create(
+            in Matrix4x4 world,
+            in Matrix4x4 view,
+            in Matrix4x4 projection,
+            float opacity,
+            SceneLighting? lighting = null,
+            bool unlit = false)
+        {
+            var scene = lighting ?? SceneLighting.Default;
+            var fog = scene.Fog;
+
+            var constants = TransformConstants.Create(world, view, projection, opacity, unlit);
+
+            constants.Ambient = new Vector4(scene.Ambient, 1f);
+            constants.FogColor = new Vector4(fog.Color, fog.IsEnabled ? fog.Density : 0f);
+            constants.Options.Z = fog.Start;
+            constants.Options.W = fog.End;
+
+            for (var i = 0; i < SceneLighting.MaxLights; i++)
+                constants.SetLight(i, ToConstants(scene.Lights, i));
+
+            return constants;
+        }
+
+        private static LightConstants ToConstants(IReadOnlyList<SceneLight> lights, int index)
+        {
+            if (index >= lights.Count)
+                return default;
+
+            var light = lights[index];
+
+            return new LightConstants
+            {
+                Vector = new Vector4(light.Vector, light.Kind == LightKind.Point ? 1f : 0f),
+                Color = new Vector4(light.Color, light.Reach),
+            };
+        }
+    }
+
     public enum LightKind
     {
         Directional,

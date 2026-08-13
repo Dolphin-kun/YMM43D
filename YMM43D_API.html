@@ -119,7 +119,7 @@ YMM43D.Commons       YMM4 のデバイスや画像との橋渡し。
 YMM43D.Items         タイムラインに置くアイテム。カメラ・光源・環境。
 YMM43D.Plugin        プラグイン作者が使う公開面。基底クラスとインターフェース。
       ↓
-YMM43D.Flat3D        「3D空間に置く」エフェクト。
+YMM43D.Effects       同梱のエフェクト（「3D空間に置く」）。
 YMM43D.PreviewTool   3Dプレビューのツールウィンドウ。</pre>
 </div>
 
@@ -189,7 +189,7 @@ YMM43D.PreviewTool   3Dプレビューのツールウィンドウ。</pre>
 <tr><td><code>Shape3D</code></td><td>3Dアイテム</td><td>図形</td><td><code>Shape3DSourceBase</code> の最小構成</td></tr>
 <tr><td><code>Extrusion3D</code></td><td>立体化3D</td><td>映像エフェクト</td><td>入力画像をテクスチャに使う。レイマーチングと <code>SV_Depth</code></td></tr>
 <tr><td><code>PixelPoints3D</code></td><td>点群3D</td><td>映像エフェクト</td><td>頂点シェーダーで形を組み立てる。複数の形状を 1 つのシェーダーで描き分ける</td></tr>
-<tr><td><code>YMM43D.Flat3D</code></td><td>3D空間に置く</td><td>映像エフェクト</td><td>入力画像を板として置く。実寸と回転を自分で扱う（<code>ScalesToInputSize</code> が false）例</td></tr>
+<tr><td><code>YMM43D.Effects</code></td><td>3D空間に置く</td><td>映像エフェクト</td><td>入力画像を板として置く。実寸と回転を自分で扱う（<code>ScalesToInputSize</code> が false）例</td></tr>
 </table>
 
 <p>
@@ -709,6 +709,8 @@ var pipeline = pipelines.Get(render.Device);</pre>
 定数バッファは <code>TransformConstants</code> です。
 <code>Render3DContext.CreateConstants</code> がシーンの光を込みで組み立てるので、
 自作のマテリアルでもこれを渡せば陰影と霧が効きます。
+<code>Graphics</code> は GPU のことだけを知る層なので、光を流し込むのは
+<code>Scene3D.SceneConstants</code> の役目です。
 自前の <code>cbuffer</code> を持つマテリアルは、<code>ShaderSource.TransformFields</code> を先頭に置き、
 C# 側の構造体の先頭に <code>TransformConstants</code> を埋めれば、並びが食い違いません
 （「立体化3D」がこの形です）。

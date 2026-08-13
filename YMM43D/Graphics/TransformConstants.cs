@@ -1,6 +1,5 @@
-using System.Numerics;
+﻿using System.Numerics;
 using System.Runtime.InteropServices;
-using YMM43D.Scene3D;
 
 namespace YMM43D.Graphics
 {
@@ -10,12 +9,6 @@ namespace YMM43D.Graphics
         public Vector4 Vector;
 
         public Vector4 Color;
-
-        public static LightConstants From(in SceneLight light) => new()
-        {
-            Vector = new Vector4(light.Vector, light.Kind == LightKind.Point ? 1f : 0f),
-            Color = new Vector4(light.Color, light.Reach),
-        };
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -56,40 +49,34 @@ namespace YMM43D.Graphics
             in Matrix4x4 view,
             in Matrix4x4 projection,
             float opacity,
-            SceneLighting? lighting = null,
-            bool unlit = false)
+            bool unlit)
         {
-            var scene = lighting ?? SceneLighting.Default;
-            var lights = scene.Lights;
-            var fog = scene.Fog;
-
             Matrix4x4.Invert(view, out var eye);
 
             if (!Matrix4x4.Invert(world, out var worldInverse))
                 worldInverse = Matrix4x4.Identity;
 
-            var constants = new TransformConstants
+            return new TransformConstants
             {
                 WorldViewProjection = Matrix4x4.Transpose(world * view * projection),
                 World = Matrix4x4.Transpose(world),
                 WorldInverse = Matrix4x4.Transpose(worldInverse),
                 CameraPosition = new Vector4(eye.Translation, 1f),
-                Ambient = new Vector4(scene.Ambient, 1f),
-                FogColor = new Vector4(fog.Color, fog.IsEnabled ? fog.Density : 0f),
-                Options = new Vector4(opacity, unlit ? 1f : 0f, fog.Start, fog.End),
+                Ambient = Vector4.Zero,
+                FogColor = Vector4.Zero,
+                Options = new Vector4(opacity, unlit ? 1f : 0f, 0f, 1f),
             };
-
-            constants.Light0 = At(lights, 0);
-            constants.Light1 = At(lights, 1);
-            constants.Light2 = At(lights, 2);
-            constants.Light3 = At(lights, 3);
-
-            return constants;
         }
 
-        private static LightConstants At(IReadOnlyList<SceneLight> lights, int index)
-            => index < lights.Count
-                ? LightConstants.From(lights[index])
-                : new LightConstants { Vector = Vector4.Zero, Color = Vector4.Zero };
+        public void SetLight(int index, in LightConstants light)
+        {
+            switch (index)
+            {
+                case 0: Light0 = light; break;
+                case 1: Light1 = light; break;
+                case 2: Light2 = light; break;
+                case 3: Light3 = light; break;
+            }
+        }
     }
 }

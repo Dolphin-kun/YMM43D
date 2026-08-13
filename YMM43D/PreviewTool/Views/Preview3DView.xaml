@@ -21,14 +21,24 @@
 
         <!-- 背景は塗らずに、置かれている場所の色をそのまま使う -->
         <Menu Grid.Row="0" Background="Transparent" Margin="0" Padding="0">
-            <MenuItem Header="カメラ">
-                <MenuItem Header="カメラを追加"
+            <MenuItem Header="追加">
+                <MenuItem Header="3Dカメラ"
                           Command="{Binding AddCameraCommand}"
-                          IsEnabled="{Binding CanAddCamera}"
-                          ToolTip="いまの再生位置に「3Dカメラ」アイテムを置きます。空いているレイヤーを下から探します。"/>
+                          IsEnabled="{Binding CanAddItem}"
+                          ToolTip="いまの再生位置に「3Dカメラ」アイテムを置きます。レイヤー番号がいちばん大きいものが使われます。"/>
 
-                <Separator/>
+                <MenuItem Header="3D光源"
+                          Command="{Binding AddLightCommand}"
+                          IsEnabled="{Binding CanAddItem}"
+                          ToolTip="いまの再生位置に「3D光源」アイテムを置きます。置いた分だけ足し合わさります（4灯まで）。1つも置かなければ、決まった光が当たります。"/>
 
+                <MenuItem Header="3D環境"
+                          Command="{Binding AddEnvironmentCommand}"
+                          IsEnabled="{Binding CanAddItem}"
+                          ToolTip="いまの再生位置に「3D環境」アイテムを置きます。環境光と霧を決めます。レイヤー番号がいちばん大きいものが使われます。"/>
+            </MenuItem>
+
+            <MenuItem Header="カメラ">
                 <MenuItem Header="カメラ追従"
                           IsCheckable="True"
                           IsChecked="{Binding DrivesSceneCamera}"
