@@ -12,7 +12,8 @@ namespace YMM43D.Camera
         private const float MinFieldOfViewDegrees = 1f;
         private const float MaxFieldOfViewDegrees = 179f;
 
-        private const float NearPlane = 0.1f;
+        public const float NearPlane = 0.1f;
+
         private const float FarPlane = 1000f;
 
         public static float GetPixelsPerTangent(in CameraState camera, float screenHeight)

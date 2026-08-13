@@ -14,9 +14,7 @@ namespace YMM43D.Plugin
     {
         private const int MaxRenderSize = 4096;
 
-        private const float MinViewDistance = 0.01f;
-
-        private const float MaxTangent = 64f;
+        private const float VisibleMargin = 0.5f;
 
         private readonly Renderer3DTo2D renderer = new();
 
@@ -41,11 +39,19 @@ namespace YMM43D.Plugin
 
             var placedWorld = world * (placement ?? scene.OwnerPlacement);
 
-            var tangentToImage = ImageProjection.TangentToImage(
-                pixelsPerTangent,
-                hostAppliesPlacement ? scene.OwnerScreenPlacement : ScreenPlacement.None);
+            var screenPlacement = hostAppliesPlacement ? scene.OwnerScreenPlacement : ScreenPlacement.None;
 
-            var area = GetRenderArea(bounds, placedWorld, view, tangentToImage);
+            var tangentToImage = ImageProjection.TangentToImage(pixelsPerTangent, screenPlacement);
+
+            var visible = ImageArea.ForScreen(
+                new Vector2((float)description.ScreenSize.Width, (float)description.ScreenSize.Height),
+                screenPlacement,
+                VisibleMargin);
+
+            var area = RenderArea.Measure(
+                bounds, placedWorld, view, tangentToImage, visible,
+                SceneProjection.NearPlane, MaxRenderSize);
+
             if (area is not { } target)
             {
                 return renderer.RenderEmpty(devices);
@@ -94,66 +100,6 @@ namespace YMM43D.Plugin
             }
         }
 
-        private static RenderArea? GetRenderArea(
-            in WorldBounds bounds,
-            in Matrix4x4 world,
-            in Matrix4x4 view,
-            in Matrix3x2 tangentToImage)
-        {
-            if (bounds.IsEmpty)
-                return null;
-
-            var worldView = world * view;
-
-            var min = new Vector2(float.MaxValue);
-            var max = new Vector2(float.MinValue);
-
-            foreach (var corner in bounds.GetCorners())
-            {
-                var viewSpace = Vector3.Transform(corner, worldView);
-
-                var depth = MathF.Max(-viewSpace.Z, MinViewDistance);
-                var tangent = new Vector2(viewSpace.X / depth, viewSpace.Y / depth);
-
-                if (!IsUsable(tangent))
-                    return null;
-
-                tangent = Vector2.Clamp(tangent, new Vector2(-MaxTangent), new Vector2(MaxTangent));
-
-                var image = Vector2.Transform(tangent, tangentToImage);
-                if (!IsUsable(image))
-                    return null;
-
-                min = Vector2.Min(min, image);
-                max = Vector2.Max(max, image);
-            }
-
-            var width = (int)MathF.Ceiling(max.X - min.X);
-            var height = (int)MathF.Ceiling(max.Y - min.Y);
-
-            if (width <= 0 || height <= 0)
-                return null;
-
-            if (width > MaxRenderSize)
-            {
-                min.X += (width - MaxRenderSize) / 2f;
-                width = MaxRenderSize;
-            }
-
-            if (height > MaxRenderSize)
-            {
-                min.Y += (height - MaxRenderSize) / 2f;
-                height = MaxRenderSize;
-            }
-
-            return new RenderArea(width, height, min);
-        }
-
-        private static bool IsUsable(in Vector2 value)
-            => float.IsFinite(value.X) && float.IsFinite(value.Y);
-
         public void Dispose() => renderer.Dispose();
-
-        private readonly record struct RenderArea(int Width, int Height, Vector2 Origin);
     }
 }

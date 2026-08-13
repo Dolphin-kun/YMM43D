@@ -26,48 +26,48 @@ namespace YMM43D.Commons
             if (tracker.HasChanged(SceneCameraResolver.Resolve(timeline)))
                 isPending = true;
 
-            if (!isPending)
+            return Apply(timeline);
+        }
+
+        public void ForceRefresh(Timeline timeline)
+        {
+            isPending = true;
+
+            if (!IsDue)
+                return;
+
+            tracker.Sync(SceneCameraResolver.Resolve(timeline));
+
+            Apply(timeline);
+        }
+
+        private bool IsDue => Environment.TickCount64 - lastRefreshAt >= MinIntervalMs;
+
+        private bool Apply(Timeline timeline)
+        {
+            if (!isPending || !IsDue)
                 return false;
+
+            lastRefreshAt = Environment.TickCount64;
+            isPending = false;
 
             var frame = timeline.CurrentFrame;
             var isAdvancing = lastKnownFrame >= 0 && lastKnownFrame != frame;
             lastKnownFrame = frame;
 
-            if (isAdvancing)
+            NotifyCameraSync(timeline);
+
+            if (!isAdvancing)
             {
-                isPending = false;
-                NotifyCameraSync(timeline);
-                return true;
+                NudgeCurrentFrame(timeline);
+                lastKnownFrame = timeline.CurrentFrame;
             }
-
-            var now = Environment.TickCount64;
-            if (now - lastRefreshAt < MinIntervalMs)
-                return false;
-
-            lastRefreshAt = now;
-            isPending = false;
-            Refresh(timeline);
-            lastKnownFrame = timeline.CurrentFrame;
 
             return true;
         }
 
-        public void ForceRefresh(Timeline timeline)
-        {
-            tracker.Sync(SceneCameraResolver.Resolve(timeline));
-            isPending = true;
-
-            RefreshIfCameraChanged(timeline);
-        }
-
         public static FrameContext GetTime(Timeline timeline)
             => new(timeline.CurrentFrame, Math.Max(1, timeline.Length), Math.Max(1, timeline.VideoInfo.FPS));
-
-        private static void Refresh(Timeline timeline)
-        {
-            NotifyCameraSync(timeline);
-            NudgeCurrentFrame(timeline);
-        }
 
         private static void NotifyCameraSync(Timeline timeline)
         {
