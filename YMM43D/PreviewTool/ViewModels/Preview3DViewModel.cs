@@ -71,6 +71,10 @@ namespace YMM43D.PreviewTool.ViewModels
 
         public ICommand ResetToSceneCameraCommand { get; }
         public ICommand AddCameraCommand { get; }
+        public ICommand FocusSelectedCommand { get; }
+        public ICommand ViewAllCommand { get; }
+        public ICommand LevelRollCommand { get; }
+        public ICommand ViewFromCommand { get; }
 
         public Preview3DViewModel()
         {
@@ -78,6 +82,10 @@ namespace YMM43D.PreviewTool.ViewModels
 
             ResetToSceneCameraCommand = new ActionCommand(_ => true, _ => ResetToSceneCamera());
             AddCameraCommand = new ActionCommand(_ => CanAddCamera, _ => AddCamera());
+            FocusSelectedCommand = new ActionCommand(_ => true, _ => FocusSelected());
+            ViewAllCommand = new ActionCommand(_ => true, _ => ViewAll());
+            LevelRollCommand = new ActionCommand(_ => true, _ => LevelRoll());
+            ViewFromCommand = new ActionCommand(_ => true, p => ViewFrom(p as string));
         }
 
         public void SetTimelineToolInfo(TimelineToolInfo info)
@@ -142,6 +150,94 @@ namespace YMM43D.PreviewTool.ViewModels
         {
             freeCamera.Reset();
             freeCamera.EnsureInitialized(ResolveCamera());
+        }
+
+        /// <summary>
+        /// 選んでいるアイテムが画面に収まるまで寄ります。
+        /// </summary>
+        /// <remarks>
+        /// プレビューで掴んだものを優先し、無ければタイムラインで選んでいるものを見ます。
+        /// どちらも無いときは何もしません。見当違いの所へ飛ぶより、動かない方が分かります。
+        /// </remarks>
+        public void FocusSelected()
+        {
+            var item = selected ?? timeline?.SelectedItems.OfType<IVideoItem>().FirstOrDefault();
+
+            if (item is not null)
+                Focus(item);
+        }
+
+        /// <summary>出ているものが全部入るまで引きます。</summary>
+        public void ViewAll() => Focus(null);
+
+        private void Focus(IVideoItem? item)
+        {
+            if (renderer.GetBounds(item) is not { } bounds)
+                return;
+
+            ApplyCameraMove(basis => freeCamera.Focus(bounds, basis));
+        }
+
+        /// <summary>傾きを 0 に戻します。</summary>
+        public void LevelRoll() => ApplyCameraMove(basis => FreeCameraController.LevelRoll(basis));
+
+        /// <summary>決まった向きから見ます。</summary>
+        /// <param name="name"><see cref="PresetViews"/> の名前。</param>
+        public void ViewFrom(string? name)
+        {
+            if (name is null || !PresetViews.TryGetValue(name, out var view))
+                return;
+
+            ApplyCameraMove(basis => freeCamera.ViewFrom(view.Yaw, view.Pitch, basis));
+        }
+
+        /// <summary>
+        /// 決まった向きから見るときの、水平・垂直の回転角。
+        /// </summary>
+        /// <remarks>
+        /// 真上・真下は視線が定まらなくなる手前で止めます。ちょうど真上から見ると
+        /// 水平方向の向きが決められません。
+        /// </remarks>
+        private static readonly Dictionary<string, (float Yaw, float Pitch)> PresetViews = new()
+        {
+            ["Front"] = (0f, 0f),
+            ["Back"] = (180f, 0f),
+            ["Right"] = (90f, 0f),
+            ["Left"] = (-90f, 0f),
+            ["Top"] = (0f, -CameraState.MaxPitch),
+            ["Bottom"] = (0f, CameraState.MaxPitch),
+        };
+
+        /// <summary>
+        /// カメラの動きを、いま動かすべき相手に効かせます。
+        /// </summary>
+        /// <remarks>
+        /// 「カメラ追従」が入っていればタイムラインのカメラアイテムを、そうでなければ
+        /// プレビュー専用の視点を動かします。動かす量はどちらの場合も相手の現在値から
+        /// 決めるので、<paramref name="make"/> にはその値が渡ります。
+        /// </remarks>
+        private void ApplyCameraMove(Func<CameraState, CameraMove> make)
+        {
+            if (timeline is null)
+                return;
+
+            var active = drivesSceneCamera ? SceneCameraResolver.Find(timeline) : null;
+            var basis = active is { } found ? found.Source.GetState(found.ItemTime) : freeCamera.State;
+
+            freeCamera.EnsureInitialized(basis);
+
+            var move = make(basis);
+            if (move.IsZero)
+                return;
+
+            if (active is not { } target)
+            {
+                freeCamera.Apply(move);
+                return;
+            }
+
+            target.Source.Move(move);
+            refresher?.ForceRefresh(timeline);
         }
 
         /// <summary>
@@ -238,7 +334,11 @@ namespace YMM43D.PreviewTool.ViewModels
         /// 左ドラッグは、アイテムの上から始めればそのアイテムを動かし、何も無い所から
         /// 始めればカメラを回します。同じボタンで両方できるのは、掴む物があるかどうかが
         /// 押した瞬間に決まるからです。アイテムの上でもカメラを回したいときは
-        /// Alt を押しながらドラッグしてください。右ドラッグとホイールは常にカメラです。
+        /// Alt を押しながらドラッグしてください。中ドラッグ・右ドラッグ・ホイールは
+        /// 常にカメラです。
+        /// <para>
+        /// 左と中は修飾キーで意味が変わります。Shift で平行移動、Ctrl で傾きです。
+        /// </para>
         /// </remarks>
         private void OnMouseAction(Point position, D3D11Host.MouseEventKind kind, int delta)
         {
@@ -248,24 +348,12 @@ namespace YMM43D.PreviewTool.ViewModels
             if (HandleItemDrag(position, kind))
                 return;
 
-            // カメラを直接動かす場合の基準は、いま効いているカメラアイテムの値。
-            // 回る軸と移動量の大きさがそこから決まる。
-            var active = drivesSceneCamera ? SceneCameraResolver.Find(timeline) : null;
-            var basis = active is { } found ? found.Source.GetState(found.ItemTime) : freeCamera.State;
+            var modifiers = D3D11Host.CurrentModifiers;
 
-            freeCamera.EnsureInitialized(basis);
-
-            if (freeCamera.HandleMouse(position, kind, delta, basis) is not { } move || move.IsZero)
-                return;
-
-            if (active is not { } target)
-            {
-                freeCamera.Apply(move);
-                return;
-            }
-
-            target.Source.Move(move);
-            refresher?.ForceRefresh(timeline);
+            // 押した瞬間はドラッグの種類を覚えるだけで、動く量は返ってこない。
+            // その場合に相手を探しに行っても無駄なので、差分が出てから振り分ける。
+            ApplyCameraMove(basis =>
+                freeCamera.HandleMouse(position, kind, delta, modifiers, basis) ?? CameraMove.None);
         }
 
         /// <summary>
@@ -334,17 +422,61 @@ namespace YMM43D.PreviewTool.ViewModels
 
         private static Vector2 ToVector(Point position) => new((float)position.X, (float)position.Y);
 
+        private void OnKeyAction(Key key, ModifierKeys modifiers) => HandleKey(key, modifiers);
+
         /// <summary>
         /// プレビュー上のキー操作。
         /// </summary>
+        /// <returns>受け取ったキーなら <c>true</c>。</returns>
         /// <remarks>
-        /// 3D表示は子ウィンドウなので、WPF のキー入力は届きません。
-        /// <see cref="D3D11Host"/> が拾ったものをここで解釈します。
+        /// 3D表示は子ウィンドウなので、WPF のキー入力はそのままでは届きません。
+        /// <see cref="D3D11Host"/> が拾ったものと、枠の側で拾ったものの両方がここに来ます。
+        /// <para>
+        /// テンキーの割り当ては Blender に合わせています。
+        /// </para>
         /// </remarks>
-        private void OnKeyAction(Key key, ModifierKeys modifiers)
+        public bool HandleKey(Key key, ModifierKeys modifiers)
         {
-            if (key == Key.R && modifiers == ModifierKeys.Control)
-                ResetToSceneCamera();
+            var control = (modifiers & ModifierKeys.Control) != 0;
+            var shift = (modifiers & ModifierKeys.Shift) != 0;
+
+            switch (key)
+            {
+                case Key.R when control:
+                    ResetToSceneCamera();
+                    return true;
+
+                case Key.R when shift:
+                    LevelRoll();
+                    return true;
+
+                case Key.F when modifiers == ModifierKeys.None:
+                    FocusSelected();
+                    return true;
+
+                case Key.Home when modifiers == ModifierKeys.None:
+                    ViewAll();
+                    return true;
+
+                case Key.NumPad0:
+                    DrivesSceneCamera = !DrivesSceneCamera;
+                    return true;
+
+                case Key.NumPad1:
+                    ViewFrom(control ? "Back" : "Front");
+                    return true;
+
+                case Key.NumPad3:
+                    ViewFrom(control ? "Left" : "Right");
+                    return true;
+
+                case Key.NumPad7:
+                    ViewFrom(control ? "Bottom" : "Top");
+                    return true;
+
+                default:
+                    return false;
+            }
         }
 
         /// <summary>

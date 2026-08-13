@@ -182,7 +182,15 @@ YMM43D.PreviewTool   3Dプレビューのツールウィンドウ。</pre>
 <tr><td><code>Shape3D</code></td><td>3Dアイテム</td><td>図形</td><td><code>Shape3DSourceBase</code> の最小構成</td></tr>
 <tr><td><code>Extrusion3D</code></td><td>立体化3D</td><td>映像エフェクト</td><td>入力画像をテクスチャに使う。レイマーチングと <code>SV_Depth</code></td></tr>
 <tr><td><code>PixelPoints3D</code></td><td>点群3D</td><td>映像エフェクト</td><td>頂点シェーダーで形を組み立てる。複数の形状を 1 つのシェーダーで描き分ける</td></tr>
+<tr><td><code>YMM43D.Flat3D</code></td><td>3D空間に置く</td><td>映像エフェクト</td><td>入力画像を板として置くだけの最小構成。設定を持たないエフェクトの例</td></tr>
 </table>
+
+<p>
+「3D空間に置く」は、ふつうの 2D アイテムをシーンカメラに従わせるためのものです。
+3D の図形やエフェクトはもともとシーンカメラの視点で出力されますが、テキストや画像は
+YMM4 が 2D のまま描くのでカメラの影響を受けません。このエフェクトを付けると、他の 3D
+物体と同じ扱いになります。
+</p>
 
 <p>プラグインのプロジェクトから YMM43D.dll を参照します。YMM4 本体の DLL 群と同じ場所に配置してください。</p>
 

@@ -15,14 +15,14 @@ namespace YMM43D.PreviewTool.Views
 
         private void UserControl_PreviewKeyDown(object sender, KeyEventArgs e)
         {
-            if (e.Key != Key.R || (Keyboard.Modifiers & ModifierKeys.Control) != ModifierKeys.Control)
+            if (DataContext is not Preview3DViewModel viewModel)
                 return;
 
-            if (DataContext is Preview3DViewModel viewModel)
-            {
-                viewModel.ResetToSceneCamera();
-                e.Handled = true;
-            }
+            // テンキーなどは SystemKey ではなく Key に来る。IME 経由で Key.ImeProcessed に
+            // なる場合があるので、そのときは元のキーを見る。
+            var key = e.Key == Key.ImeProcessed ? e.ImeProcessedKey : e.Key;
+
+            e.Handled = viewModel.HandleKey(key, Keyboard.Modifiers);
         }
     }
 }

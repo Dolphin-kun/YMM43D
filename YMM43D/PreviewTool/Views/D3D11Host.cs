@@ -24,7 +24,7 @@ namespace YMM43D.PreviewTool.Views
         public event Action<ID3D11Device, ID3D11DeviceContext, int, int>? Render;
         public event Action<Point, MouseEventKind, int>? MouseAction;
         public event Action<Key, ModifierKeys>? KeyAction;
-        public enum MouseEventKind { Down, Move, Up, Wheel, RightDown, RightUp }
+        public enum MouseEventKind { Down, Move, Up, Wheel, RightDown, RightUp, MiddleDown, MiddleUp }
 
         /// <summary>
         /// いま押されている修飾キー。
@@ -264,6 +264,18 @@ namespace YMM43D.PreviewTool.Views
                 case 0x0205: // RBUTTONUP
                     ReleaseCapture();
                     MouseAction?.Invoke(GetPoint(lParam), MouseEventKind.RightUp, 0);
+                    handled = true;
+                    break;
+                case 0x0207: // MBUTTONDOWN
+                    SetFocus(hwnd);
+                    this.Focus();
+                    SetCapture(hwnd);
+                    MouseAction?.Invoke(GetPoint(lParam), MouseEventKind.MiddleDown, 0);
+                    handled = true;
+                    break;
+                case 0x0208: // MBUTTONUP
+                    ReleaseCapture();
+                    MouseAction?.Invoke(GetPoint(lParam), MouseEventKind.MiddleUp, 0);
                     handled = true;
                     break;
                 case 0x0200: // MOUSEMOVE

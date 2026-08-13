@@ -166,6 +166,37 @@ namespace YMM43D.PreviewTool
             return found;
         }
 
+        /// <summary>
+        /// 掴めるものが占めている範囲を返します。
+        /// </summary>
+        /// <param name="item">
+        /// 調べたいアイテム。<c>null</c> を渡すと、出ているものすべてを含む範囲を返します。
+        /// </param>
+        /// <remarks>
+        /// 注視するときに使います。掴む判定と同じ箱から出すので、案内が出ている所と
+        /// 寄る先がずれません。
+        /// </remarks>
+        public WorldBounds? GetBounds(IVideoItem? item)
+        {
+            var min = new Vector3(float.MaxValue);
+            var max = new Vector3(float.MinValue);
+            var found = false;
+
+            foreach (var target in pickTargets)
+            {
+                if (item is not null && target.Item != item)
+                    continue;
+
+                var box = WorldBounds.FromCube(1f).Transform(target.World);
+
+                min = Vector3.Min(min, box.Min);
+                max = Vector3.Max(max, box.Max);
+                found = true;
+            }
+
+            return found ? new WorldBounds(min, max) : null;
+        }
+
         /// <summary>ワールド空間の点を、描画先のピクセル位置に戻します。</summary>
         public Vector2? ToScreen(in Vector3 point)
         {

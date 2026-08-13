@@ -1,7 +1,9 @@
 using System.Numerics;
 using System.Windows;
+using System.Windows.Input;
 using YMM43D.Camera;
 using YMM43D.PreviewTool.Views;
+using YMM43D.Scene3D;
 
 namespace YMM43D.PreviewTool
 {
@@ -18,6 +20,9 @@ namespace YMM43D.PreviewTool
         private const float RotateSpeed = 0.5f;
         private const float PanSpeed = 0.0015f;
 
+        /// <summary>傾ける速さ。回すより控えめにしないと、少し動かしただけで大きく傾く。</summary>
+        private const float RollSpeed = 0.3f;
+
         /// <summary>ホイール1目盛りで、軸までの距離が何倍になるか。</summary>
         private const float DollyRatio = 0.9f;
 
@@ -25,7 +30,10 @@ namespace YMM43D.PreviewTool
         private const float MinPivotDistance = 0.5f;
         private const float MaxPivotDistance = 200f;
 
-        private enum DragMode { None, Rotate, Pan }
+        /// <summary>注視したものが画面に収まるよう、範囲の半径の何倍まで離れるか。</summary>
+        private const float FocusMargin = 2.5f;
+
+        private enum DragMode { None, Rotate, Pan, Roll }
 
         private CameraState state = CameraState.Default;
 
@@ -82,18 +90,24 @@ namespace YMM43D.PreviewTool
         /// <summary>
         /// マウス操作を差分に翻訳します。動かす量が無ければ <c>null</c> を返します。
         /// </summary>
+        /// <param name="modifiers">押されている修飾キー。ドラッグの意味がこれで変わります。</param>
         /// <param name="basis">
         /// いま動かそうとしているカメラの設定値。回る軸と移動量の大きさをここから
         /// 決めるので、実際に動かす相手の値を渡してください。
         /// </param>
         public CameraMove? HandleMouse(
-            Point position, D3D11Host.MouseEventKind kind, int delta, in CameraState basis)
+            Point position,
+            D3D11Host.MouseEventKind kind,
+            int delta,
+            ModifierKeys modifiers,
+            in CameraState basis)
         {
             switch (kind)
             {
                 case D3D11Host.MouseEventKind.Down:
+                case D3D11Host.MouseEventKind.MiddleDown:
                     lastMousePosition = position;
-                    drag = DragMode.Rotate;
+                    drag = GetDragMode(modifiers);
                     return null;
 
                 case D3D11Host.MouseEventKind.RightDown:
@@ -103,6 +117,7 @@ namespace YMM43D.PreviewTool
 
                 case D3D11Host.MouseEventKind.Up:
                 case D3D11Host.MouseEventKind.RightUp:
+                case D3D11Host.MouseEventKind.MiddleUp:
                     drag = DragMode.None;
                     return null;
 
@@ -122,6 +137,24 @@ namespace YMM43D.PreviewTool
         /// <summary>ドラッグしている最中かどうか。</summary>
         public bool IsDragging => drag != DragMode.None;
 
+        /// <summary>
+        /// 修飾キーからドラッグの意味を決めます。
+        /// </summary>
+        /// <remarks>
+        /// Blender と同じ割り当てです。Shift で平行移動、Ctrl で傾き、何も押さなければ
+        /// 回り込みになります。
+        /// </remarks>
+        private static DragMode GetDragMode(ModifierKeys modifiers)
+        {
+            if ((modifiers & ModifierKeys.Shift) != 0)
+                return DragMode.Pan;
+
+            if ((modifiers & ModifierKeys.Control) != 0)
+                return DragMode.Roll;
+
+            return DragMode.Rotate;
+        }
+
         private CameraMove? GetDragMove(System.Windows.Vector difference, in CameraState basis)
         {
             switch (drag)
@@ -131,6 +164,11 @@ namespace YMM43D.PreviewTool
                         -(float)difference.X * RotateSpeed,
                         -(float)difference.Y * RotateSpeed,
                         basis);
+
+                case DragMode.Roll:
+                    // 視線そのものは変わらないので、回る軸も見ている先も動かない。
+                    // 回転の順が「傾き→垂直→水平」なので、傾きは前方向に影響しない。
+                    return new CameraMove(0f, 0f, -(float)difference.X * RollSpeed, Vector3.Zero);
 
                 case DragMode.Pan:
                     // 画面上の移動量を、視点の向きに合わせた平行移動に変換する。
@@ -183,6 +221,57 @@ namespace YMM43D.PreviewTool
             pivotDistance = next;
 
             return CameraMove.Translate(shift);
+        }
+
+        /// <summary>
+        /// 傾きを 0 に戻す差分。
+        /// </summary>
+        /// <remarks>
+        /// 傾いたままだと、回り込みも平行移動も斜めに効くので直しようがなくなります。
+        /// 水平に戻す手段だけは、ドラッグとは別に用意しておきます。
+        /// </remarks>
+        public static CameraMove LevelRoll(in CameraState basis)
+            => new(0f, 0f, -basis.Roll, Vector3.Zero);
+
+        /// <summary>
+        /// 決まった向きから見る差分。
+        /// </summary>
+        /// <remarks>
+        /// 見ている先は変えずに、そのまわりを回ってその向きに付けます。真上・真下は
+        /// 視線が定まらなくなる手前で止めます。
+        /// </remarks>
+        public CameraMove ViewFrom(float yaw, float pitch, in CameraState basis)
+        {
+            var pivot = basis.Position + basis.Forward * pivotDistance;
+            var turned = basis with { Yaw = yaw, Pitch = pitch, Roll = 0f };
+
+            return new CameraMove(
+                yaw - basis.Yaw,
+                pitch - basis.Pitch,
+                -basis.Roll,
+                pivot - turned.Forward * pivotDistance - basis.Position);
+        }
+
+        /// <summary>
+        /// 与えた範囲が画面に収まる所まで寄る差分。
+        /// </summary>
+        /// <remarks>
+        /// 向きは変えずに、範囲の中心が回る軸になるよう位置だけを動かします。以後の
+        /// 回り込みや平行移動も、その範囲を中心に効くようになります。
+        /// </remarks>
+        public CameraMove Focus(in WorldBounds bounds, in CameraState basis)
+        {
+            var center = (bounds.Min + bounds.Max) / 2f;
+
+            // 板のように潰れた形でも寄りすぎないよう、下限を設ける。
+            var radius = MathF.Max(Vector3.Distance(bounds.Min, bounds.Max) / 2f, 0.05f);
+
+            var distance = Math.Clamp(radius * FocusMargin, MinPivotDistance, MaxPivotDistance);
+
+            pivotDistance = distance;
+            pivotInitialized = true;
+
+            return CameraMove.Translate(center - basis.Forward * distance - basis.Position);
         }
 
         /// <summary>
