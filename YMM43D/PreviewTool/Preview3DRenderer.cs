@@ -28,6 +28,8 @@ namespace YMM43D.PreviewTool
         private PickTarget[] pickTargets = [];
         private IReadOnlyList<SceneMarkerResolver.PlacedMarker> pickMarkers = [];
         private SceneMarkerResolver.PlacedMarker? gizmoMarker;
+        private Vector2? pendingPick;
+        private PickTarget? pickResult;
         private Vector3 frustumApex;
         private Vector3[] frustumCorners = [];
         private TransformGizmo? lastGizmo;
@@ -93,7 +95,9 @@ namespace YMM43D.PreviewTool
             var sceneCameraPose = scene.SceneCameraPose;
             var screenTangent = scene.GetScreenTangent(pixelsPerTangent);
 
-            grid.Draw(render, viewPose.Position);
+            if (scene.ShowsGrid)
+                grid.Draw(render, viewPose.Position);
+
             cameraGizmo.Draw(render, sceneCameraPose, screenTangent);
 
             frustumApex = sceneCameraPose.Position;
@@ -134,6 +138,31 @@ namespace YMM43D.PreviewTool
             lastContext = context;
             lastWidth = width;
             lastHeight = height;
+
+            // 掴む判定はここで済ませる。アイテムをもう一度描くので、いま描いたばかりの
+            // この場所――描画側と同じ鍵の内側――でなければ、デバイスを別の場所から
+            // 同時に触ることになる。
+            if (pendingPick is { } cursor)
+            {
+                pendingPick = null;
+                pickResult = ResolvePick(cursor);
+            }
+        }
+
+        public void RequestPick(Vector2 position)
+        {
+            pendingPick = position;
+            pickResult = null;
+        }
+
+        public PickTarget? TakePickResult()
+        {
+            var found = pickResult;
+
+            pickResult = null;
+            pendingPick = null;
+
+            return found;
         }
 
         private static WorldBounds GetLocalBounds(PreviewItem item, in FrameContext itemTime)
@@ -355,14 +384,10 @@ namespace YMM43D.PreviewTool
             return Vector2.Distance(point, from + span * rate);
         }
 
-        public PickTarget? Pick(Vector2 position, out PickRay ray)
+        private PickTarget? ResolvePick(Vector2 position)
         {
-            ray = default;
-
             if (CreateRay(position) is not { } cast)
                 return null;
-
-            ray = cast;
 
             var hits = new List<(float Distance, PickTarget Target)>();
 
@@ -524,6 +549,8 @@ namespace YMM43D.PreviewTool
         public IReadOnlyList<SceneMarkerResolver.PlacedMarker> Markers { get; init; } = [];
 
         public IItem? SelectedMarker { get; init; }
+
+        public bool ShowsGrid { get; init; } = true;
 
         public GizmoHandle ActiveHandle { get; init; }
     }

@@ -62,6 +62,14 @@
                           ToolTip="プレビューで見る位置を、いまシーンを撮っているカメラの位置に合わせ直します。"/>
             </MenuItem>
 
+            <MenuItem Header="表示">
+                <MenuItem Header="グリッド"
+                          IsCheckable="True"
+                          IsChecked="{Binding ShowsGrid}"
+                          InputGestureText="G"
+                          ToolTip="床の格子と、原点を通る2本の座標軸を出すかどうか。動画の出力には関係ありません。"/>
+            </MenuItem>
+
             <MenuItem Header="視点">
                 <MenuItem Header="選んだものを注目"
                           Command="{Binding FocusSelectedCommand}"

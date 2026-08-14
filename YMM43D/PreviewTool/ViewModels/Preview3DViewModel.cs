@@ -40,6 +40,7 @@ namespace YMM43D.PreviewTool.ViewModels
 
         private bool drivesSceneCamera;
         private bool insertsKeyFrame;
+        private bool showsGrid = true;
         private bool hadSelectedItem;
         private bool isDisposed;
 
@@ -65,6 +66,12 @@ namespace YMM43D.PreviewTool.ViewModels
         {
             get => insertsKeyFrame;
             set => Set(ref insertsKeyFrame, value, nameof(InsertsKeyFrame));
+        }
+
+        public bool ShowsGrid
+        {
+            get => showsGrid;
+            set => Set(ref showsGrid, value, nameof(ShowsGrid));
         }
 
         public bool CanAddItem => timeline is not null;
@@ -300,6 +307,7 @@ namespace YMM43D.PreviewTool.ViewModels
                 Selected = selected,
                 Markers = SceneMarkerResolver.Resolve(timeline),
                 SelectedMarker = selectedMarker,
+                ShowsGrid = showsGrid,
                 ActiveHandle = itemDrag.Handle,
             });
         }
@@ -361,7 +369,7 @@ namespace YMM43D.PreviewTool.ViewModels
                 && renderer.Gizmo is { } gizmo
                 && renderer.CreateRay(screen) is { } gizmoRay)
             {
-                if (renderer.GizmoMarker is { } held)
+                if (renderer.GizmoMarker is { } held && CanGrab(held))
                 {
                     return itemDrag.BeginMarker(
                         held.Source, held.ItemTime, gizmo.Origin, grabbed, gizmoRay,
@@ -376,7 +384,8 @@ namespace YMM43D.PreviewTool.ViewModels
                 }
             }
 
-            if (renderer.PickMarker(screen) is { } placed && renderer.CreateRay(screen) is { } markerRay)
+            if (renderer.PickMarker(screen) is { } placed && CanGrab(placed)
+                && renderer.CreateRay(screen) is { } markerRay)
             {
                 selected = null;
                 selectedMarker = placed.Item;
@@ -387,7 +396,13 @@ namespace YMM43D.PreviewTool.ViewModels
                     freeCamera.State.Forward, GetEditScope(placed.Item));
             }
 
-            if (renderer.Pick(screen, out var ray) is not { } picked)
+            // 掴む判定はアイテムを描き直して行う。描画の内側でしかできないので、
+            // ここで1枚描かせて、その結果を受け取る。
+            renderer.RequestPick(screen);
+            d3dHost?.RenderFrame();
+
+            if (renderer.TakePickResult() is not { } picked
+                || renderer.CreateRay(screen) is not { } ray)
             {
                 selected = null;
                 return false;
@@ -401,6 +416,11 @@ namespace YMM43D.PreviewTool.ViewModels
                 picked.Item, picked.World.Translation, GizmoHandle.Free, ray, freeCamera.State.Forward,
                 GetEditScope(picked.Item));
         }
+
+        // カメラ追従中のドラッグは、そのカメラを振る操作そのもの。目印として掴めると
+        // 向きを変える手と場所を取り合ってしまうので、追従しているカメラは掴ませない。
+        private bool CanGrab(in SceneMarkerResolver.PlacedMarker marker)
+            => !drivesSceneCamera || marker.Marker.Kind != MarkerKind.Camera;
 
         private static Vector2 ToVector(Point position) => new((float)position.X, (float)position.Y);
 
@@ -429,6 +449,10 @@ namespace YMM43D.PreviewTool.ViewModels
 
                 case Key.K when modifiers == ModifierKeys.None:
                     InsertsKeyFrame = !InsertsKeyFrame;
+                    return true;
+
+                case Key.G when modifiers == ModifierKeys.None:
+                    ShowsGrid = !ShowsGrid;
                     return true;
 
                 case Key.NumPad0 or Key.D0:
