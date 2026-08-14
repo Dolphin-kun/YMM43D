@@ -15,6 +15,8 @@ namespace YMM43D.PreviewTool
 
         private const float MarkerGrabThreshold = 16f;
 
+        private const byte PickAlphaThreshold = 8;
+
         private readonly GridRenderer grid = new();
         private readonly CameraGizmoRenderer cameraGizmo = new();
         private readonly MarkerRenderer markers = new();
@@ -26,14 +28,30 @@ namespace YMM43D.PreviewTool
         private PickTarget[] pickTargets = [];
         private IReadOnlyList<SceneMarkerResolver.PlacedMarker> pickMarkers = [];
         private SceneMarkerResolver.PlacedMarker? gizmoMarker;
+        private Vector3 frustumApex;
+        private Vector3[] frustumCorners = [];
         private TransformGizmo? lastGizmo;
         private Matrix4x4 lastViewProjection = Matrix4x4.Identity;
+        private Matrix4x4 lastView = Matrix4x4.Identity;
+        private Matrix4x4 lastProjection = Matrix4x4.Identity;
+        private SceneLighting? lastLighting;
+        private ID3D11Device? lastDevice;
+        private ID3D11DeviceContext? lastContext;
         private float lastWidth;
         private float lastHeight;
 
+        private ID3D11Texture2D? pickSurface;
+        private ID3D11RenderTargetView? pickView;
+        private ID3D11Texture2D? pickStaging;
+
         public I3DProvider DefaultProvider => flatItemProvider;
 
-        internal readonly record struct PickTarget(IVideoItem Item, Matrix4x4 World, WorldBounds Bounds);
+        internal readonly record struct PickTarget(
+            IVideoItem Item,
+            Matrix4x4 World,
+            WorldBounds Bounds,
+            I3DProvider Provider,
+            DrawContext3D Context);
 
         public void Draw(
             ID3D11Device device,
@@ -72,8 +90,14 @@ namespace YMM43D.PreviewTool
             var render = new Render3DContext(
                 device, context, viewPose.ViewMatrix, projection, scene.Lighting);
 
+            var sceneCameraPose = scene.SceneCameraPose;
+            var screenTangent = scene.GetScreenTangent(pixelsPerTangent);
+
             grid.Draw(render, viewPose.Position);
-            cameraGizmo.Draw(render, scene.SceneCameraPose, scene.GetScreenTangent(pixelsPerTangent));
+            cameraGizmo.Draw(render, sceneCameraPose, screenTangent);
+
+            frustumApex = sceneCameraPose.Position;
+            frustumCorners = CameraFrustum.WorldCorners(sceneCameraPose, screenTangent);
 
             pickMarkers = scene.Markers;
             markers.Draw(render, scene.Markers, scene.SelectedMarker);
@@ -84,7 +108,11 @@ namespace YMM43D.PreviewTool
             pickTargets =
             [
                 .. scene.Items.Select((item, i) => new PickTarget(
-                    item.Item, drawContexts[i].World, GetLocalBounds(item, drawContexts[i].Time)))
+                    item.Item,
+                    drawContexts[i].World,
+                    GetLocalBounds(item, drawContexts[i].Time),
+                    item.Provider,
+                    drawContexts[i]))
             ];
 
             gizmoMarker = FindGizmoMarker(scene);
@@ -99,6 +127,11 @@ namespace YMM43D.PreviewTool
             axisIndicator.Draw(render, viewPose, width, height);
 
             lastViewProjection = viewPose.ViewMatrix * projection;
+            lastView = viewPose.ViewMatrix;
+            lastProjection = projection;
+            lastLighting = scene.Lighting;
+            lastDevice = device;
+            lastContext = context;
             lastWidth = width;
             lastHeight = height;
         }
@@ -159,7 +192,65 @@ namespace YMM43D.PreviewTool
                 found = placed;
             }
 
-            return found;
+            return found ?? PickCameraFrustum(position);
+        }
+
+        private SceneMarkerResolver.PlacedMarker? PickCameraFrustum(Vector2 position)
+        {
+            if (!IsInsideFrustum(position))
+                return null;
+
+            foreach (var placed in pickMarkers)
+            {
+                if (placed.Marker.Kind == MarkerKind.Camera
+                    && Vector3.DistanceSquared(placed.Marker.Position, frustumApex) < 1e-8f)
+                {
+                    return placed;
+                }
+            }
+
+            return null;
+        }
+
+        private bool IsInsideFrustum(in Vector2 position)
+        {
+            if (frustumCorners.Length != 4 || ToScreen(frustumApex) is not { } apex)
+                return false;
+
+            var corners = new Vector2[4];
+
+            for (var i = 0; i < 4; i++)
+            {
+                if (ToScreen(frustumCorners[i]) is not { } spot)
+                    return false;
+
+                corners[i] = spot;
+            }
+
+            for (var i = 0; i < 4; i++)
+            {
+                var next = corners[(i + 1) % 4];
+
+                if (IsInsideTriangle(position, apex, corners[i], next)
+                    || IsInsideTriangle(position, corners[0], corners[i], next))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool IsInsideTriangle(in Vector2 point, in Vector2 a, in Vector2 b, in Vector2 c)
+        {
+            static float Side(in Vector2 from, in Vector2 to, in Vector2 point)
+                => (to.X - from.X) * (point.Y - from.Y) - (to.Y - from.Y) * (point.X - from.X);
+
+            var ab = Side(a, b, point);
+            var bc = Side(b, c, point);
+            var ca = Side(c, a, point);
+
+            return (ab >= 0f && bc >= 0f && ca >= 0f) || (ab <= 0f && bc <= 0f && ca <= 0f);
         }
 
         public PickRay? CreateRay(Vector2 position)
@@ -273,26 +364,121 @@ namespace YMM43D.PreviewTool
 
             ray = cast;
 
-            PickTarget? found = null;
-            var nearest = float.PositiveInfinity;
+            var hits = new List<(float Distance, PickTarget Target)>();
 
             foreach (var target in pickTargets)
             {
                 if (target.Item.IsLocked)
                     continue;
 
-                if (cast.IntersectBox(target.Bounds, target.World) is not { } distance || distance >= nearest)
-                    continue;
-
-                nearest = distance;
-                found = target;
+                if (cast.IntersectBox(target.Bounds, target.World) is { } distance)
+                    hits.Add((distance, target));
             }
 
-            return found;
+            hits.Sort((left, right) => left.Distance.CompareTo(right.Distance));
+
+            foreach (var (_, target) in hits)
+            {
+                if (DrawsAt(position, target))
+                    return target;
+            }
+
+            return null;
+        }
+
+        private bool DrawsAt(in Vector2 position, in PickTarget target)
+        {
+            if (lastDevice is not { } device || lastContext is not { } context
+                || lastWidth <= 0f || lastHeight <= 0f)
+            {
+                return true;
+            }
+
+            try
+            {
+                EnsurePickSurface(device);
+
+                if (pickView is not { } view || pickSurface is not { } surface || pickStaging is not { } staging)
+                    return true;
+
+                context.OMSetRenderTargets(view);
+                context.ClearRenderTargetView(view, new Color4(0f, 0f, 0f, 0f));
+
+                context.RSSetViewport(new Viewport(-position.X, -position.Y, lastWidth, lastHeight));
+
+                var render = new Render3DContext(device, context, lastView, lastProjection, lastLighting);
+
+                target.Provider.Draw(render, AsOpaque(target.Context));
+
+                context.OMSetRenderTargets([], null);
+                context.CopyResource(staging, surface);
+
+                var map = context.Map(staging, 0, MapMode.Read);
+
+                try
+                {
+                    unsafe
+                    {
+                        return ((byte*)map.DataPointer)[3] >= PickAlphaThreshold;
+                    }
+                }
+                finally
+                {
+                    context.Unmap(staging, 0);
+                }
+            }
+            catch (Exception)
+            {
+                return true;
+            }
+        }
+
+        private static DrawContext3D AsOpaque(DrawContext3D context) => new()
+        {
+            World = context.World,
+            Opacity = 1f,
+            Blend = Graphics.BlendMode.Normal,
+            IsAlwaysOnTop = context.IsAlwaysOnTop,
+            Time = context.Time,
+            Texture = context.Texture,
+        };
+
+        private void EnsurePickSurface(ID3D11Device device)
+        {
+            if (pickSurface is not null)
+                return;
+
+            var description = new Texture2DDescription
+            {
+                Width = 1,
+                Height = 1,
+                MipLevels = 1,
+                ArraySize = 1,
+                Format = Vortice.DXGI.Format.R8G8B8A8_UNorm,
+                SampleDescription = new Vortice.DXGI.SampleDescription(1, 0),
+                Usage = ResourceUsage.Default,
+                BindFlags = BindFlags.RenderTarget,
+            };
+
+            pickSurface = device.CreateTexture2D(description);
+            pickView = device.CreateRenderTargetView(pickSurface);
+            pickStaging = device.CreateTexture2D(description with
+            {
+                Usage = ResourceUsage.Staging,
+                BindFlags = BindFlags.None,
+                CPUAccessFlags = CpuAccessFlags.Read,
+            });
         }
 
         public void Dispose()
         {
+            pickView?.Dispose();
+            pickView = null;
+            pickStaging?.Dispose();
+            pickStaging = null;
+            pickSurface?.Dispose();
+            pickSurface = null;
+
             grid.Dispose();
             cameraGizmo.Dispose();
             markers.Dispose();

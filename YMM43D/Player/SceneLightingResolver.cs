@@ -28,8 +28,11 @@ namespace YMM43D.Player
 
             foreach (var item in items)
             {
-                if (item.IsHidden || frame < item.Frame || frame >= item.Frame + item.Length)
+                if (!LayerVisibility.IsShown(timeline, item)
+                    || frame < item.Frame || frame >= item.Frame + item.Length)
+                {
                     continue;
+                }
 
                 var itemTime = new FrameContext(frame - item.Frame, Math.Max(1, item.Length), fps);
 

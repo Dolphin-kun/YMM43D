@@ -30,7 +30,7 @@ namespace YMM43D.Player
 
             foreach (var candidate in items)
             {
-                if (candidate.IsHidden || candidate is not ISceneCamera camera)
+                if (candidate is not ISceneCamera camera || !LayerVisibility.IsShown(timeline, candidate))
                     continue;
 
                 if (frame < candidate.Frame || frame >= candidate.Frame + candidate.Length)

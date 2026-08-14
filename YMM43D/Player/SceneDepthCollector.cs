@@ -37,7 +37,7 @@ namespace YMM43D.Player
 
             var alive = items
                 .OfType<IVideoItem>()
-                .Where(item => !item.IsHidden && ItemPlacement.IsAliveAt(item, frame))
+                .Where(item => LayerVisibility.IsShown(timeline, item) && ItemPlacement.IsAliveAt(item, frame))
                 .Select(item => (Item: item, Time: new FrameContext(frame - item.Frame, item.Length, fps)))
                 .ToArray();
 

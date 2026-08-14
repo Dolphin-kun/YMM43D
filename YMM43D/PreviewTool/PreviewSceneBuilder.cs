@@ -1,4 +1,5 @@
 using YMM43D.Commons;
+using YMM43D.Player;
 using YMM43D.Plugin;
 using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Player.Video;
@@ -47,7 +48,7 @@ namespace YMM43D.PreviewTool
 
             var visible = items
                 .OfType<IVideoItem>()
-                .Where(item => !item.IsHidden)
+                .Where(item => LayerVisibility.IsShown(timeline, item))
                 .Where(item => frame >= item.Frame && frame < item.Frame + item.Length)
                 .OrderBy(item => item.Layer);
 

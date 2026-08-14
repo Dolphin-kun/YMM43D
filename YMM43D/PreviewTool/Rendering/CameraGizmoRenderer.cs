@@ -13,8 +13,6 @@ namespace YMM43D.PreviewTool.Rendering
     {
         private static readonly Color4 GizmoColor = new(1f, 0.6f, 0f, 1f);
 
-        private const float FrustumDepth = 1.2f;
-
         private readonly DeviceResourceCache<GizmoResources> resources;
 
         public CameraGizmoRenderer()
@@ -31,13 +29,7 @@ namespace YMM43D.PreviewTool.Rendering
 
         private static Vector3[] BuildOutline(Vector2 tangent)
         {
-            var half = tangent * FrustumDepth;
-
-            Vector3[] frame =
-            [
-                new(-half.X,  half.Y, -FrustumDepth), new( half.X,  half.Y, -FrustumDepth),
-                new( half.X, -half.Y, -FrustumDepth), new(-half.X, -half.Y, -FrustumDepth),
-            ];
+            var frame = CameraFrustum.LocalCorners(tangent);
 
             var lines = new List<Vector3>();
             void Edge(Vector3 a, Vector3 b) { lines.Add(a); lines.Add(b); }
@@ -48,7 +40,7 @@ namespace YMM43D.PreviewTool.Rendering
             for (var i = 0; i < 4; i++)
                 Edge(frame[i], frame[(i + 1) % 4]);
 
-            var peak = new Vector3(0f, half.Y * 1.4f, -FrustumDepth);
+            var peak = CameraFrustum.LocalPeak(tangent);
             Edge(frame[0], peak);
             Edge(frame[1], peak);
 

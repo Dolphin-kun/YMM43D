@@ -23,7 +23,7 @@ namespace YMM43D.Player
 
             foreach (var item in items)
             {
-                if (item.IsHidden || item is not ISceneMarkerSource source)
+                if (item is not ISceneMarkerSource source || !LayerVisibility.IsShown(timeline, item))
                     continue;
 
                 if (frame < item.Frame || frame >= item.Frame + item.Length)
