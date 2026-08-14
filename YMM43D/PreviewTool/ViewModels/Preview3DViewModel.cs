@@ -1,4 +1,5 @@
-﻿using System.ComponentModel;
+﻿using System.Collections.Immutable;
+using System.ComponentModel;
 using System.Numerics;
 using System.Windows;
 using System.Windows.Input;
@@ -37,6 +38,7 @@ namespace YMM43D.PreviewTool.ViewModels
         private TimelineSourceAndDevices? sourceAndDevices;
         private IVideoItem? selected;
         private IItem? selectedMarker;
+        private ImmutableList<IItem>? lastItems;
 
         private bool drivesSceneCamera;
         private bool insertsKeyFrame;
@@ -117,6 +119,8 @@ namespace YMM43D.PreviewTool.ViewModels
 
             toolInfo = info;
             timeline = info.Timeline;
+            lastItems = null;
+            renderer.ResetItemCaches();
             OnPropertyChanged(nameof(CanAddItem));
 
             if (timeline is null)
@@ -396,6 +400,15 @@ namespace YMM43D.PreviewTool.ViewModels
                     freeCamera.State.Forward, GetEditScope(placed.Item));
             }
 
+            // 追従中は画面いっぱいがカメラの写す絵になるので、どこを押しても
+            // 何かのアイテムに当たる。それではカメラを振る手が残らない。
+            // 狙って掴む軸ハンドルは上で拾ってあるので、ここは素通しでよい。
+            if (IsDrivingCamera)
+            {
+                selected = null;
+                return false;
+            }
+
             // 掴む判定はアイテムを描き直して行う。描画の内側でしかできないので、
             // ここで1枚描かせて、その結果を受け取る。
             renderer.RequestPick(screen);
@@ -417,10 +430,15 @@ namespace YMM43D.PreviewTool.ViewModels
                 GetEditScope(picked.Item));
         }
 
+        // 追従を入れていても、その区間にカメラアイテムが無ければ動かす相手がいない。
+        // そのときは追従していないときと同じに振る舞う。
+        private bool IsDrivingCamera
+            => drivesSceneCamera && timeline is not null && SceneCameraResolver.Find(timeline) is not null;
+
         // カメラ追従中のドラッグは、そのカメラを振る操作そのもの。目印として掴めると
         // 向きを変える手と場所を取り合ってしまうので、追従しているカメラは掴ませない。
         private bool CanGrab(in SceneMarkerResolver.PlacedMarker marker)
-            => !drivesSceneCamera || marker.Marker.Kind != MarkerKind.Camera;
+            => !IsDrivingCamera || marker.Marker.Kind != MarkerKind.Camera;
 
         private static Vector2 ToVector(Point position) => new((float)position.X, (float)position.Y);
 
@@ -520,8 +538,19 @@ namespace YMM43D.PreviewTool.ViewModels
 
         private void UpdatePreviewItems()
         {
-            if (timeline is not null)
-                sceneBuilder.UpdateItems(timeline);
+            if (timeline is null)
+                return;
+
+            // Items は差し替え式なので、並びが変われば別のものになる。変わったなら
+            // YMM4 側が合成を組み直しているので、こちらが抱えている絵は捨てる。
+            // 古いまま触ると、解放済みの領域へ飛んでプロセスごと落ちる。
+            if (!ReferenceEquals(lastItems, timeline.Items))
+            {
+                lastItems = timeline.Items;
+                renderer.ResetItemCaches();
+            }
+
+            sceneBuilder.UpdateItems(timeline);
         }
 
         public void Dispose()

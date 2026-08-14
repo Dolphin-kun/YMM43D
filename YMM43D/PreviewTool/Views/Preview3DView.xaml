@@ -43,7 +43,7 @@
                           IsCheckable="True"
                           IsChecked="{Binding DrivesSceneCamera}"
                           InputGestureText="0"
-                          ToolTip="入れると、見る位置がカメラアイテムに追従し、ドラッグがそのカメラを直接動かします。外すと見る位置だけが動き、出力は変わりません。"/>
+                          ToolTip="入れると、見る位置がカメラアイテムに追従し、ドラッグがそのカメラを直接動かします。外すと見る位置だけが動き、出力は変わりません。入れている間はドラッグでアイテムを掴めません。動かすときは、選んでから軸ハンドルを掴んでください。"/>
 
                 <MenuItem Header="ドラッグで中間点を打つ"
                           IsCheckable="True"

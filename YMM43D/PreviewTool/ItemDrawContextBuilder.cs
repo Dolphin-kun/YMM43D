@@ -52,6 +52,15 @@ namespace YMM43D.PreviewTool
             };
         }
 
+        // タイムラインの並びが変わると、YMM4 側が組み直した合成の上に、こちらが
+        // 前のまま掴んでいる画像が残る。触れば解放済みの領域へ飛ぶので、
+        // 作り直すきっかけをもらったら、抱えているものは全部捨てる。
+        public void Reset()
+        {
+            pipeline.Clear();
+            textureBridge.Clear();
+        }
+
         public void RetainOnly(IReadOnlySet<IVideoItem> aliveItems)
         {
             pipeline.RetainOnly(aliveItems);

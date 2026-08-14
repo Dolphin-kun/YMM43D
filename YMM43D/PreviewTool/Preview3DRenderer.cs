@@ -48,6 +48,12 @@ namespace YMM43D.PreviewTool
 
         public I3DProvider DefaultProvider => flatItemProvider;
 
+        public void ResetItemCaches()
+        {
+            contextBuilder.Reset();
+            pickTargets = [];
+        }
+
         internal readonly record struct PickTarget(
             IVideoItem Item,
             Matrix4x4 World,

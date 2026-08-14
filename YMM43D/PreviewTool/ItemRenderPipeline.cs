@@ -180,7 +180,7 @@ namespace YMM43D.PreviewTool
                 chain.Dispose();
         }
 
-        public void Dispose()
+        public void Clear()
         {
             lock (gate)
             {
@@ -195,6 +195,8 @@ namespace YMM43D.PreviewTool
             effectsUnsupported.Clear();
             sourceRetryAt.Clear();
         }
+
+        public void Dispose() => Clear();
 
         private sealed class EffectChain : IDisposable
         {
