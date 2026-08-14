@@ -5,6 +5,6 @@ namespace YMM43D.Commons
     {
         CameraState GetState(in FrameContext itemTime);
 
-        void Move(in CameraMove move, in EditScope scope);
+        void Move(in CameraMove move, in FrameContext itemTime, in EditScope scope);
     }
 }

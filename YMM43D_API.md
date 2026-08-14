@@ -514,7 +514,7 @@ var pipeline = pipelines.Get(render.Device);
 
 | 型 | 種別 | 説明 |
 |---|---|---|
-| `ISceneCamera` | interface | カメラとして振る舞うアイテム。設定値を返し、ドラッグの差分を `EditScope` とともに受け取る |
+| `ISceneCamera` | interface | カメラとして振る舞うアイテム。設定値を返し、ドラッグの差分を時刻・`EditScope` とともに受け取る |
 | `CameraState` | struct | ある瞬間のカメラの設定値（位置・向き・視野角） |
 | `CameraMove` | struct | カメラをどれだけ動かすかの差分 |
 | `CameraPose` | struct | ある時点でのカメラの位置・注視点・上方向 |

@@ -230,7 +230,7 @@ namespace YMM43D.PreviewTool.ViewModels
                 return;
             }
 
-            target.Source.Move(move, GetEditScope(target.Item));
+            target.Source.Move(move, target.ItemTime, GetEditScope(target.Item));
             refresher?.ForceRefresh(timeline);
 
             if (!freeCamera.IsDragging)

@@ -17,20 +17,8 @@ namespace YMM43D.Project.Items
 
         private const int FirstOrder = 100;
 
-        [Display(GroupName = Place, Name = "X", Description = "カメラを置く位置。右が正", Order = FirstOrder)]
-        [AnimationSlider("F1", "px", -2000, 2000)]
-        public Animation X { get; } = new(0, -1000000, 1000000);
-
-        [Display(GroupName = Place, Name = "Y", Description = "下が正。画面の座標と同じ向き", Order = FirstOrder + 1)]
-        [AnimationSlider("F1", "px", -2000, 2000)]
-        public Animation Y { get; } = new(0, -1000000, 1000000);
-
-        [Display(GroupName = Place, Name = "Z", Description = "手前が正。0 の面が、YMM4 が 2D で描く面", Order = FirstOrder + 2)]
-        [AnimationSlider("F1", "px", -5000, 5000)]
-        public Animation Z { get; } = new(DefaultZ, -1000000, 1000000);
-
-        [Display(GroupName = Place, Name = "向きの決め方",
-            Description = "回転角で向けるか、決めた点を向き続けるか", Order = FirstOrder + 3)]
+        [Display(GroupName = Place, Name = "置き方",
+            Description = "カメラの位置と向きの決め方", Order = FirstOrder)]
         [EnumComboBox]
         public CameraAim AimMode
         {
@@ -40,9 +28,12 @@ namespace YMM43D.Project.Items
                 Set(ref aimMode, value);
                 OnPropertyChanged(nameof(AimsByRotation));
                 OnPropertyChanged(nameof(AimsAtTarget));
+                OnPropertyChanged(nameof(HasPosition));
+                OnPropertyChanged(nameof(HasTarget));
+                OnPropertyChanged(nameof(HasAngles));
             }
         }
-        private CameraAim aimMode = CameraAim.Rotation;
+        private CameraAim aimMode = CameraAim.Target;
 
         [Browsable(false)]
         [EditorBrowsable(EditorBrowsableState.Never)]
@@ -52,38 +43,75 @@ namespace YMM43D.Project.Items
         [EditorBrowsable(EditorBrowsableState.Never)]
         public bool AimsAtTarget => AimMode == CameraAim.Target;
 
-        [Display(GroupName = Place, Name = "水平回転", Description = "横を向きます", Order = FirstOrder + 4)]
-        [AnimationSlider("F1", "°", -180, 180)]
-        [ShowPropertyEditorWhen(nameof(AimsByRotation), true)]
-        public Animation Yaw { get; } = new(0, -100000, 100000);
+        [Browsable(false)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public bool AimsByOrbit => AimMode == CameraAim.Orbit;
 
-        [Display(GroupName = Place, Name = "垂直回転", Description = "上下を向きます", Order = FirstOrder + 5)]
-        [AnimationSlider("F1", "°", -CameraState.MaxPitch, CameraState.MaxPitch)]
-        [ShowPropertyEditorWhen(nameof(AimsByRotation), true)]
-        public Animation Pitch { get; } = new(0, -CameraState.MaxPitch, CameraState.MaxPitch);
+        [Browsable(false)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public bool HasPosition => AimMode != CameraAim.Orbit;
 
-        [Display(GroupName = Place, Name = "注目X", Description = "見つめる点。右が正", Order = FirstOrder + 6)]
+        [Browsable(false)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public bool HasTarget => AimMode != CameraAim.Rotation;
+
+        [Browsable(false)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public bool HasAngles => AimMode != CameraAim.Target;
+
+        [Display(GroupName = Place, Name = "X", Description = "カメラを置く位置。右が正", Order = FirstOrder + 1)]
         [AnimationSlider("F1", "px", -2000, 2000)]
-        [ShowPropertyEditorWhen(nameof(AimsAtTarget), true)]
+        [ShowPropertyEditorWhen(nameof(HasPosition), true)]
+        public Animation X { get; } = new(0, -1000000, 1000000);
+
+        [Display(GroupName = Place, Name = "Y", Description = "下が正。画面の座標と同じ向き", Order = FirstOrder + 2)]
+        [AnimationSlider("F1", "px", -2000, 2000)]
+        [ShowPropertyEditorWhen(nameof(HasPosition), true)]
+        public Animation Y { get; } = new(0, -1000000, 1000000);
+
+        [Display(GroupName = Place, Name = "Z", Description = "手前が正。0 の面が、YMM4 が 2D で描く面", Order = FirstOrder + 3)]
+        [AnimationSlider("F1", "px", -5000, 5000)]
+        [ShowPropertyEditorWhen(nameof(HasPosition), true)]
+        public Animation Z { get; } = new(DefaultZ, -1000000, 1000000);
+
+        [Display(GroupName = Place, Name = "注目X", Description = "見つめる点。右が正", Order = FirstOrder + 4)]
+        [AnimationSlider("F1", "px", -2000, 2000)]
+        [ShowPropertyEditorWhen(nameof(HasTarget), true)]
         public Animation TargetX { get; } = new(0, -1000000, 1000000);
 
-        [Display(GroupName = Place, Name = "注目Y", Description = "下が正。画面の座標と同じ向き", Order = FirstOrder + 7)]
+        [Display(GroupName = Place, Name = "注目Y", Description = "下が正。画面の座標と同じ向き", Order = FirstOrder + 5)]
         [AnimationSlider("F1", "px", -2000, 2000)]
-        [ShowPropertyEditorWhen(nameof(AimsAtTarget), true)]
+        [ShowPropertyEditorWhen(nameof(HasTarget), true)]
         public Animation TargetY { get; } = new(0, -1000000, 1000000);
 
-        [Display(GroupName = Place, Name = "注目Z", Description = "手前が正。0 の面が、YMM4 が 2D で描く面", Order = FirstOrder + 8)]
+        [Display(GroupName = Place, Name = "注目Z", Description = "手前が正。0 の面が、YMM4 が 2D で描く面", Order = FirstOrder + 6)]
         [AnimationSlider("F1", "px", -5000, 5000)]
-        [ShowPropertyEditorWhen(nameof(AimsAtTarget), true)]
+        [ShowPropertyEditorWhen(nameof(HasTarget), true)]
         public Animation TargetZ { get; } = new(0, -1000000, 1000000);
 
-        [Display(GroupName = Place, Name = "傾き", Description = "視線を軸にして画面を回します", Order = FirstOrder + 9)]
+        [Display(GroupName = Place, Name = "距離",
+            Description = "注目点からどれだけ離れて回り込むか", Order = FirstOrder + 7)]
+        [AnimationSlider("F1", "px", 100, 5000)]
+        [ShowPropertyEditorWhen(nameof(AimsByOrbit), true)]
+        public Animation Distance { get; } = new(DefaultZ, 1, 1000000);
+
+        [Display(GroupName = Place, Name = "水平回転", Description = "横を向きます", Order = FirstOrder + 8)]
+        [AnimationSlider("F1", "°", -180, 180)]
+        [ShowPropertyEditorWhen(nameof(HasAngles), true)]
+        public Animation Yaw { get; } = new(0, -100000, 100000);
+
+        [Display(GroupName = Place, Name = "垂直回転", Description = "上下を向きます", Order = FirstOrder + 9)]
+        [AnimationSlider("F1", "°", -CameraState.MaxPitch, CameraState.MaxPitch)]
+        [ShowPropertyEditorWhen(nameof(HasAngles), true)]
+        public Animation Pitch { get; } = new(0, -CameraState.MaxPitch, CameraState.MaxPitch);
+
+        [Display(GroupName = Place, Name = "傾き", Description = "視線を軸にして画面を回します", Order = FirstOrder + 10)]
         [AnimationSlider("F1", "°", -180, 180)]
         public Animation Roll { get; } = new(0, -100000, 100000);
 
         [Display(GroupName = Place, Name = "視野角変更",
             Description = "切ると、Z=0 の面が YMM4 の画面とちょうど同じ大きさに写る画角になります",
-            Order = FirstOrder + 10)]
+            Order = FirstOrder + 11)]
         [ToggleSlider]
         public bool IsFieldOfViewEnabled
         {
@@ -93,7 +121,7 @@ namespace YMM43D.Project.Items
         private bool isFieldOfViewEnabled;
 
         [Display(GroupName = Place, Name = "視野角", Description = "縦方向の画角。狭いほど望遠になります",
-            Order = FirstOrder + 11)]
+            Order = FirstOrder + 12)]
         [AnimationSlider("F1", "°", 1, 179)]
         [ShowPropertyEditorWhen(nameof(IsFieldOfViewEnabled), true)]
         public Animation FieldOfView { get; } = new(DefaultFieldOfView, 1, 179);
@@ -117,17 +145,32 @@ namespace YMM43D.Project.Items
 
         public CameraState GetState(in FrameContext itemTime)
         {
+            var roll = Roll.GetFloat(itemTime);
+            var fieldOfView = IsFieldOfViewEnabled ? FieldOfView.GetFloat(itemTime) : 0f;
+
+            if (AimMode == CameraAim.Orbit)
+            {
+                var aimed = new CameraState(
+                    Vector3.Zero,
+                    Yaw.GetFloat(itemTime),
+                    Math.Clamp(Pitch.GetFloat(itemTime), -CameraState.MaxPitch, CameraState.MaxPitch),
+                    roll,
+                    fieldOfView);
+
+                // 注目点から、見ている向きの反対側へ距離のぶん下がった場所に置く。
+                return aimed with
+                {
+                    Position = ToWorld(TargetX, TargetY, TargetZ, itemTime)
+                             - aimed.Forward * WorldScale.ToWorld(Distance.GetFloat(itemTime)),
+                };
+            }
+
             var position = ToWorld(X, Y, Z, itemTime);
             var (yaw, pitch) = AimMode == CameraAim.Target
                 ? GetAngles(position, ToWorld(TargetX, TargetY, TargetZ, itemTime))
                 : (Yaw.GetFloat(itemTime), Pitch.GetFloat(itemTime));
 
-            return new CameraState(
-                position,
-                yaw,
-                pitch,
-                Roll.GetFloat(itemTime),
-                IsFieldOfViewEnabled ? FieldOfView.GetFloat(itemTime) : 0f);
+            return new CameraState(position, yaw, pitch, roll, fieldOfView);
         }
 
         private static Vector3 ToWorld(Animation x, Animation y, Animation z, in FrameContext itemTime)
@@ -152,14 +195,21 @@ namespace YMM43D.Project.Items
         }
 
         public SceneMarker GetMarker(in FrameContext itemTime)
-            => SceneMarker.ForCamera(ToWorld(X, Y, Z, itemTime));
+            => SceneMarker.ForCamera(GetState(itemTime).Position);
 
         public void MoveMarker(in Vector3 shift, in FrameContext itemTime, in EditScope scope)
-            => Move(CameraMove.Translate(shift), scope);
+            => Move(CameraMove.Translate(shift), itemTime, scope);
 
-        public void Move(in CameraMove move, in EditScope scope)
+        public void Move(in CameraMove move, in FrameContext itemTime, in EditScope scope)
         {
             scope.Nudge(Roll, move.Roll);
+
+            if (AimMode == CameraAim.Orbit)
+            {
+                MoveOrbit(move, itemTime, scope);
+                return;
+            }
+
             scope.Nudge(X, WorldScale.ToPixels(move.Shift.X));
             scope.Nudge(Y, -WorldScale.ToPixels(move.Shift.Y));
             scope.Nudge(Z, WorldScale.ToPixels(move.Shift.Z));
@@ -171,8 +221,33 @@ namespace YMM43D.Project.Items
             scope.Nudge(Pitch, move.Pitch);
         }
 
+        private void MoveOrbit(in CameraMove move, in FrameContext itemTime, in EditScope scope)
+        {
+            // 回り込みでは、角度が決まればカメラの居場所も決まる。回した分に付いてくる
+            // 平行移動を受け取ると、注目点まで一緒にずれてしまうので捨てる。
+            if (move.Yaw != 0f || move.Pitch != 0f)
+            {
+                scope.Nudge(Yaw, move.Yaw);
+                scope.Nudge(Pitch, move.Pitch);
+                return;
+            }
+
+            if (move.Shift == Vector3.Zero)
+                return;
+
+            // 角度が動かないときだけ、視線に沿った分を距離に、残りを注目点に渡す。
+            var forward = GetState(itemTime).Forward;
+            var along = Vector3.Dot(move.Shift, forward);
+            var across = move.Shift - forward * along;
+
+            scope.Nudge(Distance, -WorldScale.ToPixels(along));
+            scope.Nudge(TargetX, WorldScale.ToPixels(across.X));
+            scope.Nudge(TargetY, -WorldScale.ToPixels(across.Y));
+            scope.Nudge(TargetZ, WorldScale.ToPixels(across.Z));
+        }
+
         protected override IEnumerable<IAnimatable> GetAnimatables()
-            => [X, Y, Z, Yaw, Pitch, TargetX, TargetY, TargetZ, Roll, FieldOfView];
+            => [X, Y, Z, TargetX, TargetY, TargetZ, Distance, Yaw, Pitch, Roll, FieldOfView];
 
         public override IAsyncEnumerable<ExoItem> GetExoItemsAsync(ExoOutputDescription outputDescription)
             => AsyncEnumerable.Empty<ExoItem>();
@@ -186,10 +261,14 @@ namespace YMM43D.Project.Items
 
     public enum CameraAim
     {
-        [Display(Name = "回転で指定", Description = "水平・垂直の回転角で向きを決めます")]
+        [Display(Name = "回転で指定", Description = "置いた場所から、水平・垂直の回転角で向きを決めます")]
         Rotation,
 
-        [Display(Name = "注目点で指定", Description = "決めた点を向き続けます。被写体を追うのに向きます")]
+        [Display(Name = "注目点で指定", Description = "置いた場所から、決めた点を向き続けます。被写体を追うのに向きます")]
         Target,
+
+        [Display(Name = "回り込む",
+            Description = "決めた点のまわりを、距離と回転角で回り込みます。回り込みカメラと同じ決め方です")]
+        Orbit,
     }
 }
