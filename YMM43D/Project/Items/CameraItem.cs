@@ -261,13 +261,13 @@ namespace YMM43D.Project.Items
 
     public enum CameraAim
     {
-        [Display(Name = "回転で指定", Description = "置いた場所から、水平・垂直の回転角で向きを決めます")]
+        [Display(Name = "位置", Description = "置いた場所から、水平・垂直の回転角で向きを決めます")]
         Rotation,
 
-        [Display(Name = "注目点で指定", Description = "置いた場所から、決めた点を向き続けます。被写体を追うのに向きます")]
+        [Display(Name = "注目", Description = "置いた場所から、決めた点を向き続けます。被写体を追うのに向きます")]
         Target,
 
-        [Display(Name = "回り込む",
+        [Display(Name = "回り込み",
             Description = "決めた点のまわりを、距離と回転角で回り込みます。回り込みカメラと同じ決め方です")]
         Orbit,
     }
