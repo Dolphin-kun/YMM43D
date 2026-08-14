@@ -60,6 +60,11 @@ namespace YMM43D.PreviewTool.ViewModels
                 if (!Set(ref drivesSceneCamera, value, nameof(DrivesSceneCamera)))
                     return;
 
+                // 動かす相手がいなければ、入れても何も起きない。それでは効いていない
+                // ように見えるので、その場にカメラを置いてから追従を始める。
+                if (value)
+                    EnsureSceneCamera();
+
                 freeCamera.Invalidate();
             }
         }
@@ -237,6 +242,14 @@ namespace YMM43D.PreviewTool.ViewModels
                 ? EditScope.AtFrame(timeline.CurrentFrame - item.Frame)
                 : EditScope.Whole;
 
+        private void EnsureSceneCamera()
+        {
+            if (timeline is null || SceneCameraResolver.Find(timeline) is not null)
+                return;
+
+            AddItem(() => new CameraItem());
+        }
+
         public void AddItem(Func<BaseItem> create)
         {
             if (timeline is null)
@@ -400,15 +413,6 @@ namespace YMM43D.PreviewTool.ViewModels
                     freeCamera.State.Forward, GetEditScope(placed.Item));
             }
 
-            // 追従中は画面いっぱいがカメラの写す絵になるので、どこを押しても
-            // 何かのアイテムに当たる。それではカメラを振る手が残らない。
-            // 狙って掴む軸ハンドルは上で拾ってあるので、ここは素通しでよい。
-            if (IsDrivingCamera)
-            {
-                selected = null;
-                return false;
-            }
-
             // 掴む判定はアイテムを描き直して行う。描画の内側でしかできないので、
             // ここで1枚描かせて、その結果を受け取る。
             renderer.RequestPick(screen);
@@ -417,7 +421,7 @@ namespace YMM43D.PreviewTool.ViewModels
             if (renderer.TakePickResult() is not { } picked
                 || renderer.CreateRay(screen) is not { } ray)
             {
-                selected = null;
+                ClearSelection();
                 return false;
             }
 
@@ -430,15 +434,19 @@ namespace YMM43D.PreviewTool.ViewModels
                 GetEditScope(picked.Item));
         }
 
-        // 追従を入れていても、その区間にカメラアイテムが無ければ動かす相手がいない。
-        // そのときは追従していないときと同じに振る舞う。
-        private bool IsDrivingCamera
-            => drivesSceneCamera && timeline is not null && SceneCameraResolver.Find(timeline) is not null;
-
-        // カメラ追従中のドラッグは、そのカメラを振る操作そのもの。目印として掴めると
+        // 追従中のドラッグは、そのカメラを振る操作そのもの。目印として掴めると
         // 向きを変える手と場所を取り合ってしまうので、追従しているカメラは掴ませない。
         private bool CanGrab(in SceneMarkerResolver.PlacedMarker marker)
-            => !IsDrivingCamera || marker.Marker.Kind != MarkerKind.Camera;
+            => !drivesSceneCamera || marker.Marker.Kind != MarkerKind.Camera;
+
+        public void ClearSelection()
+        {
+            selected = null;
+            selectedMarker = null;
+
+            if (timeline?.SelectedItems is { Count: > 0 })
+                timeline.SelectedItems = [];
+        }
 
         private static Vector2 ToVector(Point position) => new((float)position.X, (float)position.Y);
 
@@ -471,6 +479,10 @@ namespace YMM43D.PreviewTool.ViewModels
 
                 case Key.G when modifiers == ModifierKeys.None:
                     ShowsGrid = !ShowsGrid;
+                    return true;
+
+                case Key.Escape when modifiers == ModifierKeys.None:
+                    ClearSelection();
                     return true;
 
                 case Key.NumPad0 or Key.D0:
