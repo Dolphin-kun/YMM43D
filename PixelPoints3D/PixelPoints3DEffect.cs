@@ -91,6 +91,7 @@ namespace PixelPoints3D
             {
                 Set(ref deformKind, value);
                 OnPropertyChanged(nameof(IsDeformed));
+                OnPropertyChanged(nameof(IsWave));
             }
         }
         private DeformKind deformKind = DeformKind.None;
@@ -98,6 +99,10 @@ namespace PixelPoints3D
         [Browsable(false)]
         [EditorBrowsable(EditorBrowsableState.Never)]
         public bool IsDeformed => DeformKind != DeformKind.None;
+
+        [Browsable(false)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public bool IsWave => DeformKind == DeformKind.Wave;
 
         [Display(GroupName = Deform, Name = "強さ", Description = "歪ませる量。負にすると逆向きに歪みます")]
         [AnimationSlider("F0", "%", -100, 100)]
@@ -112,7 +117,7 @@ namespace PixelPoints3D
 
         [Display(GroupName = Deform, Name = "周期", Description = "波1つ分の長さ")]
         [AnimationSlider("F1", "px", 10, 1000)]
-        [ShowPropertyEditorWhen(nameof(DeformKind), DeformKind.Wave)]
+        [ShowPropertyEditorWhen(nameof(IsWave), true)]
         public Animation DeformPeriod { get; } = new(200, 1, 100000);
 
         [Display(GroupName = Deform, Name = "位相", Description = "波やねじれのずれ。動かすと流れます")]
@@ -214,12 +219,24 @@ namespace PixelPoints3D
 
         [Display(GroupName = "点", Name = "色の種類", Description = "単色で塗るか、その位置の画像の色を使うか")]
         [EnumComboBox]
-        public PointColorSource ColorSource { get => colorSource; set => Set(ref colorSource, value); }
+        public PointColorSource ColorSource
+        {
+            get => colorSource;
+            set
+            {
+                Set(ref colorSource, value);
+                OnPropertyChanged(nameof(IsSolidColor));
+            }
+        }
         private PointColorSource colorSource = PointColorSource.Solid;
+
+        [Browsable(false)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public bool IsSolidColor => ColorSource == PointColorSource.Solid;
 
         [Display(GroupName = "点", Name = "色", Description = "粒の色")]
         [ColorPicker]
-        [ShowPropertyEditorWhen(nameof(ColorSource), PointColorSource.Solid)]
+        [ShowPropertyEditorWhen(nameof(IsSolidColor), true)]
         public Color Color { get => color; set => Set(ref color, value); }
         private Color color = Colors.White;
 
@@ -238,12 +255,24 @@ namespace PixelPoints3D
 
         [Display(GroupName = "線", Name = "色の種類", Description = "単色で塗るか、その位置の画像の色を使うか")]
         [EnumComboBox]
-        public PointColorSource ColorSource { get => colorSource; set => Set(ref colorSource, value); }
+        public PointColorSource ColorSource
+        {
+            get => colorSource;
+            set
+            {
+                Set(ref colorSource, value);
+                OnPropertyChanged(nameof(IsSolidColor));
+            }
+        }
         private PointColorSource colorSource = PointColorSource.Solid;
+
+        [Browsable(false)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public bool IsSolidColor => ColorSource == PointColorSource.Solid;
 
         [Display(GroupName = "線", Name = "色", Description = "線の色")]
         [ColorPicker]
-        [ShowPropertyEditorWhen(nameof(ColorSource), PointColorSource.Solid)]
+        [ShowPropertyEditorWhen(nameof(IsSolidColor), true)]
         public Color Color { get => color; set => Set(ref color, value); }
         private Color color = Colors.White;
 
@@ -262,12 +291,24 @@ namespace PixelPoints3D
 
         [Display(GroupName = "面", Name = "色の種類", Description = "単色で塗るか、その位置の画像の色を使うか")]
         [EnumComboBox]
-        public PointColorSource ColorSource { get => colorSource; set => Set(ref colorSource, value); }
+        public PointColorSource ColorSource
+        {
+            get => colorSource;
+            set
+            {
+                Set(ref colorSource, value);
+                OnPropertyChanged(nameof(IsSolidColor));
+            }
+        }
         private PointColorSource colorSource = PointColorSource.Image;
+
+        [Browsable(false)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public bool IsSolidColor => ColorSource == PointColorSource.Solid;
 
         [Display(GroupName = "面", Name = "色", Description = "面の色")]
         [ColorPicker]
-        [ShowPropertyEditorWhen(nameof(ColorSource), PointColorSource.Solid)]
+        [ShowPropertyEditorWhen(nameof(IsSolidColor), true)]
         public Color Color { get => color; set => Set(ref color, value); }
         private Color color = Colors.White;
 

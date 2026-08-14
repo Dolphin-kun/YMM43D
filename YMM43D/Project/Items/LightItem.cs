@@ -1,4 +1,5 @@
-﻿using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel;
+using System.ComponentModel.DataAnnotations;
 using System.Numerics;
 using System.Windows.Media;
 using YMM43D.Commons;
@@ -19,40 +20,57 @@ namespace YMM43D.Project.Items
         [Display(GroupName = Lamp, Name = "種類",
             Description = "平行光は向きだけ、点光源は置いた場所から周りを照らします", Order = FirstOrder)]
         [EnumComboBox]
-        public LightKind Kind { get => kind; set => Set(ref kind, value); }
+        public LightKind Kind
+        {
+            get => kind;
+            set
+            {
+                Set(ref kind, value);
+                OnPropertyChanged(nameof(IsDirectional));
+                OnPropertyChanged(nameof(IsPoint));
+            }
+        }
         private LightKind kind = LightKind.Directional;
+
+        [Browsable(false)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public bool IsDirectional => Kind == LightKind.Directional;
+
+        [Browsable(false)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public bool IsPoint => Kind == LightKind.Point;
 
         [Display(GroupName = Lamp, Name = "水平角",
             Description = "光が来る向き。0 で正面から", Order = FirstOrder + 1)]
         [AnimationSlider("F1", "°", -180, 180)]
-        [ShowPropertyEditorWhen(nameof(Kind), LightKind.Directional)]
+        [ShowPropertyEditorWhen(nameof(IsDirectional), true)]
         public Animation Yaw { get; } = new(SceneLighting.DefaultYaw, -100000, 100000);
 
         [Display(GroupName = Lamp, Name = "垂直角",
             Description = "光が来る高さ。正で上から", Order = FirstOrder + 2)]
         [AnimationSlider("F1", "°", -90, 90)]
-        [ShowPropertyEditorWhen(nameof(Kind), LightKind.Directional)]
+        [ShowPropertyEditorWhen(nameof(IsDirectional), true)]
         public Animation Pitch { get; } = new(SceneLighting.DefaultPitch, -90, 90);
 
         [Display(GroupName = Lamp, Name = "X", Description = "光を置く位置。右が正", Order = FirstOrder + 3)]
         [AnimationSlider("F1", "px", -2000, 2000)]
-        [ShowPropertyEditorWhen(nameof(Kind), LightKind.Point)]
+        [ShowPropertyEditorWhen(nameof(IsPoint), true)]
         public Animation X { get; } = new(0, -1000000, 1000000);
 
         [Display(GroupName = Lamp, Name = "Y", Description = "下が正。画面の座標と同じ向き", Order = FirstOrder + 4)]
         [AnimationSlider("F1", "px", -2000, 2000)]
-        [ShowPropertyEditorWhen(nameof(Kind), LightKind.Point)]
+        [ShowPropertyEditorWhen(nameof(IsPoint), true)]
         public Animation Y { get; } = new(-500, -1000000, 1000000);
 
         [Display(GroupName = Lamp, Name = "Z", Description = "手前が正", Order = FirstOrder + 5)]
         [AnimationSlider("F1", "px", -5000, 5000)]
-        [ShowPropertyEditorWhen(nameof(Kind), LightKind.Point)]
+        [ShowPropertyEditorWhen(nameof(IsPoint), true)]
         public Animation Z { get; } = new(500, -1000000, 1000000);
 
         [Display(GroupName = Lamp, Name = "届く距離",
             Description = "この距離まで届きます。遠いほど弱くなります", Order = FirstOrder + 6)]
         [AnimationSlider("F1", "px", 100, 5000)]
-        [ShowPropertyEditorWhen(nameof(Kind), LightKind.Point)]
+        [ShowPropertyEditorWhen(nameof(IsPoint), true)]
         public Animation Reach { get; } = new(2000, 1, 1000000);
 
         [Display(GroupName = Lamp, Name = "色", Order = FirstOrder + 7)]

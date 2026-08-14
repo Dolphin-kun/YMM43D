@@ -31,17 +31,32 @@ namespace YMM43D.PreviewTool
             ISceneMarkerSource source,
             in FrameContext itemTime,
             in Vector3 origin,
+            GizmoHandle grabbed,
             in PickRay ray,
             in Vector3 viewDirection,
             in EditScope edit)
         {
             planePoint = origin;
-            planeNormal = -viewDirection;
-            anchor = ray.IntersectPlane(planePoint, planeNormal) ?? planePoint;
+
+            if (grabbed is GizmoHandle.MoveX or GizmoHandle.MoveY or GizmoHandle.MoveZ)
+            {
+                axis = TransformGizmo.AxisDirection(grabbed);
+
+                if (TransformGizmo.ClosestOnAxis(ray, origin, axis) is not { } position)
+                    return false;
+
+                axisPosition = position;
+            }
+            else
+            {
+                grabbed = GizmoHandle.Free;
+                planeNormal = -viewDirection;
+                anchor = ray.IntersectPlane(planePoint, planeNormal) ?? planePoint;
+            }
 
             marker = source;
             markerTime = itemTime;
-            handle = GizmoHandle.Free;
+            handle = grabbed;
             scope = edit;
 
             return true;
@@ -114,6 +129,9 @@ namespace YMM43D.PreviewTool
 
         private bool MoveMarker(ISceneMarkerSource source, in PickRay ray)
         {
+            if (handle is GizmoHandle.MoveX or GizmoHandle.MoveY or GizmoHandle.MoveZ)
+                return MoveMarkerAlongAxis(source, ray);
+
             if (ray.IntersectPlane(planePoint, planeNormal) is not { } hit)
                 return false;
 
@@ -123,6 +141,21 @@ namespace YMM43D.PreviewTool
 
             anchor = hit;
             source.MoveMarker(shift, markerTime, scope);
+
+            return true;
+        }
+
+        private bool MoveMarkerAlongAxis(ISceneMarkerSource source, in PickRay ray)
+        {
+            if (TransformGizmo.ClosestOnAxis(ray, planePoint, axis) is not { } position)
+                return false;
+
+            var delta = position - axisPosition;
+            if (delta == 0f)
+                return false;
+
+            axisPosition = position;
+            source.MoveMarker(axis * delta, markerTime, scope);
 
             return true;
         }

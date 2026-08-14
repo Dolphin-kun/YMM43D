@@ -103,8 +103,9 @@ namespace PixelPoints3D
 
             static const float Pi = 3.14159265;
 
-            // 粒と線はカメラを向いた板でしかないので、球（線なら円柱）の表面と
+            // 丸い粒と線はカメラを向いた板でしかないので、球（線なら円柱）の表面と
             // みなして法線を作る。縁ほど横を向くので、丸みがついて見える。
+            // 四角い粒には使わない。板のままなのに丸い陰影が乗ってしまう。
             //
             // 画素ごとに求めること。頂点で求めると四隅がどれも真横を向き、
             // 補間された真ん中の法線が打ち消し合って 0 に潰れる。
@@ -134,8 +135,10 @@ namespace PixelPoints3D
                 float3 Nrm   : NORMAL;
                 float3 World : TEXCOORD1;
 
-                // 板（粒・線）なら 1。法線を画素ごとに作り直す合図。
-                nointerpolation float IsBillboard : BILLBOARD;
+                // 法線をどこから取るか。0 … 面（Nrm をそのまま）、
+                // 1 … 丸い粒と線（画素ごとに球・円柱として作り直す）、
+                // 2 … 四角い粒（カメラを向いた板のまま）。
+                nointerpolation float Shading : SHADING;
 
                 // x … 格子の点ごと（面の不透明度）、y … 線ごと（引くかどうか）。
                 nointerpolation float2 Random : RANDOM;
@@ -269,7 +272,7 @@ namespace PixelPoints3D
 
                 float3 local = Place(input.Cell);
 
-                output.IsBillboard = any(input.Corner != 0.0) ? 1.0 : 0.0;
+                output.Shading = 0.0;
 
                 if (any(input.Other != input.Cell))
                 {
@@ -290,11 +293,16 @@ namespace PixelPoints3D
 
                     if (length2 > 1e-12)
                         local += normalize(side) * input.Corner.x * LineHalfWidth;
+
+                    // 線はいつも円柱として塗る。粒の形は線には関わらない。
+                    output.Shading = 1.0;
                 }
-                else
+                else if (any(input.Corner != 0.0))
                 {
-                    // 粒。カメラに正対させる。面では Corner が 0 なので効かない。
+                    // 粒。カメラに正対させる。面では Corner が 0 なのでここへ来ない。
                     local += (ViewRight * input.Corner.x + ViewUp * input.Corner.y) * PointHalfSize;
+
+                    output.Shading = PointIsRound > 0.5 ? 1.0 : 2.0;
                 }
 
                 output.Position = mul(float4(local, 1.0), WorldViewProjection);
@@ -348,8 +356,12 @@ namespace PixelPoints3D
 
                 float3 rgb = UseSourceColor > 0.5 ? source.rgb : Color.rgb;
 
-                float3 normal = input.IsBillboard > 0.5
-                    ? mul(float4(Billboard(input.Edge), 0.0), WorldInverse).xyz
+                float3 shape = input.Shading > 1.5 ? -ViewForward
+                             : input.Shading > 0.5 ? Billboard(input.Edge)
+                             : float3(0, 0, 0);
+
+                float3 normal = any(shape != 0.0)
+                    ? mul(float4(shape, 0.0), WorldInverse).xyz
                     : input.Nrm;
 
                 rgb = ApplyLight(rgb, normal, input.World);

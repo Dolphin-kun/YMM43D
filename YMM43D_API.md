@@ -586,7 +586,9 @@ public interface I3DProvider
 
 面がどちらを向いていても見た目が壊れないよう、シェーダーは**法線をカメラの側へ向け直してから**光を当てます。両面を描く板を裏から見ても、正しく明るくなります。閉じた立体では表の面がもともとカメラを向いているので、影響しません。
 
-板をカメラに正対させて描くもの（点群3Dの粒や線）は、面の向きがありません。この場合は**球や円柱の表面とみなして、画素ごとに法線を作ります**。頂点で作ると四隅がどれも真横を向き、補間された中央の法線が打ち消し合って 0 に潰れます。
+板をカメラに正対させて描くもの（点群3Dの粒や線）は、面の向きがありません。丸い粒と線は**球や円柱の表面とみなして、画素ごとに法線を作ります**。頂点で作ると四隅がどれも真横を向き、補間された中央の法線が打ち消し合って 0 に潰れます。
+
+**丸く扱ってよいのは、輪郭も丸いものだけです。** 四角い粒に球の法線を当てると、四角の中に円が浮き出て見えます。輪郭が板のままのものは、法線も板のまま（カメラの向きの逆）にします。
 
 光はタイムラインから集められます。**光源アイテムを1つも置かなければ既定の光が使われます**（左上手前からの平行光80% + 環境光40%）。この既定値は、**カメラを正面から向いた面がちょうど明るさ1になる**ように選んであります。2D の絵を「3D空間に置く」だけのときに暗くならないためです。
 
@@ -615,6 +617,8 @@ public void MoveMarker(in Vector3 shift, in FrameContext itemTime, in EditScope 
 | `SceneMarker.ForDirectionalLight(向き)` | 原点から一定の距離に浮かぶ太陽。原点へ線が伸びる | 動かした先の向きに回る |
 | `SceneMarker.ForPointLight(位置, 届く距離)` | 小さな球と、届く距離を表す大きな球 | その位置へ移る |
 | `SceneMarker.ForCamera(位置)` | 線画は描かない（カメラの枠がそのまま目印になる） | その位置へ移る |
+
+目印を持つアイテムをタイムラインで選ぶと、**目印の場所に軸ハンドルが出ます**。ハンドルを掴んだときの `shift` はその軸方向だけの差分になります。回転の輪は出ません。目印は位置しか持たないためです。
 
 ### YMM43D.Graphics
 
@@ -695,6 +699,41 @@ YMM4 はアイテムごとに平らな画像を作り、レイヤー順に重ね
 | 費用 | 3D アイテムの数の 2 乗に比例する |
 | カメラ系エフェクト | 他アイテムに掛かっている分は追えない。`I3DLocalTransform` で本人に答えてもらう |
 | 厚みのあるもの | YMM4 の拡大は平らな画像への操作なので、奥行き方向の見え方は厳密には一致しない |
+
+### 編集欄の表示条件は bool で書く
+
+`[ShowPropertyEditorWhen]` に**列挙型の値を渡してはいけません**。YMM4 側の比較が `HasFlag` になっているため、値が 0 のメンバーを選んでいる間は、どの条件も成り立ってしまいます。
+
+```csharp
+// 種類が「点光源」のときだけ出したいのに、「平行光」（値 0）でも出てしまう
+[ShowPropertyEditorWhen(nameof(Kind), LightKind.Point)]
+public Animation X { get; } = new(0, -1000000, 1000000);
+```
+
+条件を bool のプロパティに直し、元の列挙型のセッターから変更を知らせます。
+
+```csharp
+[EnumComboBox]
+public LightKind Kind
+{
+    get => kind;
+    set
+    {
+        Set(ref kind, value);
+        OnPropertyChanged(nameof(IsPoint));
+    }
+}
+private LightKind kind = LightKind.Directional;
+
+[Browsable(false)]
+[EditorBrowsable(EditorBrowsableState.Never)]
+public bool IsPoint => Kind == LightKind.Point;
+
+[ShowPropertyEditorWhen(nameof(IsPoint), true)]
+public Animation X { get; } = new(0, -1000000, 1000000);
+```
+
+`OnPropertyChanged` を忘れると、種類を切り替えても編集欄が開き閉じしません。
 
 ### 3Dプレビューに反映されないもの
 

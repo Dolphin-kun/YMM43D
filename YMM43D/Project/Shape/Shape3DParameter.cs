@@ -73,7 +73,15 @@ namespace YMM43D.Project.Shape
 
         [Display(GroupName = Paint, Name = "塗り", Description = "全体を1色で塗るか、面ごとに色を変えるか")]
         [EnumComboBox]
-        public CubeFill Fill { get => fill; set => Set(ref fill, value); }
+        public CubeFill Fill
+        {
+            get => fill;
+            set
+            {
+                Set(ref fill, value);
+                OnPropertyChanged(nameof(IsSolidColor));
+            }
+        }
         private CubeFill fill = CubeFill.Solid;
 
         [Display(GroupName = Paint, Name = "陰影をつけない",
@@ -84,7 +92,7 @@ namespace YMM43D.Project.Shape
 
         [Display(GroupName = Paint, Name = "色")]
         [ColorPicker]
-        [ShowPropertyEditorWhen(nameof(Fill), CubeFill.Solid)]
+        [ShowPropertyEditorWhen(nameof(IsSolidColor), true)]
         public Color Color { get => color; set => Set(ref color, value); }
         private Color color = Colors.White;
 
@@ -96,6 +104,10 @@ namespace YMM43D.Project.Shape
         [EditorBrowsable(EditorBrowsableState.Never)]
         public ImmutableList<Color> StoredFaceColors { get => storedFaceColors; set => Set(ref storedFaceColors, value); }
         private ImmutableList<Color> storedFaceColors = [];
+
+        [Browsable(false)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public bool IsSolidColor => Fill == CubeFill.Solid;
 
         [Browsable(false)]
         [EditorBrowsable(EditorBrowsableState.Never)]

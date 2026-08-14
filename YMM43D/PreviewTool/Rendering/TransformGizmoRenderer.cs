@@ -25,7 +25,7 @@ namespace YMM43D.PreviewTool.Rendering
             resources = new DeviceResourceCache<GizmoResources>(device => new GizmoResources(device));
         }
 
-        public void Draw(in Render3DContext render, in TransformGizmo gizmo, GizmoHandle active)
+        public void Draw(in Render3DContext render, in TransformGizmo gizmo, GizmoHandle active, bool canRotate)
         {
             var world = Matrix4x4.CreateScale(gizmo.Scale) * Matrix4x4.CreateTranslation(gizmo.Origin);
             var transform = render.GetWorldViewProjection(world);
@@ -36,6 +36,9 @@ namespace YMM43D.PreviewTool.Rendering
 
             foreach (var (handle, mesh) in shared.Parts)
             {
+                if (handle == GizmoHandle.RotateZ && !canRotate)
+                    continue;
+
                 var opacity = active == GizmoHandle.None || active == handle ? 1f : IdleOpacity;
 
                 shared.Pipeline.Draw(

@@ -25,6 +25,7 @@ namespace YMM43D.PreviewTool
 
         private PickTarget[] pickTargets = [];
         private IReadOnlyList<SceneMarkerResolver.PlacedMarker> pickMarkers = [];
+        private SceneMarkerResolver.PlacedMarker? gizmoMarker;
         private TransformGizmo? lastGizmo;
         private Matrix4x4 lastViewProjection = Matrix4x4.Identity;
         private float lastWidth;
@@ -86,9 +87,14 @@ namespace YMM43D.PreviewTool
                     item.Item, drawContexts[i].World, GetLocalBounds(item, drawContexts[i].Time)))
             ];
 
-            lastGizmo = FindGizmo(scene.Selected, viewPose.Position);
+            gizmoMarker = FindGizmoMarker(scene);
+
+            lastGizmo = gizmoMarker is { } placed
+                ? TransformGizmo.Create(placed.Marker.Position, viewPose.Position)
+                : FindGizmo(scene.Selected, viewPose.Position);
+
             if (lastGizmo is { } gizmo)
-                transformGizmo.Draw(render, gizmo, scene.ActiveHandle);
+                transformGizmo.Draw(render, gizmo, scene.ActiveHandle, gizmoMarker is null);
 
             axisIndicator.Draw(render, viewPose, width, height);
 
@@ -105,6 +111,20 @@ namespace YMM43D.PreviewTool
             var bounds = provider.GetLocalBounds(itemTime);
 
             return bounds.IsEmpty ? WorldBounds.FromCube(1f) : bounds;
+        }
+
+        private static SceneMarkerResolver.PlacedMarker? FindGizmoMarker(PreviewScene scene)
+        {
+            if (scene.SelectedMarker is not { } item)
+                return null;
+
+            foreach (var placed in scene.Markers)
+            {
+                if (ReferenceEquals(placed.Item, item))
+                    return placed;
+            }
+
+            return null;
         }
 
         private TransformGizmo? FindGizmo(IVideoItem? selected, in Vector3 cameraPosition)
@@ -147,6 +167,8 @@ namespace YMM43D.PreviewTool
 
         public TransformGizmo? Gizmo => lastGizmo;
 
+        public SceneMarkerResolver.PlacedMarker? GizmoMarker => gizmoMarker;
+
         public GizmoHandle PickGizmo(Vector2 position)
         {
             if (lastGizmo is not { } gizmo)
@@ -170,6 +192,9 @@ namespace YMM43D.PreviewTool
                 nearest = distance;
                 found = handle;
             }
+
+            if (gizmoMarker is not null)
+                return found;
 
             for (var i = 0; i < TransformGizmo.RingSegments; i++)
             {

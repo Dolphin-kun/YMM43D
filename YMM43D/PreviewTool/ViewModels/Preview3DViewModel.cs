@@ -357,14 +357,23 @@ namespace YMM43D.PreviewTool.ViewModels
         {
             var screen = ToVector(position);
 
-            if (selected is not null
-                && renderer.PickGizmo(screen) is var grabbed and not GizmoHandle.None
+            if (renderer.PickGizmo(screen) is var grabbed and not GizmoHandle.None
                 && renderer.Gizmo is { } gizmo
                 && renderer.CreateRay(screen) is { } gizmoRay)
             {
-                return itemDrag.Begin(
-                    selected, gizmo.Origin, grabbed, gizmoRay, freeCamera.State.Forward,
-                    GetEditScope(selected));
+                if (renderer.GizmoMarker is { } held)
+                {
+                    return itemDrag.BeginMarker(
+                        held.Source, held.ItemTime, gizmo.Origin, grabbed, gizmoRay,
+                        freeCamera.State.Forward, GetEditScope(held.Item));
+                }
+
+                if (selected is not null)
+                {
+                    return itemDrag.Begin(
+                        selected, gizmo.Origin, grabbed, gizmoRay, freeCamera.State.Forward,
+                        GetEditScope(selected));
+                }
             }
 
             if (renderer.PickMarker(screen) is { } placed && renderer.CreateRay(screen) is { } markerRay)
@@ -374,19 +383,17 @@ namespace YMM43D.PreviewTool.ViewModels
                 timeline?.SelectedItems = [placed.Item];
 
                 return itemDrag.BeginMarker(
-                    placed.Source, placed.ItemTime, placed.Marker.Position, markerRay,
+                    placed.Source, placed.ItemTime, placed.Marker.Position, GizmoHandle.Free, markerRay,
                     freeCamera.State.Forward, GetEditScope(placed.Item));
             }
 
             if (renderer.Pick(screen, out var ray) is not { } picked)
             {
                 selected = null;
-                selectedMarker = null;
                 return false;
             }
 
             selected = picked.Item;
-            selectedMarker = null;
 
             timeline?.SelectedItems = [picked.Item];
 
@@ -469,6 +476,8 @@ namespace YMM43D.PreviewTool.ViewModels
 
         private void SyncSelectionState()
         {
+            selectedMarker = timeline?.SelectedItems?.FirstOrDefault(item => item is ISceneMarkerSource);
+
             var has = HasSelectedItem;
 
             if (has == hadSelectedItem)

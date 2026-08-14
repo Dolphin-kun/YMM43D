@@ -1,4 +1,5 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel;
+using System.ComponentModel.DataAnnotations;
 using System.Windows.Media;
 using YMM43D.Plugin;
 using YukkuriMovieMaker.Commons;
@@ -24,9 +25,17 @@ namespace Extrusion3D
         public ExtrusionType ExtrusionType
         {
             get => extrusionType;
-            set => Set(ref extrusionType, value);
+            set
+            {
+                Set(ref extrusionType, value);
+                OnPropertyChanged(nameof(IsSolidSide));
+            }
         }
         private ExtrusionType extrusionType = ExtrusionType.Image;
+
+        [Browsable(false)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public bool IsSolidSide => ExtrusionType == ExtrusionType.Solid;
 
         [Display(GroupName = "立体化3D", Name = "陰影をつけない",
             Description = "光源を無視して、元の色のまま塗ります")]
@@ -36,7 +45,7 @@ namespace Extrusion3D
 
         [Display(GroupName = "立体化3D", Name = "色", Description = "側面の塗りつぶし色を設定します")]
         [ColorPicker]
-        [ShowPropertyEditorWhen(nameof(ExtrusionType), ExtrusionType.Solid)]
+        [ShowPropertyEditorWhen(nameof(IsSolidSide), true)]
         public Color SideColor
         {
             get => sideColor;

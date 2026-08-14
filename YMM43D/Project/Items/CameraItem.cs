@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Numerics;
 using System.Windows.Media;
@@ -34,33 +35,46 @@ namespace YMM43D.Project.Items
         public CameraAim AimMode
         {
             get => aimMode;
-            set => Set(ref aimMode, value);
+            set
+            {
+                Set(ref aimMode, value);
+                OnPropertyChanged(nameof(AimsByRotation));
+                OnPropertyChanged(nameof(AimsAtTarget));
+            }
         }
         private CameraAim aimMode = CameraAim.Rotation;
 
+        [Browsable(false)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public bool AimsByRotation => AimMode == CameraAim.Rotation;
+
+        [Browsable(false)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public bool AimsAtTarget => AimMode == CameraAim.Target;
+
         [Display(GroupName = Place, Name = "水平回転", Description = "横を向きます", Order = FirstOrder + 4)]
         [AnimationSlider("F1", "°", -180, 180)]
-        [ShowPropertyEditorWhen(nameof(AimMode), CameraAim.Rotation)]
+        [ShowPropertyEditorWhen(nameof(AimsByRotation), true)]
         public Animation Yaw { get; } = new(0, -100000, 100000);
 
         [Display(GroupName = Place, Name = "垂直回転", Description = "上下を向きます", Order = FirstOrder + 5)]
         [AnimationSlider("F1", "°", -CameraState.MaxPitch, CameraState.MaxPitch)]
-        [ShowPropertyEditorWhen(nameof(AimMode), CameraAim.Rotation)]
+        [ShowPropertyEditorWhen(nameof(AimsByRotation), true)]
         public Animation Pitch { get; } = new(0, -CameraState.MaxPitch, CameraState.MaxPitch);
 
         [Display(GroupName = Place, Name = "注目X", Description = "見つめる点。右が正", Order = FirstOrder + 6)]
         [AnimationSlider("F1", "px", -2000, 2000)]
-        [ShowPropertyEditorWhen(nameof(AimMode), CameraAim.Target)]
+        [ShowPropertyEditorWhen(nameof(AimsAtTarget), true)]
         public Animation TargetX { get; } = new(0, -1000000, 1000000);
 
         [Display(GroupName = Place, Name = "注目Y", Description = "下が正。画面の座標と同じ向き", Order = FirstOrder + 7)]
         [AnimationSlider("F1", "px", -2000, 2000)]
-        [ShowPropertyEditorWhen(nameof(AimMode), CameraAim.Target)]
+        [ShowPropertyEditorWhen(nameof(AimsAtTarget), true)]
         public Animation TargetY { get; } = new(0, -1000000, 1000000);
 
         [Display(GroupName = Place, Name = "注目Z", Description = "手前が正。0 の面が、YMM4 が 2D で描く面", Order = FirstOrder + 8)]
         [AnimationSlider("F1", "px", -5000, 5000)]
-        [ShowPropertyEditorWhen(nameof(AimMode), CameraAim.Target)]
+        [ShowPropertyEditorWhen(nameof(AimsAtTarget), true)]
         public Animation TargetZ { get; } = new(0, -1000000, 1000000);
 
         [Display(GroupName = Place, Name = "傾き", Description = "視線を軸にして画面を回します", Order = FirstOrder + 9)]
