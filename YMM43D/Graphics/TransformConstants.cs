@@ -28,6 +28,8 @@ namespace YMM43D.Graphics
 
         public Vector4 Options;
 
+        public Vector4 Surface;
+
         public LightConstants Light0;
 
         public LightConstants Light1;
@@ -49,7 +51,8 @@ namespace YMM43D.Graphics
             in Matrix4x4 view,
             in Matrix4x4 projection,
             float opacity,
-            bool unlit)
+            bool unlit,
+            float alphaCutoff = 0f)
         {
             Matrix4x4.Invert(view, out var eye);
 
@@ -65,6 +68,7 @@ namespace YMM43D.Graphics
                 Ambient = Vector4.Zero,
                 FogColor = Vector4.Zero,
                 Options = new Vector4(opacity, unlit ? 1f : 0f, 0f, 1f),
+                Surface = new Vector4(alphaCutoff, 0f, 0f, 0f),
             };
         }
 

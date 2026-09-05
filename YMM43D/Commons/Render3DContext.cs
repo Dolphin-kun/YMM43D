@@ -22,7 +22,8 @@ namespace YMM43D.Commons
             return inverse.Translation;
         }
 
-        public TransformConstants CreateConstants(in Matrix4x4 world, float opacity, bool unlit = false)
-            => SceneConstants.Create(world, View, Projection, opacity, Lighting, unlit);
+        public TransformConstants CreateConstants(
+            in Matrix4x4 world, float opacity, bool unlit = false, float alphaCutoff = 0f)
+            => SceneConstants.Create(world, View, Projection, opacity, Lighting, unlit, alphaCutoff);
     }
 }

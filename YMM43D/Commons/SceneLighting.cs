@@ -12,12 +12,13 @@ namespace YMM43D.Commons
             in Matrix4x4 projection,
             float opacity,
             SceneLighting? lighting = null,
-            bool unlit = false)
+            bool unlit = false,
+            float alphaCutoff = 0f)
         {
             var scene = lighting ?? SceneLighting.Default;
             var fog = scene.Fog;
 
-            var constants = TransformConstants.Create(world, view, projection, opacity, unlit);
+            var constants = TransformConstants.Create(world, view, projection, opacity, unlit, alphaCutoff);
 
             constants.Ambient = new Vector4(scene.Ambient, 1f);
             constants.FogColor = new Vector4(fog.Color, fog.IsEnabled ? fog.Density : 0f);

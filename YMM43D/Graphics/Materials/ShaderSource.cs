@@ -18,14 +18,16 @@
                 float4 Ambient;
                 float4 FogColor;
                 float4 Options;
+                float4 Surface;
                 Light  Lights[4];
             """;
 
         public const string TransformNames = """
-            #define Opacity  Options.x
-            #define Unlit    Options.y
-            #define FogStart Options.z
-            #define FogEnd   Options.w
+            #define Opacity     Options.x
+            #define Unlit       Options.y
+            #define FogStart    Options.z
+            #define FogEnd      Options.w
+            #define AlphaCutoff Surface.x
             """;
 
         public static string TransformBuffer =>
@@ -116,6 +118,12 @@
         public const string Shading = """
             float4 Shade(float4 color, PS_IN input)
             {
+                // 透けている画素を捨てる。捨てないと板の四角いままに深度が書かれ、
+                // 文字のまわりの何も無いところが後ろの物を隠してしまう。
+                // AlphaCutoff は深度だけを書くときに上げる（画素の色は同じでも、
+                // 隠すかどうかは輪郭で決めたいため）。既定の 0 では誰も捨てない。
+                clip(color.a - AlphaCutoff);
+
                 color.rgb = ApplyLight(color.rgb, input.Nrm, input.World);
                 color.rgb = ApplyFog(color.rgb, input.World);
                 color.a *= Opacity;

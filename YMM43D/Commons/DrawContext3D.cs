@@ -6,6 +6,10 @@ namespace YMM43D.Commons
 {
     public sealed class DrawContext3D
     {
+        public const float SolidAlpha = 0.5f;
+
+        public const float VisibleAlpha = 1f / 512f;
+
         public required Matrix4x4 World { get; init; }
 
         public required float Opacity { get; init; }
@@ -17,6 +21,8 @@ namespace YMM43D.Commons
         public bool DepthOnly { get; init; }
 
         public required FrameContext Time { get; init; }
+
+        public float AlphaCutoff => DepthOnly ? SolidAlpha : VisibleAlpha;
 
         public ID3D11ShaderResourceView? Texture { get; init; }
 
