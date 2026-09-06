@@ -424,7 +424,7 @@ namespace YMM43D.PreviewTool.ViewModels
             timeline?.SelectedItems = [picked.Item];
 
             return itemDrag.Begin(
-                picked.Item, picked.World.Translation, GizmoHandle.Free, ray, freeCamera.State.Forward,
+                picked.Item, picked.Origin, GizmoHandle.Free, ray, freeCamera.State.Forward,
                 GetEditScope(picked.Item));
         }
 

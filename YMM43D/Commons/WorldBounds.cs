@@ -32,6 +32,8 @@ namespace YMM43D.Commons
 
         public bool IsEmpty => Max.X <= Min.X || Max.Y <= Min.Y;
 
+        public Vector3 Center => (Min + Max) / 2f;
+
         public Vector3[] GetCorners() =>
         [
             new(Min.X, Min.Y, Min.Z),

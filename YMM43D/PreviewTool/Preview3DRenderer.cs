@@ -58,7 +58,10 @@ namespace YMM43D.PreviewTool
             Matrix4x4 World,
             WorldBounds Bounds,
             I3DProvider Provider,
-            DrawContext3D Context);
+            DrawContext3D Context)
+        {
+            public Vector3 Origin => Vector3.Transform(Bounds.Center, World);
+        }
 
         public void Draw(
             ID3D11Device device,
@@ -200,7 +203,7 @@ namespace YMM43D.PreviewTool
             foreach (var target in pickTargets)
             {
                 if (target.Item == selected)
-                    return TransformGizmo.Create(target.World.Translation, cameraPosition);
+                    return TransformGizmo.Create(target.Origin, cameraPosition);
             }
 
             return null;
