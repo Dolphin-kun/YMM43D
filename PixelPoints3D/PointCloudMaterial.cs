@@ -101,6 +101,8 @@ namespace PixelPoints3D
 
             {{ShaderSource.LightingFunctions}}
 
+            {{ShaderSource.TextureSampling}}
+
             static const float Pi = 3.14159265;
 
             // 丸い粒と線はカメラを向いた板でしかないので、球（線なら円柱）の表面と
@@ -341,7 +343,7 @@ namespace PixelPoints3D
                 // 捨てたあとの画素は隣との差が定まらないので、割合は捨てる前に求める。
                 float coverage = Coverage(input.Edge);
 
-                float4 source = txDiffuse.SampleLevel(samLinear, input.TexCoord, 0);
+                float4 source = Unpremultiply(txDiffuse.SampleLevel(samLinear, input.TexCoord, 0));
 
                 if (source.a < Threshold)
                     discard;

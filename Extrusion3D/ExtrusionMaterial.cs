@@ -42,6 +42,8 @@ namespace Extrusion3D
 
             {{ShaderSource.LightingFunctions}}
 
+            {{ShaderSource.TextureSampling}}
+
             struct VS_INPUT
             {
                 float3 Position : POSITION;
@@ -169,7 +171,7 @@ namespace Extrusion3D
 
                 if (isFrontFace || isBackFace)
                 {
-                    float4 texColor = txDiffuse.SampleLevel(samLinear, hitUV, 0);
+                    float4 texColor = Unpremultiply(txDiffuse.SampleLevel(samLinear, hitUV, 0));
                     float3 faceNormal = float3(0.0, 0.0, isFrontFace ? -1.0 : 1.0);
 
                     output.Color = float4(
@@ -186,7 +188,7 @@ namespace Extrusion3D
                 float3 sideNormal = normalize(float3(left - right, up - down, FaceEpsilon));
 
                 float3 color = ExtrusionType == TypeImage
-                    ? txDiffuse.SampleLevel(samLinear, hitUV, 0).rgb
+                    ? Unpremultiply(txDiffuse.SampleLevel(samLinear, hitUV, 0)).rgb
                     : SideColor.rgb;
 
                 output.Color = float4(Shade3D(color, sideNormal, worldPos), Opacity);

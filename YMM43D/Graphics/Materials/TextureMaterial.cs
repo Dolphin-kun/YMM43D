@@ -19,7 +19,7 @@ namespace YMM43D.Graphics.Materials
 
                 float4 PSMain(PS_IN input) : SV_TARGET
                 {
-                    return Shade(input.Col * tex.Sample(samp, input.Tex), input);
+                    return Shade(input.Col * Unpremultiply(tex.Sample(samp, input.Tex)), input);
                 }
                 """;
 

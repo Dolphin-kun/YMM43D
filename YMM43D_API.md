@@ -320,6 +320,8 @@ internal sealed class ExtrusionProcessor : VideoEffect3DProcessorBase
 
 3D 描画は YMM4 とは別のデバイスで行うため、入力画像をそのままテクスチャとして使うことはできません。`GetTexture(device)` を呼べば、基底クラスが共有テクスチャを介して変換したものを返します。実寸は `TryGetSize(out size, out offset)` で取れます。焼き込みは `Update` の中で済ませてあるので、`Draw` がプレビューのスレッドから呼ばれても安全です（[実装上の注意](#8-実装上の注意)を参照）。
 
+> **サンプルした色は `Unpremultiply()` に通してください。** Direct2D の画像は色に不透明度をあらかじめ掛けた形（乗算済みアルファ）です。陰影・霧・混ぜ合わせはどれも掛かっていない色を前提にしているので、割り戻さないと不透明度が二度掛かります。登場・退場で薄くしたときに色まで一緒に沈み、消え際が黒ずんで見えます。
+
 入力画像の実寸をワールド行列に取り込ませたくない場合は、`ScalesToInputSize` を `false` にしてください。粒や線のように太さを持つものは、縦横で違う倍率に引き伸ばされると歪みます。この値はプレビュー側からも参照されるので、出力と大きさが食い違うことはありません。
 
 > **`DrawDescription` は基底クラスが空にして返します。** アイテムの位置・拡大率・回転・カメラはすべて 3D のワールド行列に取り込んで描画済みなので、YMM4 に二重に掛けさせないためです。副作用として、**このエフェクトより後ろに置いたエフェクトからは、アイテムの位置や拡大率が既定値に見えます。** それらを参照するエフェクトは前に置いてください。
@@ -411,7 +413,10 @@ HLSL は `ShaderCompiler.Compile` で実行時にコンパイルします。共�
 | `PixelInput` | ピクセル入力 `PS_IN`（`Pos` / `Col` / `Tex` / `Nrm` / `World`） |
 | `VertexShaderMain` | 座標変換と法線変換を行う頂点シェーダー `VSMain` |
 | `LightingFunctions` | `ApplyLight` と `ApplyFog` |
-| `Shading` | 両者と不透明度をまとめた `Shade` |
+| `TextureSampling` | 乗算済みアルファを割り戻す `Unpremultiply` |
+| `Shading` | 両者と不透明度をまとめ、透けた画素を捨てる `Shade` |
+
+`Shade` は `AlphaCutoff` より薄い画素を `clip` で捨てます。捨てないと板の四角いままに深度が書かれ、文字のまわりの何も無いところが後ろの物を隠します。しきい値は `DrawContext3D.AlphaCutoff` から渡ります。色を塗るときはごくわずか、深度だけを書くときは輪郭で切れる値になります。
 
 ```csharp
 // StandardPrologue はプロパティなので const にはできない
