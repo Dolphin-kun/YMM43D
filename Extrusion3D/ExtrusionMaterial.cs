@@ -10,8 +10,6 @@ namespace Extrusion3D
     [StructLayout(LayoutKind.Sequential)]
     internal struct ExtrusionConstants
     {
-        public TransformConstants Transform;
-
         public Vector4 SideColor;
 
         public Vector3 CameraLocalPos;

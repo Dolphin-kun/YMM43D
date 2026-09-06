@@ -1,6 +1,8 @@
 #ifndef YMM43D_LIGHTING_HLSLI
 #define YMM43D_LIGHTING_HLSLI
 
+#include "Scene.hlsli"
+
 float3 ApplyLight(float3 color, float3 normal, float3 world)
 {
     if (Unlit > 0.5 || dot(normal, normal) < 1e-8)

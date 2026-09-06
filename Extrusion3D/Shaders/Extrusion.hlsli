@@ -1,21 +1,16 @@
 #ifndef YMM43D_EXTRUSION_HLSLI
 #define YMM43D_EXTRUSION_HLSLI
 
-#include "../../YMM43D/Shaders/Light.hlsli"
+#include "../../YMM43D/Shaders/Lighting.hlsli"
+#include "../../YMM43D/Shaders/Texture.hlsli"
 
-cbuffer ExtrusionConstants : register(b0)
+// このエフェクトだけの値。場（b0）には触らない。
+cbuffer ExtrusionConstants : register(b1)
 {
-#include "../../YMM43D/Shaders/SceneFields.hlsli"
     float4 SideColor;
     float3 CameraLocalPos;
     int    ExtrusionType;
 };
-
-#include "../../YMM43D/Shaders/SceneNames.hlsli"
-
-#include "../../YMM43D/Shaders/Lighting.hlsli"
-
-#include "../../YMM43D/Shaders/Texture.hlsli"
 
 struct VS_INPUT
 {

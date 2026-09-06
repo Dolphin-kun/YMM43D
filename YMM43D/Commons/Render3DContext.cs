@@ -24,5 +24,8 @@ namespace YMM43D.Commons
         public TransformConstants CreateConstants(
             in Matrix4x4 world, float opacity, bool unlit = false, float alphaCutoff = 0f)
             => SceneConstants.Create(world, View, Projection, opacity, Lighting, unlit, alphaCutoff);
+
+        public TransformConstants CreateConstants(in Matrix4x4 world, DrawContext3D item, bool unlit = false)
+            => SceneConstants.Create(world, View, Projection, item.Opacity, Lighting, unlit, item.AlphaCutoff);
     }
 }

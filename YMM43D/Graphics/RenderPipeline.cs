@@ -6,9 +6,12 @@ namespace YMM43D.Graphics
     public sealed class RenderPipeline<TConstants> : IDisposable where TConstants : unmanaged
     {
         private readonly DisposeCollector disposer = new();
+        private readonly ID3D11Device device;
         private readonly ID3D11InputLayout inputLayout;
         private readonly ID3D11Buffer constantBuffer;
         private readonly RenderStates states;
+
+        private ID3D11Buffer? extraBuffer;
 
         public IMesh? Mesh { get; }
 
@@ -29,12 +32,34 @@ namespace YMM43D.Graphics
         {
             Material = material;
             disposer.Collect(material);
+            this.device = device;
             this.states = states ?? RenderStates.For(device);
 
             inputLayout = device.CreateInputLayout(inputElements, material.VertexShaderBytecode);
             disposer.Collect(inputLayout);
             constantBuffer = D3D11Buffers.CreateConstantBuffer<TConstants>(device);
             disposer.Collect(constantBuffer);
+        }
+
+        public void Draw<TExtra>(
+            ID3D11DeviceContext context,
+            in TConstants constants,
+            in TExtra extra,
+            in DrawSettings settings,
+            IMesh? mesh = null)
+            where TExtra : unmanaged
+        {
+            if (extraBuffer is null)
+            {
+                extraBuffer = D3D11Buffers.CreateConstantBuffer<TExtra>(device);
+                disposer.Collect(extraBuffer);
+            }
+
+            context.UpdateSubresource(in extra, extraBuffer);
+            context.VSSetConstantBuffer(1, extraBuffer);
+            context.PSSetConstantBuffer(1, extraBuffer);
+
+            Draw(context, constants, settings, mesh);
         }
 
         public void Draw(

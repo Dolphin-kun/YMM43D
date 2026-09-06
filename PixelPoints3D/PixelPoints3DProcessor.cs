@@ -43,7 +43,8 @@ namespace PixelPoints3D
             var grid = shared.GetGrid(size);
             var pipeline = shared.Pipeline;
 
-            var constants = BuildConstants(time, item, render, world, size, extent);
+            var scene = render.CreateConstants(world, item, effect.IsUnlit);
+            var constants = BuildConstants(time, size, extent, render, world);
             var settings = item.ToDrawSettings(FaceCulling.None, texture);
 
             if (effect.Face is { } face && grid.Faces is { } faces)
@@ -55,7 +56,7 @@ namespace PixelPoints3D
                         face.OpacityRandomness.GetFloat(time) / 100f, 0f, 1f),
                 };
 
-                pipeline.Draw(render.Context, faceConstants, settings, faces);
+                pipeline.Draw(render.Context, scene, faceConstants, settings, faces);
             }
 
             if (effect.Line is { } line && grid.Lines is { } lines && constants.LineHalfWidth > 0f)
@@ -65,7 +66,7 @@ namespace PixelPoints3D
                     LineRandomness = Math.Clamp(line.Randomness.GetFloat(time) / 100f, 0f, 1f),
                 };
 
-                pipeline.Draw(render.Context, lineConstants, settings, lines);
+                pipeline.Draw(render.Context, scene, lineConstants, settings, lines);
             }
 
             if (effect.Point is { } point && constants.PointHalfSize > 0f)
@@ -75,7 +76,7 @@ namespace PixelPoints3D
                     PointIsRound = point.Shape == PointShape.Circle ? 1f : 0f,
                 };
 
-                pipeline.Draw(render.Context, pointConstants, settings, grid.Points);
+                pipeline.Draw(render.Context, scene, pointConstants, settings, grid.Points);
             }
         }
 
@@ -88,11 +89,10 @@ namespace PixelPoints3D
 
         private PointCloudConstants BuildConstants(
             in FrameContext time,
-            DrawContext3D item,
-            in Render3DContext render,
-            in Matrix4x4 world,
             GridSize size,
-            Vector3 extent)
+            Vector3 extent,
+            in Render3DContext render,
+            in Matrix4x4 world)
         {
             var deform = PointDeform.Create(effect, time, extent);
 
@@ -104,7 +104,6 @@ namespace PixelPoints3D
                 DeformPeriod = deform.Period,
                 DeformPhase = deform.Phase,
 
-                Transform = render.CreateConstants(world, item.Opacity, effect.IsUnlit),
                 GridCount = new Vector3(size.X, size.Y, size.Z),
                 Threshold = Math.Clamp(effect.Threshold.GetFloat(time) / 100f, 0f, 1f),
                 Extent = extent,
@@ -201,7 +200,7 @@ namespace PixelPoints3D
         {
             private PointGrid? grid;
 
-            public RenderPipeline<PointCloudConstants> Pipeline { get; } = new(
+            public RenderPipeline<TransformConstants> Pipeline { get; } = new(
                 device, GridVertex.InputElements, new PointCloudMaterial(device));
 
             public PointGrid GetGrid(GridSize size)

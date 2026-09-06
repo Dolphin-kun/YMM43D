@@ -10,8 +10,6 @@ namespace PixelPoints3D
     [StructLayout(LayoutKind.Sequential)]
     internal struct PointCloudConstants
     {
-        public TransformConstants Transform;
-
         public Vector4 Color;
 
         public Vector3 GridCount;

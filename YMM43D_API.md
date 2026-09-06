@@ -432,18 +432,17 @@ var psBytes = ShaderLibrary.Compile(assembly, "My.hlsl", "PSMain", "ps_5_0");
 >
 > 二重に取り込まれても壊れないよう、hlsli には見張り（`#ifndef`）を付けてあります。
 
-YMM43D が持っている部品です。
+YMM43D が持っている部品です。**どれも単体で完結している**ので、エディタで開いても赤くなりません。
 
 | ファイル | 内容 |
 |---|---|
 | `Standard.hlsli` | 下の全部をまとめたもの。ふつうはこれ 1 つを取り込みます |
-| `Light.hlsli` | 光 1 つぶんの `struct Light` |
-| `SceneFields.hlsli` | 変換行列・不透明度・光・霧の並び。**`cbuffer` の中に**取り込みます |
-| `SceneNames.hlsli` | `Opacity` や `FogStart` など、上の並びへの別名 |
+| `Scene.hlsli` | 3D の場の `cbuffer`（register **b0**）と、`Opacity` などの別名 |
 | `Lighting.hlsli` | `ApplyLight` と `ApplyFog` |
 | `Texture.hlsli` | 乗算済みアルファを割り戻す `Unpremultiply` |
+| `Light.hlsli` | 光 1 つぶんの `struct Light` |
 
-`Standard.hlsli` を取り込むと、`cbuffer`（register b0）、頂点入力 `VS_IN`（`Pos` / `Col` / `Tex` / `Nrm`）、ピクセル入力 `PS_IN`（`Pos` / `Col` / `Tex` / `Nrm` / `World`）、座標変換と法線変換を行う `VSMain`、陰影と霧と不透明度をまとめた `Shade` が揃います。
+`Standard.hlsli` を取り込むと、場の `cbuffer`、頂点入力 `VS_IN`（`Pos` / `Col` / `Tex` / `Nrm`）、ピクセル入力 `PS_IN`（`Pos` / `Col` / `Tex` / `Nrm` / `World`）、座標変換と法線変換を行う `VSMain`、陰影と霧と不透明度をまとめた `Shade` が揃います。
 
 ```hlsl
 #include "Standard.hlsli"
@@ -456,29 +455,52 @@ float4 PSMain(PS_IN input) : SV_TARGET
 
 `Shade` は `AlphaCutoff` より薄い画素を `clip` で捨てます。捨てないと板の四角いままに深度が書かれ、文字のまわりの何も無いところが後ろの物を隠します。しきい値は `DrawContext3D.AlphaCutoff` から渡ります。色を塗るときはごくわずか、深度だけを書くときは輪郭で切れる値になります。
 
-自前の `cbuffer` を持つマテリアルは、`SceneFields.hlsli` を先頭に置き、C# 側の構造体の先頭に `TransformConstants` を埋めれば、並びが食い違いません（「立体化3D」と「点群3D」がこの形です）。
+### 自分の値を渡す
+
+**b0 は場のもの、b1 はあなたのもの**です。自前の値は `register(b1)` に置いてください。b0 には触らなくてよく、並び順を合わせる必要もありません（「立体化3D」と「点群3D」がこの形です）。
+
+```hlsl
+#include "Standard.hlsli"
+
+cbuffer MyConstants : register(b1)
+{
+    float4 MyColor;
+};
+
+float4 PSMain(PS_IN input) : SV_TARGET
+{
+    return Shade(MyColor, input);
+}
+```
+
+C# 側は、その `cbuffer` と同じ並びの構造体を作るだけです。
 
 ```csharp
 [StructLayout(LayoutKind.Sequential)]
 internal struct MyConstants
 {
-    public TransformConstants Transform;
     public Vector4 MyColor;
 }
 ```
 
-```hlsl
-#include "Light.hlsli"
+描くときは、場と自分の値を並べて渡します。パイプラインの型引数は b0 の型なので `TransformConstants` のままです。
 
-cbuffer MyConstants : register(b0)
+```csharp
+private readonly DeviceResourceCache<RenderPipeline<TransformConstants>> pipelines = new(
+    device => new RenderPipeline<TransformConstants>(device, mesh, material));
+
+public override void Draw(in Render3DContext render, DrawContext3D item)
 {
-#include "SceneFields.hlsli"
-    float4 MyColor;
-};
+    var scene = render.CreateConstants(world, item, unlit: false);
+    var mine = new MyConstants { MyColor = ... };
 
-#include "SceneNames.hlsli"
-#include "Lighting.hlsli"
+    pipelines.Get(render.Device).Draw(render.Context, scene, mine, item.ToDrawSettings());
+}
 ```
+
+`CreateConstants(world, item)` は、不透明度と透過のしきい値を `DrawContext3D` から拾います。b1 のバッファはパイプラインが初回に作って使い回すので、こちらで用意するものはありません。b1 が要らないマテリアルは `Draw(context, scene, settings)` と、値を 2 つで呼びます。
+
+> `cbuffer` の大きさは 16 バイトの倍数でなければなりません。`float3` の後ろに `float` を置く、といった詰め方で揃えてください。余りは末尾に `float2 Padding;` のような詰め物を足します。
 
 > **hlsl ファイルは UTF-8 で保存してください。** コンパイラに渡すのは UTF-8 のバイト列です。別の文字コードで保存するとコメントの日本語が化け、場合によっては読み込みで末尾が欠けます。
 

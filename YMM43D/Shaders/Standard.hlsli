@@ -1,14 +1,8 @@
 #ifndef YMM43D_STANDARD_HLSLI
 #define YMM43D_STANDARD_HLSLI
 
-#include "Light.hlsli"
-
-cbuffer TransformBuffer : register(b0)
-{
-#include "SceneFields.hlsli"
-};
-
-#include "SceneNames.hlsli"
+#include "Lighting.hlsli"
+#include "Texture.hlsli"
 
 struct VS_IN
 {
@@ -37,10 +31,6 @@ PS_IN VSMain(VS_IN input)
     output.World = mul(float4(input.Pos, 1.0), World).xyz;
     return output;
 }
-
-#include "Lighting.hlsli"
-
-#include "Texture.hlsli"
 
 float4 Shade(float4 color, PS_IN input)
 {

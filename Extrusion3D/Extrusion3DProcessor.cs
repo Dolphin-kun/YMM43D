@@ -10,8 +10,8 @@ namespace Extrusion3D
     internal sealed class Extrusion3DProcessor(Extrusion3DEffect effect, IGraphicsDevicesAndContext devices) : VideoEffect3DProcessorBase(effect, devices)
     {
         private readonly Extrusion3DEffect effect = effect;
-        private readonly DeviceResourceCache<RenderPipeline<ExtrusionConstants>> pipelines = new(
-                device => new RenderPipeline<ExtrusionConstants>(
+        private readonly DeviceResourceCache<RenderPipeline<TransformConstants>> pipelines = new(
+                device => new RenderPipeline<TransformConstants>(
                     device,
                     BoxMesh.CreateExtrusionBox(device),
                     new ExtrusionMaterial(device)));
@@ -36,16 +36,16 @@ namespace Extrusion3D
             var cameraLocalPos = Vector3.Transform(render.GetCameraPosition(), inverseWorld);
 
             var sideColor = effect.SideColor;
+            var scene = render.CreateConstants(world, item, effect.IsUnlit);
             var constants = new ExtrusionConstants
             {
-                Transform = render.CreateConstants(world, item.Opacity, effect.IsUnlit),
                 SideColor = new Vector4(sideColor.R, sideColor.G, sideColor.B, sideColor.A) / 255f,
                 CameraLocalPos = cameraLocalPos,
                 ExtrusionType = (int)effect.ExtrusionType,
             };
 
             var settings = item.ToDrawSettings(FaceCulling.Front, texture) with { Blend = BlendMode.Normal };
-            pipelines.Get(render.Device).Draw(render.Context, constants, settings);
+            pipelines.Get(render.Device).Draw(render.Context, scene, constants, settings);
         }
 
         private float GetThickness(in FrameContext time)

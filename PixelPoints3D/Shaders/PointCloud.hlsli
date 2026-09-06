@@ -1,11 +1,12 @@
 #ifndef YMM43D_POINTCLOUD_HLSLI
 #define YMM43D_POINTCLOUD_HLSLI
 
-#include "../../YMM43D/Shaders/Light.hlsli"
+#include "../../YMM43D/Shaders/Lighting.hlsli"
+#include "../../YMM43D/Shaders/Texture.hlsli"
 
-cbuffer PointCloudConstants : register(b0)
+// このエフェクトだけの値。場（b0）には触らない。
+cbuffer PointCloudConstants : register(b1)
 {
-#include "../../YMM43D/Shaders/SceneFields.hlsli"
     float4 Color;
     float3 GridCount;
     float  Threshold;
@@ -29,12 +30,6 @@ cbuffer PointCloudConstants : register(b0)
     float  PointIsRound;
     float2 Padding;
 };
-
-#include "../../YMM43D/Shaders/SceneNames.hlsli"
-
-#include "../../YMM43D/Shaders/Lighting.hlsli"
-
-#include "../../YMM43D/Shaders/Texture.hlsli"
 
 static const float Pi = 3.14159265;
 
