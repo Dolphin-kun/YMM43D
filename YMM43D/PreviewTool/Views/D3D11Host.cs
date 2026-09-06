@@ -48,7 +48,7 @@ namespace YMM43D.PreviewTool.Views
         private static bool IsDown(int virtualKey) => (GetKeyState(virtualKey) & 0x8000) != 0;
 
         private const string WindowClassName = "YMM43D_PreviewHost_Independent";
-        private static bool isClassRegistered = false;
+        private static bool isClassRegistered;
         private static WndProcDelegate? defWndProc;
 
         public D3D11Host()

@@ -8,11 +8,9 @@ using Vortice.Direct3D11;
 using YMM43D.Commons;
 using YMM43D.Project.Items;
 using YMM43D.Player;
-using YMM43D.Plugin;
 using YMM43D.PreviewTool.Views;
 using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.ItemEditor;
-using YukkuriMovieMaker.Player.Video;
 using YukkuriMovieMaker.Plugin;
 using YukkuriMovieMaker.Project;
 using YukkuriMovieMaker.Project.Items;
@@ -81,7 +79,7 @@ namespace YMM43D.PreviewTool.ViewModels
 
         public bool CanAddItem => timeline is not null;
 
-        public bool HasSelectedItem => timeline?.SelectedItems?.Any() == true;
+        public bool HasSelectedItem => timeline?.SelectedItems is { IsEmpty: false };
 
         public ICommand ResetToSceneCameraCommand { get; }
         public ICommand AddCameraCommand { get; }

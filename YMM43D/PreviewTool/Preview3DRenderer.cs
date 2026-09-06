@@ -3,7 +3,6 @@ using Vortice.Direct3D11;
 using Vortice.Mathematics;
 using YMM43D.Commons;
 using YMM43D.Player;
-using YMM43D.Plugin;
 using YMM43D.PreviewTool.Rendering;
 using YukkuriMovieMaker.Project.Items;
 

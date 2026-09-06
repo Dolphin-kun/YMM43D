@@ -361,5 +361,3 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
-# 起動プロファイル（環境ごとの絶対パスを含む）
-launchSettings.json

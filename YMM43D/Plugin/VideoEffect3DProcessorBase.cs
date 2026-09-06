@@ -44,28 +44,28 @@ namespace YMM43D.Plugin
 
         WorldBounds I3DBounds.GetLocalBounds(in FrameContext itemTime) => GetLocalBounds(itemTime);
 
-        public DrawDescription Update(EffectDescription description)
+        public DrawDescription Update(EffectDescription effectDescription)
         {
-            EffectDescription = description;
+            EffectDescription = effectDescription;
 
             BakeInput();
 
-            var itemTime = FrameContext.FromItem(description);
+            var itemTime = FrameContext.FromItem(effectDescription);
 
             var world = ScalesToInputSize && TryGetSize(out var size, out var offset)
                 ? WorldScale.CreateSizeMatrix(size, offset + size / 2f)
                 : Matrix4x4.Identity;
 
-            ConsumeCamera(description.DrawDescription, ref world);
+            ConsumeCamera(effectDescription.DrawDescription, ref world);
 
             localMatrix = world;
 
             output = renderer.Render(
-                Devices, description, GetLocalBounds(itemTime), world, Draw,
+                Devices, effectDescription, GetLocalBounds(itemTime), world, Draw,
                 self: (I3DProvider?)owner ?? this,
-                placement: ToWorldPlacement(description.DrawDescription));
+                placement: ToWorldPlacement(effectDescription.DrawDescription));
 
-            return Neutralize(description.DrawDescription);
+            return Neutralize(effectDescription.DrawDescription);
         }
 
         private static Matrix4x4 ToWorldPlacement(DrawDescription draw)

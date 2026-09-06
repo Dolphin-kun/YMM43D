@@ -5,7 +5,6 @@ using YMM43D.Commons;
 using YMM43D.Graphics;
 using YMM43D.Graphics.Materials;
 using YMM43D.Graphics.Meshes;
-using YMM43D.Plugin;
 
 namespace YMM43D.PreviewTool.Rendering
 {

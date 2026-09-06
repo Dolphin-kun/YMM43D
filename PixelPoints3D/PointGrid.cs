@@ -83,7 +83,7 @@ namespace PixelPoints3D
             Faces = Collect(BuildFaces(device, size));
         }
 
-        private static IMesh BuildPoints(ID3D11Device device, GridSize size)
+        private static GridMesh BuildPoints(ID3D11Device device, GridSize size)
         {
             var vertices = new GridVertex[size.PointCount * 4];
             var indices = new uint[size.PointCount * 6];
@@ -118,7 +118,7 @@ namespace PixelPoints3D
             return new GridMesh(device, vertices, indices, PrimitiveTopology.TriangleList);
         }
 
-        private static IMesh? BuildLines(ID3D11Device device, GridSize size)
+        private static GridMesh? BuildLines(ID3D11Device device, GridSize size)
         {
             var count = (size.X - 1) * size.Y * size.Z
                       + size.X * (size.Y - 1) * size.Z
@@ -171,7 +171,7 @@ namespace PixelPoints3D
             return new GridMesh(device, vertices, indices, PrimitiveTopology.TriangleList);
         }
 
-        private static IMesh? BuildFaces(ID3D11Device device, GridSize size)
+        private static GridMesh? BuildFaces(ID3D11Device device, GridSize size)
         {
             if (size.X < 2 || size.Y < 2)
                 return null;

@@ -1,6 +1,5 @@
 ﻿using System.Numerics;
 using YMM43D.Commons;
-using YukkuriMovieMaker.Commons;
 
 namespace PixelPoints3D
 {

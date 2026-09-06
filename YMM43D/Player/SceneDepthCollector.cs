@@ -2,7 +2,6 @@
 using YMM43D.Commons;
 
 using YukkuriMovieMaker.Player.Video;
-using YukkuriMovieMaker.Project;
 using YukkuriMovieMaker.Project.Items;
 
 namespace YMM43D.Player

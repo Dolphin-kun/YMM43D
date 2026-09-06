@@ -26,13 +26,13 @@ namespace YMM43D.Plugin
 
         WorldBounds I3DBounds.GetLocalBounds(in FrameContext itemTime) => GetWorldBounds(itemTime);
 
-        public void Update(TimelineItemSourceDescription description)
+        public void Update(TimelineItemSourceDescription timelineItemSourceDescription)
         {
-            var itemTime = FrameContext.FromItem(description);
+            var itemTime = FrameContext.FromItem(timelineItemSourceDescription);
 
             output = renderer.Render(
                 Devices,
-                description,
+                timelineItemSourceDescription,
                 GetWorldBounds(itemTime),
                 Matrix4x4.Identity,
                 Draw,

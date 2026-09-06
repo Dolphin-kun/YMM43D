@@ -4,7 +4,6 @@ using Vortice.Mathematics;
 using YMM43D.Graphics;
 using YMM43D.Graphics.Materials;
 using YMM43D.Graphics.Meshes;
-using YMM43D.Plugin;
 using YMM43D.Commons;
 
 namespace YMM43D.PreviewTool.Rendering

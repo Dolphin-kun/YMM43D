@@ -2,7 +2,6 @@ using System.Numerics;
 using Vortice;
 using Vortice.Direct3D11;
 using YMM43D.Player;
-using YMM43D.Plugin;
 using YMM43D.Commons;
 using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Player.Video;

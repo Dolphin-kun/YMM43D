@@ -1,5 +1,4 @@
 ﻿using System.Numerics;
-using YMM43D.Commons;
 
 namespace YMM43D.Commons
 {

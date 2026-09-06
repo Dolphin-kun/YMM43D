@@ -1,5 +1,4 @@
-﻿using Vortice.DXGI;
-using Vortice.Direct3D11;
+﻿using Vortice.Direct3D11;
 using YukkuriMovieMaker.Commons;
 
 namespace YMM43D.Graphics

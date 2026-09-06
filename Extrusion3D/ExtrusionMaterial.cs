@@ -27,7 +27,7 @@ namespace Extrusion3D
         public ID3D11PixelShader PixelShader { get; }
         public byte[] VertexShaderBytecode { get; }
 
-        private static readonly string SharedDeclarations = $$"""
+        private const string SharedDeclarations = $$"""
             {{ShaderSource.LightStruct}}
 
             cbuffer ExtrusionConstants : register(b0)

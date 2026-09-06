@@ -67,7 +67,7 @@ namespace PixelPoints3D
         public ID3D11PixelShader PixelShader { get; }
         public byte[] VertexShaderBytecode { get; }
 
-        private static readonly string SharedDeclarations = $$"""
+        private const string SharedDeclarations = $$"""
             {{ShaderSource.LightStruct}}
 
             cbuffer PointCloudConstants : register(b0)

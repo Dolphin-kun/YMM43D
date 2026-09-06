@@ -24,7 +24,6 @@ namespace YMM43D.Player
             var lights = new List<SceneLight>();
 
             IItem? environmentItem = null;
-            ISceneEnvironment? environment = null;
 
             foreach (var item in items)
             {
@@ -39,20 +38,19 @@ namespace YMM43D.Player
                 if (item is ISceneLightSource source && lights.Count < SceneLighting.MaxLights)
                     lights.Add(source.GetLight(itemTime));
 
-                if (item is not ISceneEnvironment candidate)
+                if (item is not ISceneEnvironment)
                     continue;
 
                 if (environmentItem is { } current && item.Layer <= current.Layer)
                     continue;
 
                 environmentItem = item;
-                environment = candidate;
             }
 
             if (lights.Count == 0)
                 lights = [.. SceneLighting.Default.Lights];
 
-            if (environment is null || environmentItem is null)
+            if (environmentItem is not ISceneEnvironment environment)
                 return new SceneLighting(lights, SceneLighting.Default.Ambient, SceneFog.None);
 
             var time = new FrameContext(

@@ -1,6 +1,5 @@
 using YMM43D.Commons;
 using YMM43D.Player;
-using YMM43D.Plugin;
 using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Player.Video;
 using YukkuriMovieMaker.Plugin;

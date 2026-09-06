@@ -89,7 +89,7 @@ namespace YMM43D.Player
             }
         }
 
-        private ID2D1Image BuildCommandList(
+        private ID2D1CommandList BuildCommandList(
             IGraphicsDevicesAndContext ymmDevices,
             ID2D1Bitmap1? bitmap,
             Vector2 offset,
