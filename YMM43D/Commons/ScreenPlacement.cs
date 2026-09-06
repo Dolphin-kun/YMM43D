@@ -10,7 +10,21 @@ namespace YMM43D.Commons
     {
         public const float HostPerspectiveDistance = 1000f;
 
+        public const float FlatPerspectiveMargin = 4f;
+
         private const float MaxPerspectiveScale = 100f;
+
+        public static float GetFlatPerspectiveDistance(float? hostDistance, float imageReach)
+        {
+            var current = hostDistance is { } distance && float.IsFinite(distance) && distance > 0f
+                ? distance
+                : HostPerspectiveDistance;
+
+            if (!float.IsFinite(imageReach) || imageReach <= 0f)
+                return current;
+
+            return MathF.Max(current, imageReach * FlatPerspectiveMargin);
+        }
 
         public static ScreenPlacement None => new(Vector2.Zero, 1f, 0f, 0f);
 

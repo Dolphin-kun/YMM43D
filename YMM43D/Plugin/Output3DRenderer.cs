@@ -23,10 +23,13 @@ namespace YMM43D.Plugin
             WorldBounds bounds,
             Matrix4x4 world,
             Draw3DCallback draw,
+            out float imageReach,
             I3DProvider? self = null,
             bool hostAppliesPlacement = false,
             Matrix4x4? placement = null)
         {
+            imageReach = 0f;
+
             var itemTime = FrameContext.FromItem(description);
 
             var camera = SceneCameraResolver.Resolve(description);
@@ -56,6 +59,8 @@ namespace YMM43D.Plugin
             {
                 return renderer.RenderEmpty(devices);
             }
+
+            imageReach = target.Reach;
 
             var item = new DrawContext3D
             {

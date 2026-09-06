@@ -36,6 +36,7 @@ namespace YMM43D.Plugin
                 GetWorldBounds(itemTime),
                 Matrix4x4.Identity,
                 Draw,
+                out _,
                 self: this,
                 hostAppliesPlacement: true);
         }

@@ -6,6 +6,20 @@ namespace YMM43D.Commons
     {
         private const float MaxTangent = 64f;
 
+        public float Reach
+        {
+            get
+            {
+                var far = Origin + new Vector2(Width, Height);
+
+                var reach = MathF.Max(
+                    MathF.Max(MathF.Abs(Origin.X), MathF.Abs(far.X)),
+                    MathF.Max(MathF.Abs(Origin.Y), MathF.Abs(far.Y)));
+
+                return float.IsFinite(reach) ? reach : 0f;
+            }
+        }
+
         private static readonly (int From, int To)[] Edges =
         [
             (0, 1), (2, 3), (4, 5), (6, 7),

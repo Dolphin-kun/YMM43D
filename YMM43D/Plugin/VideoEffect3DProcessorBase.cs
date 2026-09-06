@@ -62,10 +62,11 @@ namespace YMM43D.Plugin
 
             output = renderer.Render(
                 Devices, effectDescription, GetLocalBounds(itemTime), world, Draw,
+                out var imageReach,
                 self: (I3DProvider?)owner ?? this,
                 placement: ToWorldPlacement(effectDescription.DrawDescription));
 
-            return Neutralize(effectDescription.DrawDescription);
+            return Neutralize(effectDescription.DrawDescription, imageReach);
         }
 
         private static Matrix4x4 ToWorldPlacement(DrawDescription draw)
@@ -88,13 +89,15 @@ namespace YMM43D.Plugin
             return Matrix4x4.CreateScale(scale) * rotation * translation;
         }
 
-        private static DrawDescription Neutralize(DrawDescription draw) => draw with
+        private static DrawDescription Neutralize(DrawDescription draw, float imageReach) => draw with
         {
             Draw = Vector3.Zero,
             CenterPoint = Vector2.Zero,
             Zoom = Vector2.One,
             Rotation = Vector3.Zero,
             Camera = Matrix4x4.Identity,
+            PerspectiveDistance =
+                ScreenPlacement.GetFlatPerspectiveDistance(draw.PerspectiveDistance, imageReach),
         };
 
         private static void ConsumeCamera(DrawDescription draw, ref Matrix4x4 world)
