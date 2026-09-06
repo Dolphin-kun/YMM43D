@@ -9,6 +9,8 @@ namespace YMM43D.Commons
         [ThreadStatic]
         private static int suppressionDepth;
 
+        public static bool IsSuppressed => suppressionDepth > 0;
+
         public static IDisposable SuppressRegistration() => new Suppression();
 
         public static void Register(object parameter, I3DProvider provider)

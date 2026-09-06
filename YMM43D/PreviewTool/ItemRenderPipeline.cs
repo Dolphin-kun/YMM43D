@@ -133,7 +133,9 @@ namespace YMM43D.PreviewTool
                 if (!chains.TryGetValue(key, out var chain) || !chain.Matches(effects))
                 {
                     ReleaseChain(key);
-                    chain = chains[key] = new EffectChain(effects, environment.Devices);
+
+                    using (Provider3DRegistry.SuppressRegistration())
+                        chain = chains[key] = new EffectChain(effects, environment.Devices);
                 }
 
                 return chain.Apply(sourceImage, description);
@@ -161,7 +163,10 @@ namespace YMM43D.PreviewTool
                 if (kind == PreviewProviderKind.Effect && ReferenceEquals(effect, provider))
                     break;
 
-                if (effect.IsEnabled && effect is not I3DProvider)
+                if (!effect.IsEnabled)
+                    continue;
+
+                if (kind == PreviewProviderKind.Flat || effect is not I3DProvider)
                     applied.Add(effect);
             }
 

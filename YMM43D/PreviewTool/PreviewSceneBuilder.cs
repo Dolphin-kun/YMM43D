@@ -83,8 +83,12 @@ namespace YMM43D.PreviewTool
 
             foreach (var effect in item.VideoEffects ?? [])
             {
-                if (effect.IsEnabled && effect is I3DProvider effectProvider)
+                if (effect.IsEnabled
+                    && effect is I3DProvider effectProvider
+                    && SceneDepthCollector.IsPlacedIn3D(item, effectProvider))
+                {
                     effects.Add(effectProvider);
+                }
             }
 
             return effects.Count == 0

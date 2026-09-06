@@ -28,7 +28,9 @@ namespace YMM43D.Plugin
 
         protected TProcessor AttachProcessor<TProcessor>(TProcessor processor) where TProcessor : I3DProvider
         {
-            Processor = processor;
+            if (!Provider3DRegistry.IsSuppressed)
+                Processor = processor;
+
             return processor;
         }
 

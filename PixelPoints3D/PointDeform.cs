@@ -14,7 +14,7 @@ namespace PixelPoints3D
             var kind = effect.DeformKind;
             if (kind == DeformKind.None)
                 return None;
-
+            
             var axis = effect.DeformAxis switch
             {
                 DeformAxis.X => Vector3.UnitX,
