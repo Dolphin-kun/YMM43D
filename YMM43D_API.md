@@ -326,6 +326,39 @@ internal sealed class ExtrusionProcessor : VideoEffect3DProcessorBase
 
 > **`DrawDescription` は基底クラスが空にして返します。** アイテムの位置・拡大率・回転・カメラはすべて 3D のワールド行列に取り込んで描画済みなので、YMM4 に二重に掛けさせないためです。副作用として、**このエフェクトより後ろに置いたエフェクトからは、アイテムの位置や拡大率が既定値に見えます。** それらを参照するエフェクトは前に置いてください。
 
+### 板を変形させるエフェクトを作る
+
+`Deform3D` プロジェクトは、「アイテムの絵を貼った板を、頂点シェーダーで動かす」形のエフェクトをまとめた土台です。湾曲・波打ち・折る・砕け散るはすべてこれに乗っています。
+
+エフェクト側が書くのは、hlsl の関数2つだけです。
+
+```hlsl
+#include "Deform.hlsli"
+
+cbuffer MyConstants : register(b1) { float Amount; };
+
+// 平らな板の1点が動いた先を返す
+float3 Deform(float3 local, float3 piece) { ... }
+
+// その点をどれだけ残すか（1 でそのまま、0 で消える）
+float DeformFade(float3 local, float3 piece) { return 1.0; }
+```
+
+`VSMain` と `PSMain` は `Deform.hlsli` にあり、`Deform` を前方宣言だけ見て組み立てています。**法線は自動で出ます。** 少しずらした2点を同じ `Deform` に通し、その差から求めているので、変形の式を書けば陰影も霧もアルファも付いてきます。
+
+`local` は板の上の位置で、x と y は -0.5〜0.5、z は 0 です。**この物差しは板の幅を 1 とします。** px で受け取った値は幅で割ってから渡してください（`Wave3DProcessor.ToPlaneUnits` が例です）。奥行きも同じ物差しで動き、描画時に画像の幅に合わせて拡大されるので、大きい画像でも小さい画像でも「曲げ90度」が同じ見え方になります。
+
+`piece` は破片の中心です。つながった板では `local` と同じ値が入ります。`DeformGrid.Create(x, y, separated: true)` で作ると1マスずつ切り離した板になり、破片ごとに別々へ動かせます。
+
+C# 側は `Deform3DProcessorBase<TConstants>` を継承して4つを用意します。
+
+| 用意するもの | 何を返すか |
+|---|---|
+| `ShaderName` | どの hlsl を使うか |
+| `GetGrid` | 板を何マスに割るか。折り目や破片の境目に頂点が来るように決める |
+| `GetConstants` | b1 へ送る値 |
+| `GetExtent` | 変形後にどこまではみ出すか。描画先の大きさと遮蔽の判定に使う |
+
 ---
 
 ## 6. 描画のしくみ

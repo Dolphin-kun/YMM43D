@@ -1,0 +1,40 @@
+#include "Deform.hlsli"
+
+cbuffer FoldConstants : register(b1)
+{
+    float HalfAngle;
+    float FoldCount;
+    int   AlongY;
+    int   FoldPadding;
+};
+
+float3 Deform(float3 local, float3 piece)
+{
+    float3 p = AlongY ? float3(local.y, local.x, local.z) : local;
+
+    float count = max(FoldCount, 1.0);
+
+    float span = 1.0 / count;                 // 折る前の、1段の長さ
+    float run = span * cos(HalfAngle);        // 畳んだあとに横へ進む量
+    float rise = span * sin(HalfAngle);       // 1段で前後する量
+
+    float along = (p.x + 0.5) * count;
+    float index = floor(min(along, count - 1e-4));
+    float within = along - index;
+
+    // 段ごとに、手前へ倒れるか奥へ倒れるかが入れ替わる。
+    bool up = fmod(index, 2.0) < 1.0;
+    float direction = up ? 1.0 : -1.0;
+
+    float x = (index + within) * run - count * run * 0.5;
+    float z = (up ? 0.0 : rise) + direction * within * rise - rise * 0.5;
+
+    float3 folded = float3(x, p.y, p.z + z);
+
+    return AlongY ? float3(folded.y, folded.x, folded.z) : folded;
+}
+
+float DeformFade(float3 local, float3 piece)
+{
+    return 1.0;
+}
