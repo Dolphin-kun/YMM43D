@@ -328,12 +328,12 @@ internal sealed class ExtrusionProcessor : VideoEffect3DProcessorBase
 
 ### 板を変形させるエフェクトを作る
 
-`Deform3D` プロジェクトは、「アイテムの絵を貼った板を、頂点シェーダーで動かす」形のエフェクトをまとめた土台です。湾曲・波打ち・折る・砕け散るはすべてこれに乗っています。
+`Deform3DProcessorBase<TConstants>` と `Deform.hlsli` は、「アイテムの絵を貼った板を、頂点シェーダーで動かす」形のエフェクトのための土台です。湾曲3D・波打ち3D・折る3D・砕け散る3D はすべてこれに乗っており、それぞれ別のアセンブリになっています。
 
 エフェクト側が書くのは、hlsl の関数2つだけです。
 
 ```hlsl
-#include "Deform.hlsli"
+#include "../../YMM43D/Shaders/Deform.hlsli"
 
 cbuffer MyConstants : register(b1) { float Amount; };
 
@@ -354,7 +354,7 @@ C# 側は `Deform3DProcessorBase<TConstants>` を継承して4つを用意しま
 
 | 用意するもの | 何を返すか |
 |---|---|
-| `ShaderName` | どの hlsl を使うか |
+| `ShaderName` | どの hlsl を使うか。自分のアセンブリから探され、`Deform.hlsli` は YMM43D から拾われる |
 | `GetGrid` | 板を何マスに割るか。折り目や破片の境目に頂点が来るように決める |
 | `GetConstants` | b1 へ送る値 |
 | `GetExtent` | 変形後にどこまではみ出すか。描画先の大きさと遮蔽の判定に使う |

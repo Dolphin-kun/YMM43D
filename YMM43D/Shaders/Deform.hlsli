@@ -1,8 +1,8 @@
 #ifndef YMM43D_DEFORM_HLSLI
 #define YMM43D_DEFORM_HLSLI
 
-#include "../../YMM43D/Shaders/Lighting.hlsli"
-#include "../../YMM43D/Shaders/Texture.hlsli"
+#include "Lighting.hlsli"
+#include "Texture.hlsli"
 
 Texture2D    txDiffuse : register(t0);
 SamplerState samLinear : register(s0);

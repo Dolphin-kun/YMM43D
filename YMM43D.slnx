@@ -1,5 +1,8 @@
 <Solution>
-  <Project Path="Deform3D/Deform3D.csproj" />
+  <Project Path="Curve3D/Curve3D.csproj" />
+  <Project Path="Fold3D/Fold3D.csproj" />
+  <Project Path="Shatter3D/Shatter3D.csproj" />
+  <Project Path="Wave3D/Wave3D.csproj" />
   <Project Path="Extrusion3D/Extrusion3D.csproj" Id="70922751-6f3e-4d71-be67-e3e3b4e689c1" />
   <Project Path="PixelPoints3D/PixelPoints3D.csproj" />
   <Project Path="YMM43D/YMM43D.csproj" />

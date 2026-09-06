@@ -8,47 +8,45 @@ using YukkuriMovieMaker.Exo;
 using YukkuriMovieMaker.Player.Video;
 using YukkuriMovieMaker.Plugin.Effects;
 
-namespace Deform3D
+namespace Wave3D
 {
-    public enum WaveShape
-    {
-        [Display(Name = "横に流れる", Description = "左から右へ波が進みます")]
-        Across,
-
-        [Display(Name = "縦に流れる", Description = "上から下へ波が進みます")]
-        Down,
-
-        [Display(Name = "波紋", Description = "中心から外へ広がります")]
-        Ripple,
-    }
-
-    [VideoEffect("波打ち3D", ["3D"], [])]
+    [VideoEffect("波打ち3D", ["3D"], ["波", "うねり", "wave", "旗", "水面"])]
     public class Wave3DEffect : VideoEffect3DBase
     {
         private const string Group = "波打ち3D";
 
         public override string Label => "波打ち3D";
 
-        [Display(GroupName = Group, Name = "高さ", Description = "波の山と谷の、手前と奥への振れ幅")]
+        [Display(GroupName = Group, Name = "高さ",
+            Description = "波の山と谷の、手前と奥への振れ幅", Order = 100)]
         [AnimationSlider("F1", "px", 0, 200)]
         public Animation Height { get; } = new(30, 0, 100000);
 
-        [Display(GroupName = Group, Name = "波の間隔", Description = "山から次の山までの長さ")]
+        [Display(GroupName = Group, Name = "波の間隔",
+            Description = "山から次の山までの長さ", Order = 200)]
         [AnimationSlider("F1", "px", 10, 2000)]
         public Animation Wavelength { get; } = new(300, 1, 100000);
 
-        [Display(GroupName = Group, Name = "位相", Description = "波の位置。時間で動かすと流れます")]
+        [Display(GroupName = Group, Name = "位相",
+            Description = "波の位置。時間で動かすと流れます", Order = 300)]
         [AnimationSlider("F1", "°", 0, 720)]
         public Animation Phase { get; } = new(0, -1000000, 1000000);
 
-        [Display(GroupName = Group, Name = "形", Description = "波の進む向き")]
-        [EnumComboBox]
-        public WaveShape Shape { get => shape; set => Set(ref shape, value); }
-        private WaveShape shape = WaveShape.Across;
+        [Display(GroupName = Group, Name = "軸の角度",
+            Description = "波の進む向き。0 で横、90 で縦", Order = 400)]
+        [AnimationSlider("F1", "°", -360, 360)]
+        public Animation AxisAngle { get; } = new(0, -100000, 100000);
+
+        [Display(GroupName = Group, Name = "波紋",
+            Description = "向きに沿わせず、中心から外へ広げます", Order = 500)]
+        [ToggleSlider]
+        public bool IsRipple { get => isRipple; set => Set(ref isRipple, value); }
+        private bool isRipple;
 
         [Display(GroupName = Group, Name = "分割の細かさ",
-            Description = "板を何枚の面で作るか。波の間隔が狭いときは大きくしてください")]
+            Description = "板を何枚の面で作るか。波の間隔が狭いときは大きくしてください", Order = 600)]
         [TextBoxSlider("F0", "", 8, 128)]
+        [Range(DeformGrid.MinSegments, DeformGrid.MaxSegments)]
         public int Segments
         {
             get => segments;
@@ -57,7 +55,7 @@ namespace Deform3D
         private int segments = 64;
 
         [Display(GroupName = Group, Name = "陰影をつけない",
-            Description = "光源を無視して、元の色のまま塗ります")]
+            Description = "光源を無視して、元の色のまま塗ります", Order = 700)]
         [ToggleSlider]
         public bool IsUnlit { get => isUnlit; set => Set(ref isUnlit, value); }
         private bool isUnlit;
@@ -66,7 +64,7 @@ namespace Deform3D
             => AttachProcessor(new Wave3DProcessor(this, devices));
 
         protected override IEnumerable<IAnimatable> GetAnimatables()
-            => [Height, Wavelength, Phase, CameraSyncAnimation];
+            => [Height, Wavelength, Phase, AxisAngle, CameraSyncAnimation];
 
         public override IEnumerable<string> CreateExoVideoFilters(
             int keyFrameIndex, ExoOutputDescription exoOutputDescription) => [];
@@ -78,7 +76,12 @@ namespace Deform3D
         public float Amplitude;
         public float Wavelength;
         public float PhaseRadians;
-        public int Mode;
+        public float AxisRadians;
+
+        public int Ripple;
+        public int Padding0;
+        public int Padding1;
+        public int Padding2;
     }
 
     internal sealed class Wave3DProcessor(Wave3DEffect effect, IGraphicsDevicesAndContext devices)
@@ -98,7 +101,8 @@ namespace Deform3D
             Amplitude = ToPlaneUnits(effect.Height.GetFloat(time)),
             Wavelength = ToPlaneUnits(effect.Wavelength.GetFloat(time)),
             PhaseRadians = Rotation3D.ToRadians(effect.Phase.GetFloat(time)),
-            Mode = (int)effect.Shape,
+            AxisRadians = Rotation3D.ToRadians(effect.AxisAngle.GetFloat(time)),
+            Ripple = effect.IsRipple ? 1 : 0,
         };
 
         protected override DeformExtent GetExtent(in FrameContext time)

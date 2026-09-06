@@ -1,11 +1,11 @@
 using System.Numerics;
+using System.Reflection;
 using Vortice.Direct3D11;
 using YMM43D.Commons;
 using YMM43D.Graphics;
-using YMM43D.Plugin;
 using YukkuriMovieMaker.Commons;
 
-namespace Deform3D
+namespace YMM43D.Plugin
 {
     // 板をどう動かすかだけが違う変形エフェクトの、共通の土台。
     //
@@ -14,7 +14,7 @@ namespace Deform3D
     //   GetGrid       板を何マスに割るか
     //   GetConstants  シェーダーへ渡す値（b1）
     //   GetExtent     動いた先がどこまで届くか
-    internal abstract class Deform3DProcessorBase<TConstants>
+    public abstract class Deform3DProcessorBase<TConstants>
         : VideoEffect3DProcessorBase where TConstants : unmanaged
     {
         private readonly DeviceResourceCache<DeformResources> resources;
@@ -22,8 +22,10 @@ namespace Deform3D
         protected Deform3DProcessorBase(VideoEffect3DBase owner, IGraphicsDevicesAndContext devices)
             : base(owner, devices)
         {
+            var assembly = GetType().Assembly;
+
             resources = new DeviceResourceCache<DeformResources>(
-                device => new DeformResources(device, ShaderName));
+                device => new DeformResources(device, assembly, ShaderName));
         }
 
         protected abstract string ShaderName { get; }
@@ -90,12 +92,12 @@ namespace Deform3D
 
             public RenderPipeline<TransformConstants> Pipeline { get; }
 
-            public DeformResources(ID3D11Device device, string shader)
+            public DeformResources(ID3D11Device device, Assembly assembly, string shader)
             {
                 this.device = device;
 
                 Pipeline = new RenderPipeline<TransformConstants>(
-                    device, DeformVertex.InputElements, new DeformMaterial(device, shader));
+                    device, DeformVertex.InputElements, new DeformMaterial(device, assembly, shader));
             }
 
             public DeformMesh GetMesh(in DeformGrid grid)
@@ -119,5 +121,5 @@ namespace Deform3D
 
     // 変形したあと、板が元の四角からどれだけはみ出すか。
     // Margin は板の幅を 1 とした横縦のはみ出し、Depth は同じ物差しでの奥行き。
-    internal readonly record struct DeformExtent(float Margin, float Depth);
+    public readonly record struct DeformExtent(float Margin, float Depth);
 }

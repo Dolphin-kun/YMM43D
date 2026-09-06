@@ -1,16 +1,25 @@
-#include "Deform.hlsli"
+#include "../../YMM43D/Shaders/Deform.hlsli"
 
 cbuffer FoldConstants : register(b1)
 {
     float HalfAngle;
     float FoldCount;
-    int   AlongY;
-    int   FoldPadding;
+    float AxisRadians;
+    float FoldPadding;
 };
+
+float2 Turn(float2 v, float angle)
+{
+    float s = sin(angle);
+    float c = cos(angle);
+
+    return float2(v.x * c - v.y * s, v.x * s + v.y * c);
+}
 
 float3 Deform(float3 local, float3 piece)
 {
-    float3 p = AlongY ? float3(local.y, local.x, local.z) : local;
+    // 軸の角度ぶん回してから、いつも横向きに折る。終わったら戻す。
+    float3 p = float3(Turn(local.xy, -AxisRadians), local.z);
 
     float count = max(FoldCount, 1.0);
 
@@ -31,7 +40,7 @@ float3 Deform(float3 local, float3 piece)
 
     float3 folded = float3(x, p.y, p.z + z);
 
-    return AlongY ? float3(folded.y, folded.x, folded.z) : folded;
+    return float3(Turn(folded.xy, AxisRadians), folded.z);
 }
 
 float DeformFade(float3 local, float3 piece)

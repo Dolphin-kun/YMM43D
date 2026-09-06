@@ -1,10 +1,11 @@
+using System.Reflection;
 using Vortice.Direct3D11;
 using YMM43D.Graphics;
 using YukkuriMovieMaker.Commons;
 
-namespace Deform3D
+namespace YMM43D.Plugin
 {
-    internal sealed class DeformMaterial : IMaterial
+    public sealed class DeformMaterial : IMaterial
     {
         private readonly DisposeCollector disposer = new();
 
@@ -14,10 +15,10 @@ namespace Deform3D
 
         public byte[] VertexShaderBytecode { get; }
 
-        public DeformMaterial(ID3D11Device device, string shader)
+        // hlsl はエフェクト側のアセンブリに埋まっているので、そちらを渡してもらう。
+        // Deform.hlsli は見つからなければ YMM43D から拾われる。
+        public DeformMaterial(ID3D11Device device, Assembly assembly, string shader)
         {
-            var assembly = typeof(DeformMaterial).Assembly;
-
             VertexShaderBytecode = ShaderLibrary.Compile(assembly, shader, "VSMain", "vs_5_0");
             VertexShader = device.CreateVertexShader(VertexShaderBytecode);
             disposer.Collect(VertexShader);

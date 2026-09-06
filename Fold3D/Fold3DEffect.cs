@@ -8,9 +8,9 @@ using YukkuriMovieMaker.Exo;
 using YukkuriMovieMaker.Player.Video;
 using YukkuriMovieMaker.Plugin.Effects;
 
-namespace Deform3D
+namespace Fold3D
 {
-    [VideoEffect("折る3D", ["3D"], [])]
+    [VideoEffect("折る3D", ["3D"], ["折る", "蛇腹", "fold", "紙"])]
     public class Fold3DEffect : VideoEffect3DBase
     {
         private const string Group = "折る3D";
@@ -18,12 +18,14 @@ namespace Deform3D
         public override string Label => "折る3D";
 
         [Display(GroupName = Group, Name = "折り込み",
-            Description = "0 で平ら、大きくするほど蛇腹に畳まれます")]
+            Description = "0 で平ら、大きくするほど蛇腹に畳まれます", Order = 100)]
         [AnimationSlider("F1", "°", 0, 170)]
         public Animation Angle { get; } = new(0, 0, 179);
 
-        [Display(GroupName = Group, Name = "折り目の数", Description = "何段に折るか")]
+        [Display(GroupName = Group, Name = "折り目の数",
+            Description = "何段に折るか", Order = 200)]
         [TextBoxSlider("F0", "", 2, 32)]
+        [Range(1, 64)]
         public int Count
         {
             get => count;
@@ -31,13 +33,13 @@ namespace Deform3D
         }
         private int count = 6;
 
-        [Display(GroupName = Group, Name = "向き", Description = "どちらの向きに折るか")]
-        [EnumComboBox]
-        public DeformAxis Axis { get => axis; set => Set(ref axis, value); }
-        private DeformAxis axis = DeformAxis.Across;
+        [Display(GroupName = Group, Name = "軸の角度",
+            Description = "どの向きに折るか。0 で横、90 で縦", Order = 300)]
+        [AnimationSlider("F1", "°", -360, 360)]
+        public Animation AxisAngle { get; } = new(0, -100000, 100000);
 
         [Display(GroupName = Group, Name = "陰影をつけない",
-            Description = "光源を無視して、元の色のまま塗ります")]
+            Description = "光源を無視して、元の色のまま塗ります", Order = 400)]
         [ToggleSlider]
         public bool IsUnlit { get => isUnlit; set => Set(ref isUnlit, value); }
         private bool isUnlit;
@@ -46,7 +48,7 @@ namespace Deform3D
             => AttachProcessor(new Fold3DProcessor(this, devices));
 
         protected override IEnumerable<IAnimatable> GetAnimatables()
-            => [Angle, CameraSyncAnimation];
+            => [Angle, AxisAngle, CameraSyncAnimation];
 
         public override IEnumerable<string> CreateExoVideoFilters(
             int keyFrameIndex, ExoOutputDescription exoOutputDescription) => [];
@@ -57,8 +59,8 @@ namespace Deform3D
     {
         public float HalfAngle;
         public float Count;
-        public int AlongY;
-        public int Padding;
+        public float AxisRadians;
+        public float Padding;
     }
 
     internal sealed class Fold3DProcessor(Fold3DEffect effect, IGraphicsDevicesAndContext devices)
@@ -72,21 +74,20 @@ namespace Deform3D
 
         protected override bool IsUnlit => effect.IsUnlit;
 
-        // 折り目の位置に頂点が来ないと角が丸まるので、段の数から分割を決める。
+        // 折り目の位置に頂点が来ないと角が丸まる。斜めにも折れるので、
+        // 縦横どちらにも段の数ぶんの細かさを持たせる。
         protected override DeformGrid GetGrid(in FrameContext time)
         {
             var along = effect.Count * SegmentsPerFold;
 
-            return effect.Axis == DeformAxis.Down
-                ? DeformGrid.Create(4, along)
-                : DeformGrid.Create(along, 4);
+            return DeformGrid.Create(along, along);
         }
 
         protected override FoldConstants GetConstants(in FrameContext time) => new()
         {
             HalfAngle = Rotation3D.ToRadians(effect.Angle.GetFloat(time)) / 2f,
             Count = effect.Count,
-            AlongY = effect.Axis == DeformAxis.Down ? 1 : 0,
+            AxisRadians = Rotation3D.ToRadians(effect.AxisAngle.GetFloat(time)),
         };
 
         protected override DeformExtent GetExtent(in FrameContext time)

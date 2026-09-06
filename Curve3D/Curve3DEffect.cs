@@ -1,5 +1,4 @@
 using System.ComponentModel.DataAnnotations;
-using System.Numerics;
 using System.Runtime.InteropServices;
 using YMM43D.Commons;
 using YMM43D.Plugin;
@@ -9,40 +8,39 @@ using YukkuriMovieMaker.Exo;
 using YukkuriMovieMaker.Player.Video;
 using YukkuriMovieMaker.Plugin.Effects;
 
-namespace Deform3D
+namespace Curve3D
 {
-    public enum DeformAxis
-    {
-        [Display(Name = "横", Description = "左右の向きに沿って変形します")]
-        Across,
-
-        [Display(Name = "縦", Description = "上下の向きに沿って変形します")]
-        Down,
-    }
-
-    [VideoEffect("湾曲3D", ["3D"], [])]
+    [VideoEffect("湾曲3D", ["3D"], ["湾曲", "曲げ", "ねじり", "bend", "twist"])]
     public class Curve3DEffect : VideoEffect3DBase
     {
         private const string Group = "湾曲3D";
 
         public override string Label => "湾曲3D";
 
-        [Display(GroupName = Group, Name = "曲げ", Description = "端から端までで、これだけ回り込みます")]
+        [Display(GroupName = Group, Name = "曲げ角度",
+            Description = "端から端までで、これだけ回り込みます", Order = 100)]
         [AnimationSlider("F1", "°", -360, 360)]
-        public Animation Bend { get; } = new(0, -100000, 100000);
+        public Animation BendAngle { get; } = new(0, -100000, 100000);
 
-        [Display(GroupName = Group, Name = "ねじり", Description = "反対側の端までで、これだけひねります")]
+        [Display(GroupName = Group, Name = "ねじり角度",
+            Description = "反対の端までで、これだけひねります", Order = 200)]
         [AnimationSlider("F1", "°", -360, 360)]
-        public Animation Twist { get; } = new(0, -100000, 100000);
+        public Animation TwistAngle { get; } = new(0, -100000, 100000);
 
-        [Display(GroupName = Group, Name = "向き", Description = "どちらの向きに沿って曲げるか")]
-        [EnumComboBox]
-        public DeformAxis Axis { get => axis; set => Set(ref axis, value); }
-        private DeformAxis axis = DeformAxis.Across;
+        [Display(GroupName = Group, Name = "軸の角度",
+            Description = "どの向きに沿って曲げるか。0 で横、90 で縦", Order = 300)]
+        [AnimationSlider("F1", "°", -360, 360)]
+        public Animation AxisAngle { get; } = new(0, -100000, 100000);
+
+        [Display(GroupName = Group, Name = "基準位置",
+            Description = "曲げても動かない場所。50 で真ん中", Order = 400)]
+        [AnimationSlider("F1", "%", 0, 100)]
+        public Animation Anchor { get; } = new(50, -1000, 1000);
 
         [Display(GroupName = Group, Name = "分割の細かさ",
-            Description = "板を何枚の面で作るか。大きいほど滑らかで、そのぶん重くなります")]
+            Description = "板を何枚の面で作るか。大きいほど滑らかで、そのぶん重くなります", Order = 500)]
         [TextBoxSlider("F0", "", 8, 128)]
+        [Range(DeformGrid.MinSegments, DeformGrid.MaxSegments)]
         public int Segments
         {
             get => segments;
@@ -51,7 +49,7 @@ namespace Deform3D
         private int segments = 64;
 
         [Display(GroupName = Group, Name = "陰影をつけない",
-            Description = "光源を無視して、元の色のまま塗ります")]
+            Description = "光源を無視して、元の色のまま塗ります", Order = 600)]
         [ToggleSlider]
         public bool IsUnlit { get => isUnlit; set => Set(ref isUnlit, value); }
         private bool isUnlit;
@@ -60,7 +58,7 @@ namespace Deform3D
             => AttachProcessor(new Curve3DProcessor(this, devices));
 
         protected override IEnumerable<IAnimatable> GetAnimatables()
-            => [Bend, Twist, CameraSyncAnimation];
+            => [BendAngle, TwistAngle, AxisAngle, Anchor, CameraSyncAnimation];
 
         public override IEnumerable<string> CreateExoVideoFilters(
             int keyFrameIndex, ExoOutputDescription exoOutputDescription) => [];
@@ -71,8 +69,8 @@ namespace Deform3D
     {
         public float BendRadians;
         public float TwistRadians;
-        public int AlongY;
-        public int Padding;
+        public float AxisRadians;
+        public float Anchor;
     }
 
     internal sealed class Curve3DProcessor(Curve3DEffect effect, IGraphicsDevicesAndContext devices)
@@ -89,20 +87,21 @@ namespace Deform3D
 
         protected override CurveConstants GetConstants(in FrameContext time) => new()
         {
-            BendRadians = Rotation3D.ToRadians(effect.Bend.GetFloat(time)),
-            TwistRadians = Rotation3D.ToRadians(effect.Twist.GetFloat(time)),
-            AlongY = effect.Axis == DeformAxis.Down ? 1 : 0,
+            BendRadians = Rotation3D.ToRadians(effect.BendAngle.GetFloat(time)),
+            TwistRadians = Rotation3D.ToRadians(effect.TwistAngle.GetFloat(time)),
+            AxisRadians = Rotation3D.ToRadians(effect.AxisAngle.GetFloat(time)),
+            Anchor = effect.Anchor.GetFloat(time) / 100f - 0.5f,
         };
 
         protected override DeformExtent GetExtent(in FrameContext time)
         {
-            var bend = MathF.Abs(Rotation3D.ToRadians(effect.Bend.GetFloat(time)));
+            var bend = MathF.Abs(Rotation3D.ToRadians(effect.BendAngle.GetFloat(time)));
 
-            // 円弧に置き換えたときの、いちばん遠いところ。
-            // 曲げが小さいと半径が跳ね上がるので、平らなときの大きさで頭を打たせる。
-            var reach = bend > 1e-4f ? 2f / bend : 0.5f;
+            // 円弧に置き換えたときの半径。曲げが浅いと跳ね上がるので、
+            // 平らなままの大きさで頭を打たせる。
+            var reach = bend > 1e-4f ? MathF.Min(2f / bend, 1.5f) : 0.75f;
 
-            return new DeformExtent(MathF.Min(reach, 1.5f), MathF.Min(reach, 1.5f));
+            return new DeformExtent(reach, reach);
         }
     }
 }

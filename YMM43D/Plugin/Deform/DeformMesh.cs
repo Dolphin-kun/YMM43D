@@ -6,10 +6,10 @@ using Vortice.DXGI;
 using YMM43D.Graphics;
 using YukkuriMovieMaker.Commons;
 
-namespace Deform3D
+namespace YMM43D.Plugin
 {
     [StructLayout(LayoutKind.Sequential)]
-    internal struct DeformVertex(Vector3 position, Vector2 texCoord, Vector3 piece)
+    public struct DeformVertex(Vector3 position, Vector2 texCoord, Vector3 piece)
     {
         public Vector3 Position = position;
         public Vector2 TexCoord = texCoord;
@@ -25,7 +25,7 @@ namespace Deform3D
         ];
     }
 
-    internal readonly record struct DeformGrid(int X, int Y, bool Separated)
+    public readonly record struct DeformGrid(int X, int Y, bool Separated)
     {
         public const int MinSegments = 1;
 
@@ -37,7 +37,7 @@ namespace Deform3D
             separated);
     }
 
-    internal sealed class DeformMesh : IMesh
+    public sealed class DeformMesh : IMesh
     {
         private readonly DisposeCollector disposer = new();
 
