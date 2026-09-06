@@ -404,35 +404,51 @@ using var mesh = new SurfaceMesh(device, solid, [new Color4(1f, 1f, 1f, 1f)]);
 
 ### シェーダーの記述
 
-HLSL は `ShaderCompiler.Compile` で実行時にコンパイルします。共通の宣言は `ShaderSource.StandardPrologue` にまとまっています。
+HLSL はプロジェクトの `Shaders` フォルダに置き、埋め込みリソースとして持ちます。`ShaderLibrary.Compile` が読み出し、`#include` を展開してから実行時にコンパイルします。
 
-| 断片 | 内容 |
+拡張子は役割で使い分けます。`.hlsl` は入口を持つシェーダー本体、`.hlsli` は `#include` されるだけの部品です（C の `.h` と同じ立場で、単体ではコンパイルしません）。
+
+```xml
+<ItemGroup>
+  <EmbeddedResource Include="Shaders\**\*.hlsl" />
+  <EmbeddedResource Include="Shaders\**\*.hlsli" />
+</ItemGroup>
+```
+
+```csharp
+var assembly = typeof(MyMaterial).Assembly;
+
+VertexShaderBytecode = ShaderLibrary.Compile(assembly, "My.hlsl", "VSMain", "vs_5_0");
+var psBytes = ShaderLibrary.Compile(assembly, "My.hlsl", "PSMain", "ps_5_0");
+```
+
+`#include "X.hlsli"` は、まず渡したアセンブリの `Shaders` から、無ければ YMM43D 本体から探します。**別のプラグインからも本体の部品を取り込めます。** 同じ名前は一度しか取り込まないので、取り込み順を気にする必要はありません。同じ名前のファイルを自分側に置けば、本体のものを差し替えられます。
+
+YMM43D が持っている部品です。
+
+| ファイル | 内容 |
 |---|---|
-| `TransformBuffer` | 変換行列・不透明度・光・霧を持つ `cbuffer`（register b0） |
-| `VertexInput` | 頂点入力 `VS_IN`（`Pos` / `Col` / `Tex` / `Nrm`） |
-| `PixelInput` | ピクセル入力 `PS_IN`（`Pos` / `Col` / `Tex` / `Nrm` / `World`） |
-| `VertexShaderMain` | 座標変換と法線変換を行う頂点シェーダー `VSMain` |
-| `LightingFunctions` | `ApplyLight` と `ApplyFog` |
-| `TextureSampling` | 乗算済みアルファを割り戻す `Unpremultiply` |
-| `Shading` | 両者と不透明度をまとめ、透けた画素を捨てる `Shade` |
+| `Standard.hlsli` | 下の全部をまとめたもの。ふつうはこれ 1 つを取り込みます |
+| `Light.hlsli` | 光 1 つぶんの `struct Light` |
+| `SceneFields.hlsli` | 変換行列・不透明度・光・霧の並び。**`cbuffer` の中に**取り込みます |
+| `SceneNames.hlsli` | `Opacity` や `FogStart` など、上の並びへの別名 |
+| `Lighting.hlsli` | `ApplyLight` と `ApplyFog` |
+| `Texture.hlsli` | 乗算済みアルファを割り戻す `Unpremultiply` |
+
+`Standard.hlsli` を取り込むと、`cbuffer`（register b0）、頂点入力 `VS_IN`（`Pos` / `Col` / `Tex` / `Nrm`）、ピクセル入力 `PS_IN`（`Pos` / `Col` / `Tex` / `Nrm` / `World`）、座標変換と法線変換を行う `VSMain`、陰影と霧と不透明度をまとめた `Shade` が揃います。
+
+```hlsl
+#include "Standard.hlsli"
+
+float4 PSMain(PS_IN input) : SV_TARGET
+{
+    return Shade(input.Col, input);
+}
+```
 
 `Shade` は `AlphaCutoff` より薄い画素を `clip` で捨てます。捨てないと板の四角いままに深度が書かれ、文字のまわりの何も無いところが後ろの物を隠します。しきい値は `DrawContext3D.AlphaCutoff` から渡ります。色を塗るときはごくわずか、深度だけを書くときは輪郭で切れる値になります。
 
-```csharp
-// StandardPrologue はプロパティなので const にはできない
-var source = ShaderSource.StandardPrologue + """
-    float4 PSMain(PS_IN input) : SV_TARGET
-    {
-        return Shade(input.Col, input);
-    }
-    """;
-
-// 頂点シェーダーは標準実装をそのまま使える
-var vsBytes = ShaderCompiler.Compile(source, "VSMain", "vs_5_0");
-var psBytes = ShaderCompiler.Compile(source, "PSMain", "ps_5_0");
-```
-
-自前の `cbuffer` を持つマテリアルは、`ShaderSource.TransformFields` を先頭に置き、C# 側の構造体の先頭に `TransformConstants` を埋めれば、並びが食い違いません（「立体化3D」と「点群3D」がこの形です）。
+自前の `cbuffer` を持つマテリアルは、`SceneFields.hlsli` を先頭に置き、C# 側の構造体の先頭に `TransformConstants` を埋めれば、並びが食い違いません（「立体化3D」と「点群3D」がこの形です）。
 
 ```csharp
 [StructLayout(LayoutKind.Sequential)]
@@ -443,22 +459,20 @@ internal struct MyConstants
 }
 ```
 
-```csharp
-private static readonly string Declarations = $$"""
-    {{ShaderSource.LightStruct}}
+```hlsl
+#include "Light.hlsli"
 
-    cbuffer MyConstants : register(b0)
-    {
-    {{ShaderSource.TransformFields}}
-        float4 MyColor;
-    };
+cbuffer MyConstants : register(b0)
+{
+#include "SceneFields.hlsli"
+    float4 MyColor;
+};
 
-    {{ShaderSource.TransformNames}}
-    {{ShaderSource.LightingFunctions}}
-    """;
+#include "SceneNames.hlsli"
+#include "Lighting.hlsli"
 ```
 
-> **HLSL に非 ASCII 文字を書かないでください。** コンパイラに渡すのは UTF-8 のバイト列で、文字数とバイト数がずれると末尾が切り捨てられます。ライブラリ側では UTF-8 に変換してから渡すことでこの問題を回避していますが、コメントも含めて ASCII に収めておくのが安全です。
+> **hlsl ファイルは UTF-8 で保存してください。** コンパイラに渡すのは UTF-8 のバイト列です。別の文字コードで保存するとコメントの日本語が化け、場合によっては読み込みで末尾が欠けます。
 
 ### デバイスごとの資源
 
@@ -639,7 +653,7 @@ public void MoveMarker(in Vector3 shift, in FrameContext itemTime, in EditScope 
 | `Primitives` | static class | 基本の形を作る。平面・正多面体5種・球・円柱・円錐・ドーナツ |
 | `SurfaceMesh` | class | `SurfaceGeometry` を GPU の頂点バッファにする |
 | `TransformConstants` | struct | 変換行列・不透明度・光・霧を持つ標準定数バッファ |
-| `ShaderSource` | static class | 共通の HLSL 断片 |
+| `ShaderLibrary` | static class | 埋め込んだ hlsl の読み出しと `#include` の展開 |
 | `ShaderCompiler` | static class | HLSL の実行時コンパイル |
 | `DeviceResourceCache<T>` | class | デバイスごとの資源を保持する |
 | `GraphicsDevicePool` | static class | 3D 描画用の独立デバイスを貸し出す |

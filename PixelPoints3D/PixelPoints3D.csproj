@@ -22,6 +22,11 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<EmbeddedResource Include="Shaders\**\*.hlsl" />
+		<EmbeddedResource Include="Shaders\**\*.hlsli" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<Reference Include="SharpGen.Runtime">
 			<HintPath>$(YMM4DirPath)SharpGen.Runtime.dll</HintPath>
 		</Reference>

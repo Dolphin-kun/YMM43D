@@ -1,10 +1,12 @@
-﻿using Vortice.Direct3D11;
+using Vortice.Direct3D11;
 using YukkuriMovieMaker.Commons;
 
 namespace YMM43D.Graphics.Materials
 {
     public sealed class TextureMaterial : IMaterial
     {
+        private const string Shader = "TextureMaterial.hlsl";
+
         private readonly DisposeCollector disposer = new();
 
         public ID3D11VertexShader VertexShader { get; }
@@ -13,22 +15,14 @@ namespace YMM43D.Graphics.Materials
 
         public TextureMaterial(ID3D11Device device)
         {
-            var source = ShaderSource.StandardPrologue + """
-                Texture2D    tex  : register(t0);
-                SamplerState samp : register(s0);
+            var assembly = typeof(TextureMaterial).Assembly;
 
-                float4 PSMain(PS_IN input) : SV_TARGET
-                {
-                    return Shade(input.Col * Unpremultiply(tex.Sample(samp, input.Tex)), input);
-                }
-                """;
-
-            VertexShaderBytecode = ShaderCompiler.Compile(source, "VSMain", "vs_5_0", nameof(TextureMaterial));
+            VertexShaderBytecode = ShaderLibrary.Compile(assembly, Shader, "VSMain", "vs_5_0");
             VertexShader = device.CreateVertexShader(VertexShaderBytecode);
             disposer.Collect(VertexShader);
 
-            var pixelShaderBytecode = ShaderCompiler.Compile(source, "PSMain", "ps_5_0", nameof(TextureMaterial));
-            PixelShader = device.CreatePixelShader(pixelShaderBytecode);
+            PixelShader = device.CreatePixelShader(
+                ShaderLibrary.Compile(assembly, Shader, "PSMain", "ps_5_0"));
             disposer.Collect(PixelShader);
         }
 

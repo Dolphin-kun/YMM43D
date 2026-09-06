@@ -1,0 +1,9 @@
+    matrix WorldViewProjection;
+    matrix World;
+    matrix WorldInverse;
+    float4 CameraPosition;
+    float4 Ambient;
+    float4 FogColor;
+    float4 Options;
+    float4 Surface;
+    Light  Lights[4];
