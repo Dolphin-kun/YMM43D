@@ -1,18 +1,21 @@
-#include "Light.hlsli"
+#ifndef YMM43D_EXTRUSION_HLSLI
+#define YMM43D_EXTRUSION_HLSLI
+
+#include "../../YMM43D/Shaders/Light.hlsli"
 
 cbuffer ExtrusionConstants : register(b0)
 {
-#include "SceneFields.hlsli"
+#include "../../YMM43D/Shaders/SceneFields.hlsli"
     float4 SideColor;
     float3 CameraLocalPos;
     int    ExtrusionType;
 };
 
-#include "SceneNames.hlsli"
+#include "../../YMM43D/Shaders/SceneNames.hlsli"
 
-#include "Lighting.hlsli"
+#include "../../YMM43D/Shaders/Lighting.hlsli"
 
-#include "Texture.hlsli"
+#include "../../YMM43D/Shaders/Texture.hlsli"
 
 struct VS_INPUT
 {
@@ -29,3 +32,5 @@ struct PS_INPUT
     float2 TexCoord : TEXCOORD;
     float3 LocalPos : LOCPOS;
 };
+
+#endif

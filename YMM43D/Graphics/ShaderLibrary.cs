@@ -20,8 +20,10 @@ namespace YMM43D.Graphics
         public static byte[] Compile(Assembly assembly, string name, string entryPoint, string profile)
             => ShaderCompiler.Compile(Load(assembly, name), entryPoint, profile, name);
 
-        private static string Expand(Assembly assembly, string name, HashSet<string> taken)
+        private static string Expand(Assembly assembly, string path, HashSet<string> taken)
         {
+            var name = Path.GetFileName(path);
+
             if (!taken.Add(name))
                 return string.Empty;
 
@@ -51,9 +53,9 @@ namespace YMM43D.Graphics
             return reader.ReadToEnd();
         }
 
-        private static Stream? Open(Assembly assembly, string name)
+        private static Stream? Open(Assembly assembly, string path)
         {
-            var suffix = Folder + name;
+            var suffix = Folder + Path.GetFileName(path);
 
             foreach (var resource in assembly.GetManifestResourceNames())
             {

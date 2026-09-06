@@ -1,3 +1,6 @@
+#ifndef YMM43D_LIGHTING_HLSLI
+#define YMM43D_LIGHTING_HLSLI
+
 float3 ApplyLight(float3 color, float3 normal, float3 world)
 {
     if (Unlit > 0.5 || dot(normal, normal) < 1e-8)
@@ -42,3 +45,5 @@ float3 ApplyFog(float3 color, float3 world)
 
     return lerp(color, FogColor.rgb, amount * FogColor.a);
 }
+
+#endif

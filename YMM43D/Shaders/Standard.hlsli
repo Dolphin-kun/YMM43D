@@ -1,3 +1,6 @@
+#ifndef YMM43D_STANDARD_HLSLI
+#define YMM43D_STANDARD_HLSLI
+
 #include "Light.hlsli"
 
 cbuffer TransformBuffer : register(b0)
@@ -52,3 +55,5 @@ float4 Shade(float4 color, PS_IN input)
     color.a *= Opacity;
     return color;
 }
+
+#endif

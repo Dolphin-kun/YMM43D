@@ -1,8 +1,11 @@
-#include "Light.hlsli"
+#ifndef YMM43D_POINTCLOUD_HLSLI
+#define YMM43D_POINTCLOUD_HLSLI
+
+#include "../../YMM43D/Shaders/Light.hlsli"
 
 cbuffer PointCloudConstants : register(b0)
 {
-#include "SceneFields.hlsli"
+#include "../../YMM43D/Shaders/SceneFields.hlsli"
     float4 Color;
     float3 GridCount;
     float  Threshold;
@@ -27,11 +30,11 @@ cbuffer PointCloudConstants : register(b0)
     float2 Padding;
 };
 
-#include "SceneNames.hlsli"
+#include "../../YMM43D/Shaders/SceneNames.hlsli"
 
-#include "Lighting.hlsli"
+#include "../../YMM43D/Shaders/Lighting.hlsli"
 
-#include "Texture.hlsli"
+#include "../../YMM43D/Shaders/Texture.hlsli"
 
 static const float Pi = 3.14159265;
 
@@ -75,3 +78,5 @@ struct PS_INPUT
     // x … 格子の点ごと（面の不透明度）、y … 線ごと（引くかどうか）。
     nointerpolation float2 Random : RANDOM;
 };
+
+#endif
