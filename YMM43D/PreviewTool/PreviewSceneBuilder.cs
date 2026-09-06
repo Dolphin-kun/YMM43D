@@ -54,8 +54,8 @@ namespace YMM43D.PreviewTool
 
             foreach (var item in visible)
             {
-                foreach (var provider in FindProviders(item))
-                    updated.Add(new PreviewItem(provider, item, item.Frame, item.Length));
+                foreach (var (provider, kind) in FindProviders(item))
+                    updated.Add(new PreviewItem(provider, kind, item, item.Frame, item.Length));
             }
 
             Items = updated;
@@ -66,26 +66,30 @@ namespace YMM43D.PreviewTool
         private static bool IsComposite(IVideoItem item)
             => item is EffectItem or GroupItem or FrameBufferItem or TransitionItem;
 
-        private IEnumerable<I3DProvider> FindProviders(IVideoItem item)
+        private IEnumerable<(I3DProvider Provider, PreviewProviderKind Kind)> FindProviders(IVideoItem item)
         {
-            var providers = new List<I3DProvider>();
+            var sources = new List<I3DProvider>();
 
             if (item is I3DProvider itemProvider)
-                providers.Add(itemProvider);
+                sources.Add(itemProvider);
 
             if (item is ShapeItem shape && Provider3DRegistry.Find(shape.ShapeParameter) is { } shapeProvider)
-                providers.Add(shapeProvider);
+                sources.Add(shapeProvider);
 
-            if (providers.Count > 0)
-                return providers.Distinct();
+            if (sources.Count > 0)
+                return sources.Distinct().Select(p => (p, PreviewProviderKind.Source));
+
+            var effects = new List<I3DProvider>();
 
             foreach (var effect in item.VideoEffects ?? [])
             {
                 if (effect.IsEnabled && effect is I3DProvider effectProvider)
-                    providers.Add(effectProvider);
+                    effects.Add(effectProvider);
             }
 
-            return providers.Count == 0 ? [fallbackProvider] : providers.Distinct();
+            return effects.Count == 0
+                ? [(fallbackProvider, PreviewProviderKind.Flat)]
+                : effects.Distinct().Select(p => (p, PreviewProviderKind.Effect));
         }
     }
 }

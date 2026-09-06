@@ -101,12 +101,7 @@ namespace YMM43D.Plugin
         };
 
         private static void ConsumeCamera(DrawDescription draw, ref Matrix4x4 world)
-        {
-            if (draw.Camera == Matrix4x4.Identity)
-                return;
-
-            world *= WorldScale.ToYUpMatrix(draw.Camera);
-        }
+            => world = ItemPlacement.WithCamera(world, draw.Camera);
 
         public void SetInput(ID2D1Image? input)
         {

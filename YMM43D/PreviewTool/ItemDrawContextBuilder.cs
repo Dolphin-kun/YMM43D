@@ -19,14 +19,15 @@ namespace YMM43D.PreviewTool
             IVideoItem item,
             in FrameContext itemTime,
             PreviewEnvironment environment,
-            I3DProvider provider)
+            I3DProvider provider,
+            PreviewProviderKind kind)
         {
             var providerTexture = provider is I3DTextureProvider textureProvider
                 ? textureProvider.GetTexture(environment.Device)
                 : null;
 
             var needsImage = provider.RequiresMappedTexture && providerTexture is null;
-            var rendered = pipeline.Render(item, itemTime, environment, needsImage);
+            var rendered = pipeline.Render(item, itemTime, environment, needsImage, provider, kind);
 
             var texture = providerTexture;
             RawRectF? imageBounds = null;
@@ -41,8 +42,9 @@ namespace YMM43D.PreviewTool
 
             return new DrawContext3D
             {
-                World = BuildSizeMatrix(provider, imageBounds)
-                      * ItemPlacement.GetWorldMatrix(item, itemTime, rendered.CameraMatrix),
+                World = ItemPlacement.WithCamera(
+                            BuildSizeMatrix(provider, imageBounds), rendered.CameraMatrix)
+                      * ItemPlacement.GetWorldMatrix(item, itemTime),
                 Opacity = Math.Clamp(ItemPlacement.GetOpacity(item, itemTime), 0f, 1f),
                 Blend = ToBlendMode(item.Blend),
                 IsAlwaysOnTop = item.IsAlwaysOnTop,

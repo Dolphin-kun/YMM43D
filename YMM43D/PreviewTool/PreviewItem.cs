@@ -3,9 +3,24 @@ using YukkuriMovieMaker.Project.Items;
 
 namespace YMM43D.PreviewTool
 {
-    internal sealed class PreviewItem(I3DProvider provider, IVideoItem item, int startFrame, int length)
+    internal enum PreviewProviderKind
+    {
+        Source,
+        Effect,
+        Flat,
+    }
+
+    internal sealed class PreviewItem(
+        I3DProvider provider,
+        PreviewProviderKind kind,
+        IVideoItem item,
+        int startFrame,
+        int length)
     {
         public I3DProvider Provider { get; } = provider;
+
+        public PreviewProviderKind Kind { get; } = kind;
+
         public IVideoItem Item { get; } = item;
 
         public int StartFrame { get; } = startFrame;

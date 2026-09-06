@@ -77,7 +77,8 @@ namespace YMM43D.PreviewTool
                     previewItem.Item,
                     previewItem.GetItemTime(scene.Time),
                     scene.Environment,
-                    previewItem.Provider);
+                    previewItem.Provider,
+                    previewItem.Kind);
             }
 
             contextBuilder.RetainOnly(scene.Items.Select(i => i.Item).ToHashSet());

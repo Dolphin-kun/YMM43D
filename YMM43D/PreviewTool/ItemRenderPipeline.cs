@@ -20,7 +20,7 @@ namespace YMM43D.PreviewTool
     {
         private readonly Lock gate = new();
         private readonly Dictionary<IVideoItem, ISource> sources = [];
-        private readonly Dictionary<IVideoItem, EffectChain> chains = [];
+        private readonly Dictionary<(IVideoItem Item, I3DProvider Provider), EffectChain> chains = [];
 
         private readonly HashSet<IVideoItem> effectsUnsupported = [];
 
@@ -32,25 +32,28 @@ namespace YMM43D.PreviewTool
             IVideoItem item,
             in FrameContext time,
             PreviewEnvironment environment,
-            bool needsImage)
+            bool needsImage,
+            I3DProvider provider,
+            PreviewProviderKind kind)
         {
             if (environment.Scene is null || environment.SourceDescription is null)
                 return ItemRenderResult.None;
 
-            var effects = CollectEffects(item);
+            var effects = CollectEffects(item, provider, kind);
 
             if (!needsImage && effects.IsEmpty)
                 return ItemRenderResult.None;
 
             lock (D2DGate.Sync)
-                return RenderCore(item, time, environment, effects);
+                return RenderCore(item, time, environment, effects, provider);
         }
 
         private ItemRenderResult RenderCore(
             IVideoItem item,
             in FrameContext time,
             PreviewEnvironment environment,
-            ImmutableList<IVideoEffect> effects)
+            ImmutableList<IVideoEffect> effects,
+            I3DProvider provider)
         {
             var scene = environment.Scene!;
             var sourceDescription = environment.SourceDescription!;
@@ -65,7 +68,7 @@ namespace YMM43D.PreviewTool
             if (effects.IsEmpty)
                 return new ItemRenderResult(image, Matrix4x4.Identity);
 
-            return ApplyEffects(item, effects, environment, description, image);
+            return ApplyEffects(item, provider, effects, environment, description, image);
         }
 
         private ID2D1Image? RenderSource(
@@ -114,6 +117,7 @@ namespace YMM43D.PreviewTool
 
         private ItemRenderResult ApplyEffects(
             IVideoItem item,
+            I3DProvider provider,
             ImmutableList<IVideoEffect> effects,
             PreviewEnvironment environment,
             TimelineItemSourceDescription description,
@@ -122,30 +126,46 @@ namespace YMM43D.PreviewTool
             if (effectsUnsupported.Contains(item))
                 return new ItemRenderResult(sourceImage, Matrix4x4.Identity);
 
+            var key = (item, provider);
+
             try
             {
-                if (!chains.TryGetValue(item, out var chain) || !chain.Matches(effects))
+                if (!chains.TryGetValue(key, out var chain) || !chain.Matches(effects))
                 {
-                    ReleaseChain(item);
-                    chain = chains[item] = new EffectChain(effects, environment.Devices);
+                    ReleaseChain(key);
+                    chain = chains[key] = new EffectChain(effects, environment.Devices);
                 }
 
                 return chain.Apply(sourceImage, description);
             }
             catch
             {
-                ReleaseChain(item);
+                ReleaseChain(key);
                 effectsUnsupported.Add(item);
                 return new ItemRenderResult(sourceImage, Matrix4x4.Identity);
             }
         }
 
-        private static ImmutableList<IVideoEffect> CollectEffects(IVideoItem item)
+        private static ImmutableList<IVideoEffect> CollectEffects(
+            IVideoItem item,
+            I3DProvider provider,
+            PreviewProviderKind kind)
         {
-            if (item.VideoEffects is null)
+            if (kind == PreviewProviderKind.Source || item.VideoEffects is null)
                 return [];
 
-            return [.. item.VideoEffects.Where(e => e.IsEnabled && e is not I3DProvider)];
+            var applied = new List<IVideoEffect>();
+
+            foreach (var effect in item.VideoEffects)
+            {
+                if (kind == PreviewProviderKind.Effect && ReferenceEquals(effect, provider))
+                    break;
+
+                if (effect.IsEnabled && effect is not I3DProvider)
+                    applied.Add(effect);
+            }
+
+            return [.. applied];
         }
 
         public void RetainOnly(IReadOnlySet<IVideoItem> aliveItems)
@@ -164,8 +184,8 @@ namespace YMM43D.PreviewTool
             foreach (var source in retired)
                 source.Dispose();
 
-            foreach (var item in chains.Keys.Where(k => !aliveItems.Contains(k)).ToArray())
-                ReleaseChain(item);
+            foreach (var key in chains.Keys.Where(k => !aliveItems.Contains(k.Item)).ToArray())
+                ReleaseChain(key);
 
             effectsUnsupported.RemoveWhere(item => !aliveItems.Contains(item));
 
@@ -173,9 +193,9 @@ namespace YMM43D.PreviewTool
                 sourceRetryAt.Remove(item);
         }
 
-        private void ReleaseChain(IVideoItem item)
+        private void ReleaseChain((IVideoItem Item, I3DProvider Provider) key)
         {
-            if (chains.Remove(item, out var chain))
+            if (chains.Remove(key, out var chain))
                 chain.Dispose();
         }
 

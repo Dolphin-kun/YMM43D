@@ -44,7 +44,7 @@ namespace YMM43D.Player
             if (owner is null)
                 return SceneView.None;
 
-            var ownerPlacement = ItemPlacement.GetWorldMatrix(owner, ownerTime, Matrix4x4.Identity);
+            var ownerPlacement = ItemPlacement.GetWorldMatrix(owner, ownerTime);
             var ownerScreen = ItemPlacement.GetScreenPlacement(owner, ownerTime);
 
             var occluders = new List<Occluder>();
@@ -54,7 +54,7 @@ namespace YMM43D.Player
                 if (ReferenceEquals(item, owner))
                     continue;
 
-                var placement = ItemPlacement.GetWorldMatrix(item, itemTime, Matrix4x4.Identity);
+                var placement = ItemPlacement.GetWorldMatrix(item, itemTime);
 
                 foreach (var provider in FindProviders(item))
                     occluders.Add(new Occluder(provider, GetLocalMatrix(provider) * placement, itemTime));

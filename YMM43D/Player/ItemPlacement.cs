@@ -6,10 +6,7 @@ namespace YMM43D.Player
 {
     public static class ItemPlacement
     {
-        public static Matrix4x4 GetWorldMatrix(
-            IVideoItem item,
-            in FrameContext time,
-            Matrix4x4 cameraMatrix)
+        public static Matrix4x4 GetWorldMatrix(IVideoItem item, in FrameContext time)
         {
             var zoom = Matrix4x4.CreateScale(item.Zoom.GetFloat(time) / 100f);
 
@@ -20,11 +17,13 @@ namespace YMM43D.Player
                 -WorldScale.ToWorld(item.Y.GetFloat(time)),
                 WorldScale.ToWorld(item.Z.GetFloat(time)));
 
-            if (cameraMatrix == Matrix4x4.Identity)
-                return zoom * rotation * translation;
-
-            return zoom * rotation * WorldScale.ToYUpMatrix(cameraMatrix) * translation;
+            return zoom * rotation * translation;
         }
+
+        public static Matrix4x4 WithCamera(in Matrix4x4 local, in Matrix4x4 cameraMatrix)
+            => cameraMatrix == Matrix4x4.Identity
+                ? local
+                : local * WorldScale.ToYUpMatrix(cameraMatrix);
 
         public static ScreenPlacement GetScreenPlacement(IVideoItem item, in FrameContext time)
         {
