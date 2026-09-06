@@ -64,9 +64,6 @@ namespace YMM43D.PreviewTool
 
         public void Clear() => Items = [];
 
-        // 下のレイヤーをまとめて1枚の絵にするアイテムは、3Dプレビューでは扱わない。
-        // 1つずつ並べて描く作りと二重になるうえ、その絵は YMM4 が組み替えるもので、
-        // こちらから作らせると組み替えの最中の絵に触ってプロセスごと落ちる。
         private static bool IsComposite(IVideoItem item)
             => item is EffectItem or GroupItem or FrameBufferItem or TransitionItem;
 

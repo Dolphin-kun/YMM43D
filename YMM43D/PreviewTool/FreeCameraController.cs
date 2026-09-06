@@ -48,8 +48,6 @@ namespace YMM43D.PreviewTool
             pivotInitialized = true;
         }
 
-        public float PivotDistance => pivotDistance;
-
         public void Reset()
         {
             initialized = false;

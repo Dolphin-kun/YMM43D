@@ -157,7 +157,6 @@ namespace YMM43D.Project.Items
                     roll,
                     fieldOfView);
 
-                // 注目点から、見ている向きの反対側へ距離のぶん下がった場所に置く。
                 return aimed with
                 {
                     Position = ToWorld(TargetX, TargetY, TargetZ, itemTime)
@@ -223,8 +222,6 @@ namespace YMM43D.Project.Items
 
         private void MoveOrbit(in CameraMove move, in FrameContext itemTime, in EditScope scope)
         {
-            // 回り込みでは、角度が決まればカメラの居場所も決まる。回した分に付いてくる
-            // 平行移動を受け取ると、注目点まで一緒にずれてしまうので捨てる。
             if (move.Yaw != 0f || move.Pitch != 0f)
             {
                 scope.Nudge(Yaw, move.Yaw);
@@ -235,7 +232,6 @@ namespace YMM43D.Project.Items
             if (move.Shift == Vector3.Zero)
                 return;
 
-            // 角度が動かないときだけ、視線に沿った分を距離に、残りを注目点に渡す。
             var forward = GetState(itemTime).Forward;
             var along = Vector3.Dot(move.Shift, forward);
             var across = move.Shift - forward * along;

@@ -145,9 +145,6 @@ namespace YMM43D.PreviewTool
             lastWidth = width;
             lastHeight = height;
 
-            // 掴む判定はここで済ませる。アイテムをもう一度描くので、いま描いたばかりの
-            // この場所――描画側と同じ鍵の内側――でなければ、デバイスを別の場所から
-            // 同時に触ることになる。
             if (pendingPick is { } cursor)
             {
                 pendingPick = null;
