@@ -49,6 +49,9 @@ namespace YMM43D.Player
 
             var occluders = new List<Occluder>();
 
+            if (!IsPlacedIn3D(owner, self))
+                return new SceneView(owner, ownerTime, ownerPlacement, ownerScreen, occluders);
+
             foreach (var (item, itemTime) in alive)
             {
                 if (ReferenceEquals(item, owner))
@@ -61,6 +64,20 @@ namespace YMM43D.Player
             }
 
             return new SceneView(owner, ownerTime, ownerPlacement, ownerScreen, occluders);
+        }
+
+        public static bool IsPlacedIn3D(IVideoItem item, I3DProvider provider)
+        {
+            var effects = (item.VideoEffects ?? []).ToArray();
+            var last = Array.FindLastIndex(effects, effect => effect.IsEnabled);
+
+            for (var i = 0; i < effects.Length; i++)
+            {
+                if (ReferenceEquals(effects[i], provider))
+                    return i == last;
+            }
+
+            return true;
         }
 
         private static IEnumerable<I3DProvider> FindProviders(IVideoItem item)
@@ -78,7 +95,7 @@ namespace YMM43D.Player
 
             foreach (var effect in item.VideoEffects ?? [])
             {
-                if (effect.IsEnabled && effect is I3DProvider effectProvider)
+                if (effect.IsEnabled && effect is I3DProvider effectProvider && IsPlacedIn3D(item, effectProvider))
                     providers.Add(effectProvider);
             }
 
