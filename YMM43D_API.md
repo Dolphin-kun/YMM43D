@@ -473,7 +473,7 @@ YMM43D が持っている部品です。**どれも単体で完結している**
 | `Scene.hlsli` | 3D の場の `cbuffer`（register **b0**）と、`Opacity` などの別名 |
 | `Lighting.hlsli` | `ApplyLight` と `ApplyFog` |
 | `Texture.hlsli` | 乗算済みアルファを割り戻す `Unpremultiply` |
-| `Light.hlsli` | 光 1 つぶんの `struct Light` |
+| `Light.hlsli` | 光 1 つぶんの `struct Light` と、その並び `Lights`（register **t1**） |
 
 `Standard.hlsli` を取り込むと、場の `cbuffer`、頂点入力 `VS_IN`（`Pos` / `Col` / `Tex` / `Nrm`）、ピクセル入力 `PS_IN`（`Pos` / `Col` / `Tex` / `Nrm` / `World`）、座標変換と法線変換を行う `VSMain`、陰影と霧と不透明度をまとめた `Shade` が揃います。
 
@@ -491,6 +491,8 @@ float4 PSMain(PS_IN input) : SV_TARGET
 ### 自分の値を渡す
 
 **b0 は場のもの、b1 はあなたのもの**です。自前の値は `register(b1)` に置いてください。b0 には触らなくてよく、並び順を合わせる必要もありません（「立体化3D」と「点群3D」がこの形です）。
+
+同じように、**テクスチャの t0 はアイテムの絵、t1 は光の並び**です。自前のテクスチャは `t2` から使ってください。t1 は `Render3DContext` が描画の頭でまとめて割り当てるので、あなたが渡す必要はありません。
 
 ```hlsl
 #include "Standard.hlsli"
@@ -605,7 +607,8 @@ var pipeline = pipelines.Get(render.Device);
 | `ISceneLightSource` | interface | 光源として振る舞うアイテム |
 | `ISceneEnvironment` | interface | 環境光と霧を決めるアイテム |
 | `SceneLighting` | class | そのシーンの光ひとそろい。光源・環境光・霧 |
-| `SceneLight` | struct | 光1灯。平行光なら向き、点光源なら位置と届く距離 |
+| `SceneLight` | struct | 光1灯。平行光なら向き、点光源とスポットなら位置と届く距離 |
+| `LightKind` | enum | 光の種類。平行光・点光源・スポットライト |
 | `SceneFog` | struct | 霧。色・濃さ・効き始める距離・届く距離 |
 | `SceneConstants` | static class | シーンの光を `TransformConstants` に流し込む |
 
@@ -618,7 +621,7 @@ var pipeline = pipelines.Get(render.Device);
 | `GizmoHandle` | enum | 案内のどこを掴んでいるか |
 | `ISceneMarkerSource` | interface | 3Dプレビューに目印を出すアイテム。掴んで動かされたら差分を受け取る |
 | `SceneMarker` | struct | 目印の見た目と場所 |
-| `MarkerKind` | enum | 目印の絵柄。平行光・点光源・カメラ |
+| `MarkerKind` | enum | 目印の絵柄。平行光・点光源・スポットライト・カメラ |
 
 #### DrawContext3D
 
@@ -642,6 +645,7 @@ var pipeline = pipelines.Get(render.Device);
 | `GetWorldViewProjection(in Matrix4x4 world)` | ワールド行列を掛けた最終変換 |
 | `GetCameraPosition()` | ワールド空間でのカメラ位置。レイマーチングなどで使う |
 | `CreateConstants(world, opacity, unlit)` | シーンの光と霧を込みで `TransformConstants` を作る |
+| `BindLights()` | 光の並びを t1 に割り当てる。描画の頭で YMM43D が済ませるので、自分で呼ぶ必要はない |
 
 #### I3DProvider
 
@@ -672,9 +676,21 @@ public interface I3DProvider
 
 **丸く扱ってよいのは、輪郭も丸いものだけです。** 四角い粒に球の法線を当てると、四角の中に円が浮き出て見えます。輪郭が板のままのものは、法線も板のまま（カメラの向きの逆）にします。
 
-光はタイムラインから集められます。**光源アイテムを1つも置かなければ既定の光が使われます**（左上手前からの平行光80% + 環境光40%）。この既定値は、**カメラを正面から向いた面がちょうど明るさ1になる**ように選んであります。2D の絵を「3D空間に置く」だけのときに暗くならないためです。
+光はタイムラインから集められます。**光源アイテムを1つも置かなければ既定の光が使われます**（左上手前からの平行光80% + 環境光40%）。この値は、**カメラを正面から向いた面がちょうど明るさ1になる**ように選んであります。2D の絵を「3D空間に置く」だけのときに暗くならないためです。
 
 `Render3DContext.CreateConstants` がシーンの光を込みで `TransformConstants` を組み立てるので、自作のマテリアルでもこれを渡せば陰影と霧が効きます。
+
+**光源の数に上限はありません。** 光は定数バッファではなく `StructuredBuffer`（t1）に置いてあり、いくつ置いても入ります。ただし画素ごとに全灯をなめるので、数を増やすとその分だけ重くなります。
+
+光の種類は3つです。
+
+| 種類 | 作り方 | 効き方 |
+|---|---|---|
+| 平行光 | `SceneLight.Directional(向き, 色)` / `SceneLight.FromAngles(水平角, 垂直角, 色)` | 太陽のように、場所によらず同じ向きから当たる |
+| 点光源 | `SceneLight.Point(位置, 色, 届く距離)` | 置いた場所から全方向へ。距離の2乗で弱まる |
+| スポットライト | `SceneLight.Spot(位置, 照らす向き, 色, 届く距離, 広がり, ふちのぼかし)` | 点光源をさらに円錐で絞る |
+
+広がりは円錐の半頂角（度）で、`SceneLight.MinSpread`〜`MaxSpread` に収められます。ふちのぼかしは 0〜1 で、0 なら円の境目がくっきり、1 なら中心から外へなだらかに暗くなります。
 
 #### 3Dプレビューの目印
 
@@ -698,6 +714,7 @@ public void MoveMarker(in Vector3 shift, in FrameContext itemTime, in EditScope 
 |---|---|---|
 | `SceneMarker.ForDirectionalLight(向き)` | 原点から一定の距離に浮かぶ太陽。原点へ線が伸びる | 動かした先の向きに回る |
 | `SceneMarker.ForPointLight(位置, 届く距離)` | 小さな球と、届く距離を表す大きな球 | その位置へ移る |
+| `SceneMarker.ForSpotLight(位置, 照らす向き, 届く距離, 広がり)` | 光の届く範囲そのままの円錐 | その位置へ移る |
 | `SceneMarker.ForCamera(位置)` | 線画は描かない（カメラの枠がそのまま目印になる） | その位置へ移る |
 
 目印を持つアイテムをタイムラインで選ぶと、**目印の場所に軸ハンドルが出ます**。ハンドルを掴んだときの `shift` はその軸方向だけの差分になります。回転の輪は出ません。目印は位置しか持たないためです。

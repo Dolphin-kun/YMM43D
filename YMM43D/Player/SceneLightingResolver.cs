@@ -35,7 +35,7 @@ namespace YMM43D.Player
 
                 var itemTime = new FrameContext(frame - item.Frame, Math.Max(1, item.Length), fps);
 
-                if (item is ISceneLightSource source && lights.Count < SceneLighting.MaxLights)
+                if (item is ISceneLightSource source)
                     lights.Add(source.GetLight(itemTime));
 
                 if (item is not ISceneEnvironment)

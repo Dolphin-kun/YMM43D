@@ -13,6 +13,13 @@ namespace YMM43D.Commons
     {
         public Matrix4x4 ViewProjection => View * Projection;
 
+        public Render3DContext BindLights()
+        {
+            SceneLightBuffer.Bind(Device, Context, (Lighting ?? SceneLighting.Default).LightBuffer);
+
+            return this;
+        }
+
         public Matrix4x4 GetWorldViewProjection(in Matrix4x4 world) => world * View * Projection;
 
         public Vector3 GetCameraPosition()

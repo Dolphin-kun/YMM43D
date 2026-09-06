@@ -99,7 +99,7 @@ namespace YMM43D.PreviewTool
                 (float)width / Math.Max(1, height), scene.ScreenHeight, pixelsPerTangent);
 
             var render = new Render3DContext(
-                device, context, viewPose.ViewMatrix, projection, scene.Lighting);
+                device, context, viewPose.ViewMatrix, projection, scene.Lighting).BindLights();
 
             var sceneCameraPose = scene.SceneCameraPose;
             var screenTangent = scene.GetScreenTangent(pixelsPerTangent);
@@ -437,7 +437,8 @@ namespace YMM43D.PreviewTool
 
                 context.RSSetViewport(new Viewport(-position.X, -position.Y, lastWidth, lastHeight));
 
-                var render = new Render3DContext(device, context, lastView, lastProjection, lastLighting);
+                var render = new Render3DContext(
+                    device, context, lastView, lastProjection, lastLighting).BindLights();
 
                 target.Provider.Draw(render, AsOpaque(target.Context));
 

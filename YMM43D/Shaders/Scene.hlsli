@@ -15,12 +15,12 @@ cbuffer SceneConstants : register(b0)
     float4 FogColor;
     float4 Options;
     float4 Surface;
-    Light  Lights[4];
 };
 #define Opacity     Options.x
 #define Unlit       Options.y
 #define FogStart    Options.z
 #define FogEnd      Options.w
 #define AlphaCutoff Surface.x
+#define LightCount  Surface.y
 
 #endif

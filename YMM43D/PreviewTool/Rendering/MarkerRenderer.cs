@@ -43,35 +43,54 @@ namespace YMM43D.PreviewTool.Rendering
 
         public void Dispose() => resources.Dispose();
 
-        private static Vector3[] BuildOutline(in SceneMarker marker) => marker.Kind switch
+        private static Vector3[] BuildOutline(MarkerKind kind) => kind switch
         {
-            MarkerKind.DirectionalLight => Sun(marker.Direction),
+            MarkerKind.DirectionalLight => Sun(),
             MarkerKind.PointLight => Globe(SceneMarker.BodyRadius),
+            MarkerKind.SpotLight => Cone(),
             _ => [],
         };
 
-        private static Vector3[] Sun(in Vector3 shines)
+        // 光の向きを +Z としたときの形。実際の向きは行列で合わせる。
+        private static Vector3[] Sun()
         {
             var lines = new List<Vector3>();
             var radius = SceneMarker.BodyRadius;
 
-            var forward = shines.LengthSquared() > 1e-8f ? Vector3.Normalize(shines) : -Vector3.UnitZ;
-            var (right, up) = Basis(forward);
-
             for (var i = 0; i < RingSegments; i++)
             {
-                lines.Add(OnCircle(right, up, radius, i, RingSegments));
-                lines.Add(OnCircle(right, up, radius, i + 1, RingSegments));
+                lines.Add(OnCircle(radius, i, RingSegments));
+                lines.Add(OnCircle(radius, i + 1, RingSegments));
             }
 
             for (var i = 0; i < RayCount; i++)
             {
-                lines.Add(OnCircle(right, up, radius * 1.3f, i, RayCount));
-                lines.Add(OnCircle(right, up, radius * 2f, i, RayCount));
+                lines.Add(OnCircle(radius * 1.3f, i, RayCount));
+                lines.Add(OnCircle(radius * 2f, i, RayCount));
             }
 
-            lines.Add(forward * radius);
-            lines.Add(forward * (radius + SceneMarker.DirectionalDistance * 0.35f));
+            lines.Add(Vector3.UnitZ * radius);
+            lines.Add(Vector3.UnitZ * (radius + SceneMarker.DirectionalDistance * 0.35f));
+
+            return [.. lines];
+        }
+
+        // 先端が原点、+Z へ長さ 1・半径 1 の円錐。広がりと届く距離は行列で与える。
+        private static Vector3[] Cone()
+        {
+            var lines = new List<Vector3>();
+
+            for (var i = 0; i < RingSegments; i++)
+            {
+                lines.Add(OnCircle(1f, i, RingSegments) + Vector3.UnitZ);
+                lines.Add(OnCircle(1f, i + 1, RingSegments) + Vector3.UnitZ);
+            }
+
+            for (var i = 0; i < RayCount; i++)
+            {
+                lines.Add(Vector3.Zero);
+                lines.Add(OnCircle(1f, i, RayCount) + Vector3.UnitZ);
+            }
 
             return [.. lines];
         }
@@ -97,6 +116,9 @@ namespace YMM43D.PreviewTool.Rendering
             return [.. lines];
         }
 
+        private static Vector3 OnCircle(float radius, int step, int count)
+            => OnCircle(Vector3.UnitX, Vector3.UnitY, radius, step, count);
+
         private static Vector3 OnCircle(in Vector3 right, in Vector3 up, float radius, int step, int count)
         {
             var angle = MathF.Tau * step / count;
@@ -112,54 +134,77 @@ namespace YMM43D.PreviewTool.Rendering
             return (right, Vector3.Cross(forward, right));
         }
 
+        // ローカルの +Z が渡した向きを指すようにする回転。
+        private static Matrix4x4 Aim(in Vector3 direction)
+        {
+            if (direction.LengthSquared() < 1e-8f)
+                return Matrix4x4.Identity;
+
+            var forward = Vector3.Normalize(direction);
+            var (right, up) = Basis(forward);
+
+            return new Matrix4x4(
+                right.X, right.Y, right.Z, 0f,
+                up.X, up.Y, up.Z, 0f,
+                forward.X, forward.Y, forward.Z, 0f,
+                0f, 0f, 0f, 1f);
+        }
+
+        private static Matrix4x4 WorldFor(in SceneMarker marker)
+        {
+            if (marker.Kind != MarkerKind.SpotLight)
+                return Aim(marker.Direction) * Matrix4x4.CreateTranslation(marker.Position);
+
+            var length = MathF.Max(marker.Reach, 0.01f);
+            var spread = Math.Clamp(marker.Spread, SceneLight.MinSpread, SceneLight.MaxSpread);
+            var radius = length * MathF.Tan(Rotation3D.ToRadians(spread));
+
+            return Matrix4x4.CreateScale(radius, radius, length)
+                * Aim(marker.Direction)
+                * Matrix4x4.CreateTranslation(marker.Position);
+        }
+
         private sealed class MarkerResources(ID3D11Device device) : IDisposable
         {
             private readonly RenderPipeline<TransformConstants> pipeline = new(
                 device, Vertex.InputElements, new VertexColorMaterial(device));
 
-            private readonly Dictionary<(SceneMarker Shape, bool IsSelected), LineMesh> bodies = [];
+            private readonly Dictionary<(MarkerKind Kind, bool IsSelected), LineMesh> bodies = [];
 
             private LineMesh? reach;
 
             public void Draw(in Render3DContext render, in SceneMarker marker, bool isSelected)
             {
-                if (Body(marker, isSelected) is { } body)
-                    Draw(render, body, marker.Position, 1f);
+                if (Body(marker.Kind, isSelected) is { } body)
+                    Draw(render, body, WorldFor(marker));
 
                 if (marker.Kind != MarkerKind.PointLight || marker.Reach <= 0f)
                     return;
 
-                Draw(render, Reach(), marker.Position, marker.Reach);
+                Draw(
+                    render,
+                    Reach(),
+                    Matrix4x4.CreateScale(marker.Reach) * Matrix4x4.CreateTranslation(marker.Position));
             }
 
-            private void Draw(in Render3DContext render, LineMesh mesh, in Vector3 position, float scale)
+            private void Draw(in Render3DContext render, LineMesh mesh, in Matrix4x4 world)
             {
-                var world = Matrix4x4.CreateScale(scale) * Matrix4x4.CreateTranslation(position);
-
                 var constants = TransformConstants.CreateUnlit(render.GetWorldViewProjection(world), 1f);
 
                 pipeline.Draw(render.Context, constants, new DrawSettings(), mesh);
             }
 
-            private LineMesh? Body(in SceneMarker marker, bool isSelected)
+            private LineMesh? Body(MarkerKind kind, bool isSelected)
             {
-                var key = (marker with { Position = Vector3.Zero, Reach = 0f }, isSelected);
+                var key = (kind, isSelected);
 
                 if (bodies.TryGetValue(key, out var found))
                     return found;
 
-                var outline = BuildOutline(key.Item1);
+                var outline = BuildOutline(kind);
 
                 if (outline.Length == 0)
                     return null;
-
-                if (bodies.Count > 16)
-                {
-                    foreach (var mesh in bodies.Values)
-                        mesh.Dispose();
-
-                    bodies.Clear();
-                }
 
                 return bodies[key] = new LineMesh(
                     device, outline, isSelected ? LightColor : Dim(LightColor));

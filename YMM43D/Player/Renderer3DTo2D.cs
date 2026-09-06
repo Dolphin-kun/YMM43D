@@ -73,7 +73,7 @@ namespace YMM43D.Player
 
                     context.RSSetViewport(new Viewport(0, 0, width, height));
 
-                    draw(new Render3DContext(lease.Device, context, view, projection, lighting));
+                    draw(new Render3DContext(lease.Device, context, view, projection, lighting).BindLights());
 
                     context.Flush();
                 }

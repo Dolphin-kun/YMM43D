@@ -24,26 +24,27 @@ namespace YMM43D.Commons
             constants.FogColor = new Vector4(fog.Color, fog.IsEnabled ? fog.Density : 0f);
             constants.Options.Z = fog.Start;
             constants.Options.W = fog.End;
-
-            for (var i = 0; i < SceneLighting.MaxLights; i++)
-                constants.SetLight(i, ToConstants(scene.Lights, i));
+            constants.Surface.Y = scene.Lights.Count;
 
             return constants;
         }
 
-        private static LightConstants ToConstants(IReadOnlyList<SceneLight> lights, int index)
+        public static LightConstants ToConstants(SceneLight light) => new()
         {
-            if (index >= lights.Count)
-                return default;
+            Vector = new Vector4(light.Vector, ToShaderKind(light.Kind)),
+            Color = new Vector4(light.Color, light.Reach),
+            Cone = new Vector4(light.Axis, Cosine(light.OuterAngle)),
+            Edge = new Vector4(Cosine(light.InnerAngle), 0f, 0f, 0f),
+        };
 
-            var light = lights[index];
+        private static float ToShaderKind(LightKind kind) => kind switch
+        {
+            LightKind.Point => 1f,
+            LightKind.Spot => 2f,
+            _ => 0f,
+        };
 
-            return new LightConstants
-            {
-                Vector = new Vector4(light.Vector, light.Kind == LightKind.Point ? 1f : 0f),
-                Color = new Vector4(light.Color, light.Reach),
-            };
-        }
+        private static float Cosine(float degrees) => MathF.Cos(Rotation3D.ToRadians(degrees));
     }
 
     public enum LightKind
@@ -53,13 +54,19 @@ namespace YMM43D.Commons
 
         [Display(Name = "点光源", Description = "電球のように、置いた場所から周りへ広がります")]
         Point,
+
+        [Display(Name = "スポットライト", Description = "舞台の照明のように、円錐の形に絞って照らします")]
+        Spot,
     }
 
     public readonly record struct SceneLight(
         LightKind Kind,
         Vector3 Vector,
         Vector3 Color,
-        float Reach)
+        float Reach,
+        Vector3 Axis = default,
+        float InnerAngle = 0f,
+        float OuterAngle = 0f)
     {
         public static SceneLight Directional(Vector3 direction, Vector3 color)
             => new(LightKind.Directional, Normalize(direction), color, 0f);
@@ -92,6 +99,25 @@ namespace YMM43D.Commons
         public static SceneLight Point(Vector3 position, Vector3 color, float reach)
             => new(LightKind.Point, position, color, MathF.Max(reach, 0.01f));
 
+        public const float MinSpread = 1f;
+
+        public const float MaxSpread = 89f;
+
+        public static SceneLight Spot(
+            Vector3 position, Vector3 shines, Vector3 color, float reach, float spread, float blur)
+        {
+            var outer = Math.Clamp(spread, MinSpread, MaxSpread);
+
+            return new SceneLight(
+                LightKind.Spot,
+                position,
+                color,
+                MathF.Max(reach, 0.01f),
+                Normalize(shines),
+                outer * (1f - Math.Clamp(blur, 0f, 1f)),
+                outer);
+        }
+
         private static Vector3 Normalize(in Vector3 value)
             => value.LengthSquared() > 1e-12f ? Vector3.Normalize(value) : new Vector3(0f, 0f, 1f);
     }
@@ -105,8 +131,6 @@ namespace YMM43D.Commons
 
     public sealed class SceneLighting(IReadOnlyList<SceneLight> lights, Vector3 ambient, SceneFog fog)
     {
-        public const int MaxLights = 4;
-
         public const float DefaultYaw = 20f;
 
         public const float DefaultPitch = 30f;
@@ -120,11 +144,15 @@ namespace YMM43D.Commons
             new Vector3(DefaultAmbient),
             SceneFog.None);
 
-        public IReadOnlyList<SceneLight> Lights { get; } = lights.Count > MaxLights ? [.. lights.Take(MaxLights)] : lights;
+        public IReadOnlyList<SceneLight> Lights { get; } = lights;
 
         public Vector3 Ambient { get; } = ambient;
 
         public SceneFog Fog { get; } = fog;
+
+        public IReadOnlyList<LightConstants> LightBuffer
+            => lightBuffer ??= [.. Lights.Select(SceneConstants.ToConstants)];
+        private LightConstants[]? lightBuffer;
 
         public bool NearlyEquals(SceneLighting other)
         {
