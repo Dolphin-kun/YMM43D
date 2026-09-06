@@ -74,16 +74,14 @@ namespace YMM43D.PreviewTool
         {
             var effects = item.VideoEffects ?? [];
 
-            var sources = new List<I3DProvider>();
+            if (!SceneDepthCollector.HasSolidEffect(item))
+            {
+                var sources = SceneDepthCollector.FindSources(item).ToArray();
 
-            if (item is I3DProvider itemProvider)
-                sources.Add(itemProvider);
-
-            if (item is ShapeItem shape && Provider3DRegistry.Find(shape.ShapeParameter) is { } shapeProvider)
-                sources.Add(shapeProvider);
-
-            if (sources.Count > 0)
-                return sources.Distinct().Select(provider => new Placed(provider, []));
+                return sources.Length > 0
+                    ? sources.Select(provider => new Placed(provider, []))
+                    : [new Placed(fallbackProvider, Flattened(effects))];
+            }
 
             var solids = new List<Placed>();
 

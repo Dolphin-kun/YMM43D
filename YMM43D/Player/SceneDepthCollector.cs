@@ -80,18 +80,28 @@ namespace YMM43D.Player
             return true;
         }
 
-        private static IEnumerable<I3DProvider> FindProviders(IVideoItem item)
+        public static bool HasSolidEffect(IVideoItem item)
+            => (item.VideoEffects ?? []).Any(effect => effect.IsEnabled && effect is I3DProvider);
+
+        public static IEnumerable<I3DProvider> FindSources(IVideoItem item)
         {
-            var providers = new List<I3DProvider>();
+            var sources = new List<I3DProvider>();
 
             if (item is I3DProvider itemProvider)
-                providers.Add(itemProvider);
+                sources.Add(itemProvider);
 
             if (item is ShapeItem shape && Provider3DRegistry.Find(shape.ShapeParameter) is { } shapeProvider)
-                providers.Add(shapeProvider);
+                sources.Add(shapeProvider);
 
-            if (providers.Count > 0)
-                return providers.Distinct();
+            return sources.Distinct();
+        }
+
+        private static IEnumerable<I3DProvider> FindProviders(IVideoItem item)
+        {
+            if (!HasSolidEffect(item))
+                return FindSources(item);
+
+            var providers = new List<I3DProvider>();
 
             foreach (var effect in item.VideoEffects ?? [])
             {
