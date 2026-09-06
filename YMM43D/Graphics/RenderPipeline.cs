@@ -76,10 +76,8 @@ namespace YMM43D.Graphics
             context.OMSetBlendState(
                 settings.DepthOnly ? states.NoColorWrite : states.GetBlend(settings.Blend));
 
-            context.OMSetDepthStencilState(
-                settings.IgnoreDepth && !settings.DepthOnly ? states.DepthDisabled
-                : settings.SkipDepthWrite && !settings.DepthOnly ? states.DepthTestOnly
-                : states.DepthDefault);
+            context.OMSetDepthStencilState(DepthStateFor(settings));
+
             context.RSSetState(settings.Culling switch
             {
                 FaceCulling.Back => states.CullBack,
@@ -113,6 +111,17 @@ namespace YMM43D.Graphics
             }
 
             ResetState(context, settings);
+        }
+
+        private ID3D11DepthStencilState DepthStateFor(in DrawSettings settings)
+        {
+            if (settings.DepthOnly)
+                return states.DepthDefault;
+
+            if (settings.IgnoreDepth)
+                return states.DepthDisabled;
+
+            return settings.SkipDepthWrite ? states.DepthTestOnly : states.DepthDefault;
         }
 
         private static void ResetState(ID3D11DeviceContext context, in DrawSettings settings)

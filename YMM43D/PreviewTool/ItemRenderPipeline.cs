@@ -34,12 +34,10 @@ namespace YMM43D.PreviewTool
             PreviewEnvironment environment,
             bool needsImage,
             I3DProvider provider,
-            PreviewProviderKind kind)
+            ImmutableList<IVideoEffect> effects)
         {
             if (environment.Scene is null || environment.SourceDescription is null)
                 return ItemRenderResult.None;
-
-            var effects = CollectEffects(item, provider, kind);
 
             if (!needsImage && effects.IsEmpty)
                 return ItemRenderResult.None;
@@ -146,31 +144,6 @@ namespace YMM43D.PreviewTool
                 effectsUnsupported.Add(item);
                 return new ItemRenderResult(sourceImage, Matrix4x4.Identity);
             }
-        }
-
-        private static ImmutableList<IVideoEffect> CollectEffects(
-            IVideoItem item,
-            I3DProvider provider,
-            PreviewProviderKind kind)
-        {
-            if (kind == PreviewProviderKind.Source || item.VideoEffects is null)
-                return [];
-
-            var applied = new List<IVideoEffect>();
-
-            foreach (var effect in item.VideoEffects)
-            {
-                if (kind == PreviewProviderKind.Effect && ReferenceEquals(effect, provider))
-                    break;
-
-                if (!effect.IsEnabled)
-                    continue;
-
-                if (kind == PreviewProviderKind.Flat || effect is not I3DProvider)
-                    applied.Add(effect);
-            }
-
-            return [.. applied];
         }
 
         public void RetainOnly(IReadOnlySet<IVideoItem> aliveItems)

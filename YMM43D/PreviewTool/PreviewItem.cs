@@ -1,25 +1,20 @@
+using System.Collections.Immutable;
 using YMM43D.Commons;
+using YukkuriMovieMaker.Plugin.Effects;
 using YukkuriMovieMaker.Project.Items;
 
 namespace YMM43D.PreviewTool
 {
-    internal enum PreviewProviderKind
-    {
-        Source,
-        Effect,
-        Flat,
-    }
-
     internal sealed class PreviewItem(
         I3DProvider provider,
-        PreviewProviderKind kind,
+        ImmutableList<IVideoEffect> effects,
         IVideoItem item,
         int startFrame,
         int length)
     {
         public I3DProvider Provider { get; } = provider;
 
-        public PreviewProviderKind Kind { get; } = kind;
+        public ImmutableList<IVideoEffect> Effects { get; } = effects;
 
         public IVideoItem Item { get; } = item;
 

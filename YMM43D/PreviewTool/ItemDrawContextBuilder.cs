@@ -1,5 +1,7 @@
+using System.Collections.Immutable;
 using System.Numerics;
 using Vortice;
+using YukkuriMovieMaker.Plugin.Effects;
 using Vortice.Direct3D11;
 using YMM43D.Player;
 using YMM43D.Commons;
@@ -20,14 +22,14 @@ namespace YMM43D.PreviewTool
             in FrameContext itemTime,
             PreviewEnvironment environment,
             I3DProvider provider,
-            PreviewProviderKind kind)
+            ImmutableList<IVideoEffect> effects)
         {
             var providerTexture = provider is I3DTextureProvider textureProvider
                 ? textureProvider.GetTexture(environment.Device)
                 : null;
 
             var needsImage = provider.RequiresMappedTexture && providerTexture is null;
-            var rendered = pipeline.Render(item, itemTime, environment, needsImage, provider, kind);
+            var rendered = pipeline.Render(item, itemTime, environment, needsImage, provider, effects);
 
             var texture = providerTexture;
             RawRectF? imageBounds = null;

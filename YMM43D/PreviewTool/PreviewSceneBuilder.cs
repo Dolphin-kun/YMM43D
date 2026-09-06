@@ -1,5 +1,7 @@
+using System.Collections.Immutable;
 using YMM43D.Commons;
 using YMM43D.Player;
+using YukkuriMovieMaker.Plugin.Effects;
 using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Player.Video;
 using YukkuriMovieMaker.Plugin;
@@ -10,6 +12,8 @@ namespace YMM43D.PreviewTool
 {
     internal sealed class PreviewSceneBuilder(I3DProvider fallbackProvider)
     {
+        private readonly record struct Placed(I3DProvider Provider, ImmutableList<IVideoEffect> Effects);
+
         private readonly I3DProvider fallbackProvider = fallbackProvider;
 
         private (int Width, int Height, int Fps, int Frame, int Length) lastSignature;
@@ -54,8 +58,8 @@ namespace YMM43D.PreviewTool
 
             foreach (var item in visible)
             {
-                foreach (var (provider, kind) in FindProviders(item))
-                    updated.Add(new PreviewItem(provider, kind, item, item.Frame, item.Length));
+                foreach (var (provider, effects) in FindProviders(item))
+                    updated.Add(new PreviewItem(provider, effects, item, item.Frame, item.Length));
             }
 
             Items = updated;
@@ -66,8 +70,10 @@ namespace YMM43D.PreviewTool
         private static bool IsComposite(IVideoItem item)
             => item is EffectItem or GroupItem or FrameBufferItem or TransitionItem;
 
-        private IEnumerable<(I3DProvider Provider, PreviewProviderKind Kind)> FindProviders(IVideoItem item)
+        private IEnumerable<Placed> FindProviders(IVideoItem item)
         {
+            var effects = item.VideoEffects ?? [];
+
             var sources = new List<I3DProvider>();
 
             if (item is I3DProvider itemProvider)
@@ -77,23 +83,41 @@ namespace YMM43D.PreviewTool
                 sources.Add(shapeProvider);
 
             if (sources.Count > 0)
-                return sources.Distinct().Select(p => (p, PreviewProviderKind.Source));
+                return sources.Distinct().Select(provider => new Placed(provider, []));
 
-            var effects = new List<I3DProvider>();
+            var solids = new List<Placed>();
 
-            foreach (var effect in item.VideoEffects ?? [])
+            foreach (var effect in effects)
             {
                 if (effect.IsEnabled
-                    && effect is I3DProvider effectProvider
-                    && SceneDepthCollector.IsPlacedIn3D(item, effectProvider))
+                    && effect is I3DProvider provider
+                    && SceneDepthCollector.IsPlacedIn3D(item, provider))
                 {
-                    effects.Add(effectProvider);
+                    solids.Add(new Placed(provider, Preceding(effects, effect)));
                 }
             }
 
-            return effects.Count == 0
-                ? [(fallbackProvider, PreviewProviderKind.Flat)]
-                : effects.Distinct().Select(p => (p, PreviewProviderKind.Effect));
+            return solids.Count > 0 ? solids : [new Placed(fallbackProvider, Flattened(effects))];
         }
+
+        private static ImmutableList<IVideoEffect> Preceding(
+            IEnumerable<IVideoEffect> effects, IVideoEffect solid)
+        {
+            var taken = new List<IVideoEffect>();
+
+            foreach (var effect in effects)
+            {
+                if (ReferenceEquals(effect, solid))
+                    break;
+
+                if (effect.IsEnabled && effect is not I3DProvider)
+                    taken.Add(effect);
+            }
+
+            return [.. taken];
+        }
+
+        private static ImmutableList<IVideoEffect> Flattened(IEnumerable<IVideoEffect> effects)
+            => [.. effects.Where(effect => effect.IsEnabled)];
     }
 }
