@@ -2,10 +2,11 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
+using SharpGen.Runtime;
 using Vortice.DXGI;
 using Vortice.Direct3D11;
-using YMM43D.Player;
 using YMM43D.Graphics;
+using YMM43D.Player;
 using YukkuriMovieMaker.Commons;
 
 namespace YMM43D.PreviewTool.Views
@@ -77,8 +78,17 @@ namespace YMM43D.PreviewTool.Views
             lock (D2DGate.Sync)
             lock (device)
             {
-                Render?.Invoke(device, deviceContext, (int)ActualWidth, (int)ActualHeight);
-                swapChain.Present(1, PresentFlags.None);
+                if (DeviceHealth.IsLost(device, "3Dプレビュー", out _))
+                    return;
+
+                try
+                {
+                    Render?.Invoke(device, deviceContext, (int)ActualWidth, (int)ActualHeight);
+                    swapChain.Present(1, PresentFlags.None);
+                }
+                catch (SharpGenException) when (DeviceHealth.IsLost(device, "3Dプレビュー", out _))
+                {
+                }
             }
         }
 

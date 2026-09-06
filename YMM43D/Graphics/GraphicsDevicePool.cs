@@ -12,6 +12,12 @@ namespace YMM43D.Graphics
         private static ID3D11DeviceContext? context;
         private static int refCount;
 
+        public static bool IsDeviceLost(out string reason)
+        {
+            lock (gate)
+                return DeviceHealth.IsLost(device, "3D描画", out reason);
+        }
+
         public static DeviceLease Acquire()
         {
             lock (gate)
@@ -67,6 +73,8 @@ namespace YMM43D.Graphics
         {
             foreach (var cache in caches.ToArray())
                 cache.Clear();
+
+            DeviceHealth.Forget(device);
 
             context?.Dispose();
             context = null;

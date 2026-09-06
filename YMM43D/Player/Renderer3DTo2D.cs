@@ -1,11 +1,11 @@
 ﻿using System.Numerics;
+using SharpGen.Runtime;
 using Vortice;
 using Vortice.Direct2D1;
 using Vortice.Direct3D11;
 using Vortice.Mathematics;
 using YMM43D.Commons;
 using YMM43D.Graphics;
-
 using YukkuriMovieMaker.Commons;
 
 namespace YMM43D.Player
@@ -41,6 +41,9 @@ namespace YMM43D.Player
             lock (D2DGate.Sync)
             lock (lease.Device)
             {
+                if (GraphicsDevicePool.IsDeviceLost(out _))
+                    return BuildCommandList(ymmDevices, null, offset);
+
                 var d2dContext = privateContext.For(ymmDevices);
                 surface.Resize(ymmDevices, d2dContext, width, height);
 
@@ -59,6 +62,8 @@ namespace YMM43D.Player
                 if (previousViewports is not null)
                     context.RSGetViewports(previousViewports);
 
+                var lost = false;
+
                 try
                 {
                     context.OMSetRenderTargets(surface.RenderTargetView, surface.DepthStencilView);
@@ -72,6 +77,10 @@ namespace YMM43D.Player
 
                     context.Flush();
                 }
+                catch (SharpGenException) when (GraphicsDevicePool.IsDeviceLost(out _))
+                {
+                    lost = true;
+                }
                 finally
                 {
                     context.OMSetRenderTargets(previousTarget, previousDepth);
@@ -83,6 +92,9 @@ namespace YMM43D.Player
 
                     surface.EndWrite();
                 }
+
+                if (lost)
+                    return BuildCommandList(ymmDevices, null, offset);
 
                 return BuildCommandList(
                     ymmDevices, surface.Bitmap, offset, new RawRectF(0, 0, width, height));
