@@ -57,7 +57,8 @@ namespace YMM43D.Player
                 if (ReferenceEquals(item, owner))
                     continue;
 
-                var placement = ItemPlacement.GetWorldMatrix(item, itemTime);
+                var placement = ItemPlacement.GetWorldMatrix(item, itemTime)
+                    * TimelineGroups.GetTransform(timeline, item, frame, fps);
 
                 foreach (var provider in FindProviders(item))
                     occluders.Add(new Occluder(provider, GetLocalMatrix(provider) * placement, itemTime));
@@ -82,7 +83,9 @@ namespace YMM43D.Player
                     continue;
 
                 var itemTime = new FrameContext(frame - item.Frame, item.Length, description.FPS);
-                var placement = ItemPlacement.GetWorldMatrix(item, itemTime);
+
+                var placement = ItemPlacement.GetWorldMatrix(item, itemTime)
+                    * TimelineGroups.GetTransform(timeline, item, frame, description.FPS);
 
                 foreach (var provider in FindProviders(item))
                     casters.Add(new Occluder(provider, GetLocalMatrix(provider) * placement, itemTime));

@@ -898,7 +898,16 @@ public Animation X { get; } = new(0, -1000000, 1000000);
 
 **アイテムの位置・拡大率・回転・不透明度は、エフェクトを通す前の `DrawDescription` に載っています。** 置き場所はアイテムの値から直接ではなく、**通し終えた `DrawDescription` から** `ItemPlacement.GetWorldMatrix(DrawDescription)` で作ってください。アイテムの値を直接読むと、途中のエフェクトが足した分が抜け落ちます。
 
-なお `DrawDescription.DrawPoint` と `DrawPointX/Y/Z` は `Draw` を読みやすくしただけの読み取り専用の値で、中身は同じです。
+**グループ制御は `DrawDescription` には現れません。** レイヤー範囲に入っているかどうかはタイムラインを見ないと分からないためです。`TimelineGroups.GetTransform(timeline, item, frame, fps)` が、そのアイテムに掛かっているグループ制御をまとめた行列を返すので、置き場所の後ろに掛けてください。
+
+```csharp
+var world = ItemPlacement.GetWorldMatrix(draw)
+          * TimelineGroups.GetTransform(timeline, item, frame, fps);
+```
+
+入れ子になったグループは内側から外側の順に重なります。「同一グループのみ」はグループ番号で絞り込まれ、「画像を合成」を入れたグループは YMM4 が中身を1枚の絵にまとめてから動かすので、ここでは掛かりません。
+
+なお `DrawDescription.DrawPoint` と `DrawPointX/Y/Z` は `Draw` を読みやすくしただけの読み取り専用の値で、中身は同じです（後者は非推奨になっています）。
 
 ### カメラ系エフェクトとの並び順
 

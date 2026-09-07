@@ -39,7 +39,12 @@ namespace YMM43D.Player
                     lights.Add(source.GetLight(itemTime));
 
                 if (FindPlacedLight(item) is { } placed && placed.IsLightEnabled && item is IVideoItem video)
-                    lights.Add(placed.GetLight(itemTime, ItemPlacement.GetWorldMatrix(video, itemTime)));
+                {
+                    lights.Add(placed.GetLight(
+                        itemTime,
+                        ItemPlacement.GetWorldMatrix(video, itemTime)
+                            * TimelineGroups.GetTransform(timeline, item, frame, fps)));
+                }
 
                 if (item is not ISceneEnvironment)
                     continue;
