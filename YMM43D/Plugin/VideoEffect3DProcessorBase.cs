@@ -64,29 +64,9 @@ namespace YMM43D.Plugin
                 Devices, effectDescription, GetLocalBounds(itemTime), world, Draw,
                 out var imageReach,
                 self: (I3DProvider?)owner ?? this,
-                placement: ToWorldPlacement(effectDescription.DrawDescription));
+                placement: ItemPlacement.GetWorldMatrix(effectDescription.DrawDescription));
 
             return Neutralize(effectDescription.DrawDescription, imageReach);
-        }
-
-        private static Matrix4x4 ToWorldPlacement(DrawDescription draw)
-        {
-            var zoom = draw.Zoom;
-
-            var scale = new Vector3(
-                (float)zoom.X,
-                (float)zoom.Y,
-                (float)(zoom.X + zoom.Y) / 2f);
-
-            var rotation = Rotation3D.ForObject(
-                -(float)draw.Rotation.X, -(float)draw.Rotation.Y, -(float)draw.Rotation.Z);
-
-            var translation = Matrix4x4.CreateTranslation(
-                WorldScale.ToWorld((float)draw.Draw.X),
-                -WorldScale.ToWorld((float)draw.Draw.Y),
-                WorldScale.ToWorld((float)draw.Draw.Z));
-
-            return Matrix4x4.CreateScale(scale) * rotation * translation;
         }
 
         private static DrawDescription Neutralize(DrawDescription draw, float imageReach) => draw with

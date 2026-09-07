@@ -11,10 +11,7 @@ using YukkuriMovieMaker.Project.Items;
 
 namespace YMM43D.PreviewTool
 {
-    internal readonly record struct ItemRenderResult(ID2D1Image? Image, Matrix4x4 CameraMatrix)
-    {
-        public static ItemRenderResult None => new(null, Matrix4x4.Identity);
-    }
+    internal readonly record struct ItemRenderResult(ID2D1Image? Image, DrawDescription Draw);
 
     internal sealed class ItemRenderPipeline : IDisposable
     {
@@ -34,16 +31,17 @@ namespace YMM43D.PreviewTool
             PreviewEnvironment environment,
             bool needsImage,
             I3DProvider provider,
-            ImmutableList<IVideoEffect> effects)
+            ImmutableList<IVideoEffect> effects,
+            DrawDescription seed)
         {
             if (environment.Scene is null || environment.SourceDescription is null)
-                return ItemRenderResult.None;
+                return new ItemRenderResult(null, seed);
 
             if (!needsImage && effects.IsEmpty)
-                return ItemRenderResult.None;
+                return new ItemRenderResult(null, seed);
 
             lock (D2DGate.Sync)
-                return RenderCore(item, time, environment, effects, provider);
+                return RenderCore(item, time, environment, effects, provider, seed);
         }
 
         private ItemRenderResult RenderCore(
@@ -51,7 +49,8 @@ namespace YMM43D.PreviewTool
             in FrameContext time,
             PreviewEnvironment environment,
             ImmutableList<IVideoEffect> effects,
-            I3DProvider provider)
+            I3DProvider provider,
+            DrawDescription seed)
         {
             var scene = environment.Scene!;
             var sourceDescription = environment.SourceDescription!;
@@ -61,12 +60,12 @@ namespace YMM43D.PreviewTool
 
             var image = RenderSource(item, scene, environment, description);
             if (image is null)
-                return ItemRenderResult.None;
+                return new ItemRenderResult(null, seed);
 
             if (effects.IsEmpty)
-                return new ItemRenderResult(image, Matrix4x4.Identity);
+                return new ItemRenderResult(image, seed);
 
-            return ApplyEffects(item, provider, effects, environment, description, image);
+            return ApplyEffects(item, provider, effects, environment, description, image, seed);
         }
 
         private ID2D1Image? RenderSource(
@@ -119,10 +118,11 @@ namespace YMM43D.PreviewTool
             ImmutableList<IVideoEffect> effects,
             PreviewEnvironment environment,
             TimelineItemSourceDescription description,
-            ID2D1Image sourceImage)
+            ID2D1Image sourceImage,
+            DrawDescription seed)
         {
             if (effectsUnsupported.Contains(item))
-                return new ItemRenderResult(sourceImage, Matrix4x4.Identity);
+                return new ItemRenderResult(sourceImage, seed);
 
             var key = (item, provider);
 
@@ -136,13 +136,13 @@ namespace YMM43D.PreviewTool
                         chain = chains[key] = new EffectChain(effects, environment.Devices);
                 }
 
-                return chain.Apply(sourceImage, description);
+                return chain.Apply(sourceImage, description, seed);
             }
             catch
             {
                 ReleaseChain(key);
                 effectsUnsupported.Add(item);
-                return new ItemRenderResult(sourceImage, Matrix4x4.Identity);
+                return new ItemRenderResult(sourceImage, seed);
             }
         }
 
@@ -211,9 +211,10 @@ namespace YMM43D.PreviewTool
                 => effects.Count == current.Count
                 && !effects.Where((effect, i) => !ReferenceEquals(effect, current[i])).Any();
 
-            public ItemRenderResult Apply(ID2D1Image input, TimelineItemSourceDescription description)
+            public ItemRenderResult Apply(
+                ID2D1Image input, TimelineItemSourceDescription description, DrawDescription seed)
             {
-                var draw = CreateInitialDrawDescription();
+                var draw = seed;
                 var image = input;
 
                 foreach (var processor in processors)
@@ -226,19 +227,8 @@ namespace YMM43D.PreviewTool
                     image = processor.Output;
                 }
 
-                return new ItemRenderResult(image, draw.Camera);
+                return new ItemRenderResult(image, draw);
             }
-
-            private static DrawDescription CreateInitialDrawDescription() => new(
-                Draw: Vector3.Zero,
-                CenterPoint: Vector2.Zero,
-                Zoom: Vector2.One,
-                Rotation: Vector3.Zero,
-                Camera: Matrix4x4.Identity,
-                ZoomInterpolationMode: InterpolationMode.Linear,
-                Opacity: 1.0,
-                Invert: false,
-                Controllers: []);
 
             public void Dispose()
             {

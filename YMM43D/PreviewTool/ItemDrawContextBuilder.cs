@@ -29,7 +29,10 @@ namespace YMM43D.PreviewTool
                 : null;
 
             var needsImage = provider.RequiresMappedTexture && providerTexture is null;
-            var rendered = pipeline.Render(item, itemTime, environment, needsImage, provider, effects);
+
+            var rendered = pipeline.Render(
+                item, itemTime, environment, needsImage, provider, effects,
+                ItemPlacement.ToDrawDescription(item, itemTime));
 
             var texture = providerTexture;
             RawRectF? imageBounds = null;
@@ -45,9 +48,9 @@ namespace YMM43D.PreviewTool
             return new DrawContext3D
             {
                 World = ItemPlacement.WithCamera(
-                            BuildSizeMatrix(provider, imageBounds), rendered.CameraMatrix)
-                      * ItemPlacement.GetWorldMatrix(item, itemTime),
-                Opacity = Math.Clamp(ItemPlacement.GetOpacity(item, itemTime), 0f, 1f),
+                            BuildSizeMatrix(provider, imageBounds), rendered.Draw.Camera)
+                      * ItemPlacement.GetWorldMatrix(rendered.Draw),
+                Opacity = Math.Clamp((float)rendered.Draw.Opacity, 0f, 1f),
                 Blend = ToBlendMode(item.Blend),
                 IsAlwaysOnTop = item.IsAlwaysOnTop,
                 Time = itemTime,
