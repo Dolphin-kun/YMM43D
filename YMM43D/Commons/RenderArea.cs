@@ -40,26 +40,30 @@ namespace YMM43D.Commons
                 return null;
 
             var worldView = world * view;
-            var corners = bounds.GetCorners();
+
+            // 1コマにアイテムの数だけ通るので、置き場所は積まずに borrow で済ませる。
+            Span<Vector3> corners = stackalloc Vector3[WorldBounds.CornerCount];
+            bounds.WriteCorners(corners);
 
             for (var i = 0; i < corners.Length; i++)
                 corners[i] = Vector3.Transform(corners[i], worldView);
 
-            var visiblePoints = new List<Vector3>(corners.Length + Edges.Length);
+            Span<Vector3> visiblePoints = stackalloc Vector3[WorldBounds.CornerCount + 12];
+            var visibleCount = 0;
 
             foreach (var corner in corners)
                 if (-corner.Z >= nearDistance)
-                    visiblePoints.Add(corner);
+                    visiblePoints[visibleCount++] = corner;
 
             foreach (var (from, to) in Edges)
                 if (CrossNear(corners[from], corners[to], nearDistance) is { } crossing)
-                    visiblePoints.Add(crossing);
+                    visiblePoints[visibleCount++] = crossing;
 
             var min = new Vector2(float.MaxValue);
             var max = new Vector2(float.MinValue);
             var found = false;
 
-            foreach (var point in visiblePoints)
+            foreach (var point in visiblePoints[..visibleCount])
             {
                 var depth = MathF.Max(-point.Z, nearDistance);
                 var tangent = new Vector2(point.X / depth, point.Y / depth);
@@ -147,7 +151,15 @@ namespace YMM43D.Commons
             var min = new Vector2(float.MaxValue);
             var max = new Vector2(float.MinValue);
 
-            foreach (var corner in Corners(half))
+            Span<Vector2> corners =
+            [
+                new(-half.X, -half.Y),
+                new(half.X, -half.Y),
+                new(half.X, half.Y),
+                new(-half.X, half.Y),
+            ];
+
+            foreach (var corner in corners)
             {
                 var image = Vector2.Transform(corner, toImage);
 
@@ -160,13 +172,5 @@ namespace YMM43D.Commons
 
             return new ImageArea(min, max);
         }
-
-        private static Vector2[] Corners(Vector2 half) =>
-        [
-            new(-half.X, -half.Y),
-            new(half.X, -half.Y),
-            new(half.X, half.Y),
-            new(-half.X, half.Y),
-        ];
     }
 }

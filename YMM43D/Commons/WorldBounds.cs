@@ -34,17 +34,28 @@ namespace YMM43D.Commons
 
         public Vector3 Center => (Min + Max) / 2f;
 
-        public Vector3[] GetCorners() =>
-        [
-            new(Min.X, Min.Y, Min.Z),
-            new(Max.X, Min.Y, Min.Z),
-            new(Min.X, Max.Y, Min.Z),
-            new(Max.X, Max.Y, Min.Z),
-            new(Min.X, Min.Y, Max.Z),
-            new(Max.X, Min.Y, Max.Z),
-            new(Min.X, Max.Y, Max.Z),
-            new(Max.X, Max.Y, Max.Z),
-        ];
+        public const int CornerCount = 8;
+
+        public Vector3[] GetCorners()
+        {
+            var corners = new Vector3[CornerCount];
+
+            WriteCorners(corners);
+
+            return corners;
+        }
+
+        public void WriteCorners(Span<Vector3> into)
+        {
+            into[0] = new Vector3(Min.X, Min.Y, Min.Z);
+            into[1] = new Vector3(Max.X, Min.Y, Min.Z);
+            into[2] = new Vector3(Min.X, Max.Y, Min.Z);
+            into[3] = new Vector3(Max.X, Max.Y, Min.Z);
+            into[4] = new Vector3(Min.X, Min.Y, Max.Z);
+            into[5] = new Vector3(Max.X, Min.Y, Max.Z);
+            into[6] = new Vector3(Min.X, Max.Y, Max.Z);
+            into[7] = new Vector3(Max.X, Max.Y, Max.Z);
+        }
 
         public WorldBounds Transform(in Matrix4x4 matrix)
         {

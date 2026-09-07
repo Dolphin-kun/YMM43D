@@ -22,6 +22,7 @@ namespace YMM43D.Player
                 return SceneLighting.Default;
 
             var lights = new List<SceneLight>();
+            var groups = GroupLookup.Build(timeline, frame, fps);
 
             IItem? environmentItem = null;
 
@@ -42,8 +43,7 @@ namespace YMM43D.Player
                 {
                     lights.Add(placed.GetLight(
                         itemTime,
-                        ItemPlacement.GetWorldMatrix(video, itemTime)
-                            * TimelineGroups.GetTransform(timeline, item, frame, fps)));
+                        ItemPlacement.GetWorldMatrix(video, itemTime) * groups.GetTransform(item)));
                 }
 
                 if (item is not ISceneEnvironment)

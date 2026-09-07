@@ -19,6 +19,10 @@ namespace YMM43D.Player
         private readonly ID2D1CommandList?[] commandLists = new ID2D1CommandList?[CommandListRetention];
         private int commandListIndex;
 
+        // 1コマにアイテムの数だけ通るので、置き場所を覚えておく入れ物は使い回す。
+        private readonly ID3D11RenderTargetView?[] previousTargets = new ID3D11RenderTargetView?[1];
+        private Viewport[] previousViewports = new Viewport[8];
+
         public ID2D1Image RenderEmpty(IGraphicsDevicesAndContext ymmDevices)
             => BuildCommandList(ymmDevices, null, Vector2.Zero);
 
@@ -54,14 +58,17 @@ namespace YMM43D.Player
                 if (!surface.BeginWrite())
                     return BuildCommandList(ymmDevices, null, offset);
 
-                var previousTargets = new ID3D11RenderTargetView[1];
-                context.OMGetRenderTargets(1, previousTargets, out var previousDepth);
+                context.OMGetRenderTargets(1, previousTargets!, out var previousDepth);
                 var previousTarget = previousTargets[0];
+                previousTargets[0] = null;
 
                 var viewportCount = context.RSGetViewports();
-                var previousViewports = viewportCount > 0 ? new Viewport[viewportCount] : null;
-                if (previousViewports is not null)
-                    context.RSGetViewports(previousViewports);
+
+                if (viewportCount > previousViewports.Length)
+                    previousViewports = new Viewport[viewportCount];
+
+                if (viewportCount > 0)
+                    context.RSGetViewports(previousViewports.AsSpan(0, viewportCount));
 
                 var lost = false;
 
@@ -87,12 +94,12 @@ namespace YMM43D.Player
                 }
                 finally
                 {
-                    context.OMSetRenderTargets(previousTarget, previousDepth);
+                    context.OMSetRenderTargets(previousTarget!, previousDepth);
                     previousTarget?.Dispose();
                     previousDepth?.Dispose();
 
-                    if (previousViewports is not null)
-                        context.RSSetViewports(previousViewports);
+                    if (viewportCount > 0)
+                        context.RSSetViewports(previousViewports.AsSpan(0, viewportCount));
 
                     surface.EndWrite();
                 }

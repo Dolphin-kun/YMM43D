@@ -72,6 +72,9 @@ namespace YMM43D.PreviewTool
             int height,
             PreviewScene scene)
         {
+            var groups = GroupLookup.Build(
+                scene.Environment.Scene?.Timeline, scene.Time.Frame, scene.Time.Fps);
+
             var drawContexts = new DrawContext3D[scene.Items.Count];
             for (var i = 0; i < scene.Items.Count; i++)
             {
@@ -81,7 +84,8 @@ namespace YMM43D.PreviewTool
                     previewItem.GetItemTime(scene.Time),
                     scene.Environment,
                     previewItem.Provider,
-                    previewItem.Effects);
+                    previewItem.Effects,
+                    groups);
             }
 
             contextBuilder.RetainOnly(scene.Items.Select(i => i.Item).ToHashSet());

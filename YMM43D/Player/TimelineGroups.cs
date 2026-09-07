@@ -5,21 +5,43 @@ using YukkuriMovieMaker.Project.Items;
 
 namespace YMM43D.Player
 {
-    public static class TimelineGroups
+    // 1コマの間、グループ制御の顔ぶれも置き場所も変わらない。
+    // アイテムごとに数え直さずに済むよう、一度だけ数えて持ち回る。
+    public readonly struct GroupLookup
     {
-        // グループ制御は、自分より下の「レイヤー範囲」に入るアイテムをまとめて動かす。
-        // 入れ子にもなるので、いちばん近い親から外側へたどって掛け合わせる。
-        public static Matrix4x4 GetTransform(Timeline? timeline, IItem item, int frame, int fps)
+        private readonly Placed[]? groups;
+
+        private readonly record struct Placed(GroupItem Group, Matrix4x4 World);
+
+        private GroupLookup(Placed[] groups) => this.groups = groups;
+
+        public bool IsEmpty => groups is null || groups.Length == 0;
+
+        public static GroupLookup Build(Timeline? timeline, int frame, int fps)
         {
             if (timeline?.Items is not { } items)
-                return Matrix4x4.Identity;
+                return default;
 
-            var groups = items
-                .OfType<GroupItem>()
-                .Where(group => Applies(timeline, group, frame))
-                .ToArray();
+            List<Placed>? found = null;
 
-            if (groups.Length == 0)
+            foreach (var item in items)
+            {
+                if (item is not GroupItem group || !Applies(timeline, group, frame))
+                    continue;
+
+                var groupTime = new FrameContext(
+                    frame - group.Frame, Math.Max(1, group.Length), fps);
+
+                (found ??= []).Add(new Placed(group, ItemPlacement.GetWorldMatrix(group, groupTime)));
+            }
+
+            return found is null ? default : new GroupLookup([.. found]);
+        }
+
+        // レイヤー範囲をたどって、掛かっているグループを内側から外側の順に重ねる。
+        public Matrix4x4 GetTransform(IItem item)
+        {
+            if (groups is null || groups.Length == 0)
                 return Matrix4x4.Identity;
 
             var transform = Matrix4x4.Identity;
@@ -27,17 +49,41 @@ namespace YMM43D.Player
 
             for (var depth = 0; depth < groups.Length; depth++)
             {
-                if (FindParent(groups, current) is not { } parent)
+                var parent = FindParent(current);
+
+                if (parent < 0)
                     break;
 
-                var parentTime = new FrameContext(
-                    frame - parent.Frame, Math.Max(1, parent.Length), fps);
-
-                transform *= ItemPlacement.GetWorldMatrix(parent, parentTime);
-                current = parent;
+                transform *= groups[parent].World;
+                current = groups[parent].Group;
             }
 
             return transform;
+        }
+
+        private int FindParent(IItem item)
+        {
+            var found = -1;
+
+            for (var i = 0; i < groups!.Length; i++)
+            {
+                var group = groups[i].Group;
+
+                if (ReferenceEquals(group, item))
+                    continue;
+
+                if (item.Layer <= group.Layer || item.Layer > group.Layer + group.GroupRange)
+                    continue;
+
+                // 「同一グループのみ」なら、同じグループ番号のアイテムだけを動かす。
+                if (group.IsGroupOnly && group.Group != item.Group)
+                    continue;
+
+                if (found < 0 || group.Layer > groups[found].Group.Layer)
+                    found = i;
+            }
+
+            return found;
         }
 
         private static bool Applies(Timeline timeline, GroupItem group, int frame)
@@ -52,29 +98,11 @@ namespace YMM43D.Player
 
             return frame >= group.Frame && frame < group.Frame + group.Length;
         }
+    }
 
-        // レイヤー範囲に入っているグループのうち、いちばん近い（下にある）もの。
-        private static GroupItem? FindParent(GroupItem[] groups, IItem item)
-        {
-            GroupItem? found = null;
-
-            foreach (var group in groups)
-            {
-                if (ReferenceEquals(group, item))
-                    continue;
-
-                if (item.Layer <= group.Layer || item.Layer > group.Layer + group.GroupRange)
-                    continue;
-
-                // 「同一グループのみ」なら、同じグループ番号のアイテムだけを動かす。
-                if (group.IsGroupOnly && group.Group != item.Group)
-                    continue;
-
-                if (found is null || group.Layer > found.Layer)
-                    found = group;
-            }
-
-            return found;
-        }
+    public static class TimelineGroups
+    {
+        public static Matrix4x4 GetTransform(Timeline? timeline, IItem item, int frame, int fps)
+            => GroupLookup.Build(timeline, frame, fps).GetTransform(item);
     }
 }

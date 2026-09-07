@@ -22,7 +22,8 @@ namespace YMM43D.PreviewTool
             in FrameContext itemTime,
             PreviewEnvironment environment,
             I3DProvider provider,
-            ImmutableList<IVideoEffect> effects)
+            ImmutableList<IVideoEffect> effects,
+            in GroupLookup groups)
         {
             var providerTexture = provider is I3DTextureProvider textureProvider
                 ? textureProvider.GetTexture(environment.Device)
@@ -50,8 +51,7 @@ namespace YMM43D.PreviewTool
                 World = ItemPlacement.WithCamera(
                             BuildSizeMatrix(provider, imageBounds), rendered.Draw.Camera)
                       * ItemPlacement.GetWorldMatrix(rendered.Draw)
-                      * TimelineGroups.GetTransform(
-                            environment.Scene?.Timeline, item, TimelineFrame(item, itemTime), itemTime.Fps),
+                      * groups.GetTransform(item),
                 Opacity = Math.Clamp((float)rendered.Draw.Opacity, 0f, 1f),
                 Blend = ToBlendMode(item.Blend),
                 IsAlwaysOnTop = item.IsAlwaysOnTop,
@@ -78,10 +78,6 @@ namespace YMM43D.PreviewTool
             pipeline.Dispose();
             textureBridge.Dispose();
         }
-
-        // itemTime はアイテムの頭からの位置なので、タイムライン上の位置に戻す。
-        private static int TimelineFrame(IVideoItem item, in FrameContext itemTime)
-            => item.Frame + itemTime.Frame;
 
         private static Matrix4x4 BuildSizeMatrix(I3DProvider provider, RawRectF? imageBounds)
         {
