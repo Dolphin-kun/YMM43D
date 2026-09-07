@@ -18,6 +18,7 @@ namespace YMM43D.Graphics
         private readonly ID3D11BlendState subtract;
         private readonly ID3D11BlendState multiply;
         private readonly ID3D11BlendState screen;
+        private readonly ID3D11BlendState accumulate;
 
         public ID3D11DepthStencilState DepthDefault { get; }
 
@@ -42,6 +43,8 @@ namespace YMM43D.Graphics
             subtract = CreateBlend(device, D3DBlend.SourceAlpha, D3DBlend.One, BlendOperation.ReverseSubtract);
             multiply = CreateBlend(device, D3DBlend.DestinationColor, D3DBlend.InverseSourceAlpha, BlendOperation.Add);
             screen = CreateBlend(device, D3DBlend.One, D3DBlend.InverseSourceColor, BlendOperation.Add);
+            accumulate = CreateBlend(
+                device, D3DBlend.One, D3DBlend.One, BlendOperation.Add, D3DBlend.One, D3DBlend.One);
 
             noColorWrite = Collect(device.CreateBlendState(new BlendDescription
             {
@@ -92,10 +95,17 @@ namespace YMM43D.Graphics
             BlendMode.Subtract => subtract,
             BlendMode.Multiply => multiply,
             BlendMode.Screen => screen,
+            BlendMode.Accumulate => accumulate,
             _ => normal,
         };
 
-        private ID3D11BlendState CreateBlend(ID3D11Device device, D3DBlend source, D3DBlend destination, BlendOperation operation)
+        private ID3D11BlendState CreateBlend(
+            ID3D11Device device,
+            D3DBlend source,
+            D3DBlend destination,
+            BlendOperation operation,
+            D3DBlend sourceAlpha = D3DBlend.One,
+            D3DBlend destinationAlpha = D3DBlend.InverseSourceAlpha)
         {
             var desc = new BlendDescription();
             desc.RenderTarget[0] = new RenderTargetBlendDescription
@@ -105,8 +115,8 @@ namespace YMM43D.Graphics
                 SourceBlend = source,
                 DestinationBlend = destination,
                 BlendOperation = operation,
-                SourceBlendAlpha = D3DBlend.One,
-                DestinationBlendAlpha = D3DBlend.InverseSourceAlpha,
+                SourceBlendAlpha = sourceAlpha,
+                DestinationBlendAlpha = destinationAlpha,
                 BlendOperationAlpha = BlendOperation.Add,
             };
             return Collect(device.CreateBlendState(desc));

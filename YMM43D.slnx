@@ -1,4 +1,5 @@
 <Solution>
+  <Project Path="BeamLight3D/BeamLight3D.csproj" />
   <Project Path="Curve3D/Curve3D.csproj" />
   <Project Path="Fold3D/Fold3D.csproj" />
   <Project Path="Shatter3D/Shatter3D.csproj" />

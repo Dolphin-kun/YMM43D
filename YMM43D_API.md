@@ -604,7 +604,8 @@ var pipeline = pipelines.Get(render.Device);
 | `CameraPose` | struct | ある時点でのカメラの位置・注視点・上方向 |
 | `SceneProjection` | static class | シーンを画面に写す射影。クリップ面と画角の決め方 |
 | `ICameraSync` / `CameraSync` | interface / class | カメラの変化を YMM4 に伝える |
-| `ISceneLightSource` | interface | 光源として振る舞うアイテム |
+| `ISceneLightSource` | interface | 自分で位置を持つ光源アイテム |
+| `IPlacedSceneLightSource` | interface | アイテムの置き場所に従って光るもの。3D図形の形状パラメータでも実装できる |
 | `ISceneEnvironment` | interface | 環境光と霧を決めるアイテム |
 | `SceneLighting` | class | そのシーンの光ひとそろい。光源・環境光・霧 |
 | `SceneLight` | struct | 光1灯。平行光なら向き、点光源とスポットなら位置と届く距離 |
@@ -692,6 +693,28 @@ public interface I3DProvider
 
 広がりは円錐の半頂角（度）で、`SceneLight.MinSpread`〜`MaxSpread` に収められます。ふちのぼかしは 0〜1 で、0 なら円の境目がくっきり、1 なら中心から外へなだらかに暗くなります。
 
+#### 絵を描くものが光源も兼ねる
+
+光源アイテムは自分で位置を持ちますが、3D 図形のように **YMM4 側の座標で動かされるもの**は、自分がどこに置かれたのかを知りません。`IPlacedSceneLightSource` を実装すると、アイテムの置き場所を受け取ってから光を返せます。3D 図形アイテムの場合は、**形状パラメータ側**に実装します。
+
+```csharp
+public bool IsLightEnabled => true;
+
+public SceneLight GetLight(in FrameContext itemTime, in Matrix4x4 placement)
+{
+    var aimed = GetOrientation(itemTime) * placement;
+
+    return SceneLight.Spot(
+        Vector3.Transform(Vector3.Zero, aimed),
+        Vector3.TransformNormal(Vector3.UnitZ, aimed),
+        color, reach, spread, blur);
+}
+```
+
+`placement` はアイテムの拡大率・回転・位置を含んだワールド行列です。**拡大率のぶんだけ、描かれる形も一緒に伸びます。** 届く距離にも同じ倍率を掛けないと、見えている形と当たる光がずれます。倍率は `Vector3.TransformNormal(Vector3.UnitZ, aimed).Length()` で取れます。
+
+`IsLightEnabled` が false のときは `GetLight` を呼ばずに飛ばされるので、光を出さない設定のときに無駄な計算をしません。
+
 #### 3Dプレビューの目印
 
 絵を描かないアイテム（カメラや光源）は、そのままでは 3Dプレビュー上のどこにあるのか分かりません。`ISceneMarkerSource` を実装すると、線画の目印が出て、掴んで動かせるようになります。
@@ -735,10 +758,12 @@ public void MoveMarker(in Vector3 shift, in FrameContext itemTime, in EditScope 
 | `TransformConstants` | struct | 変換行列・不透明度・光・霧を持つ標準定数バッファ |
 | `ShaderLibrary` | static class | 埋め込んだ hlsl の読み出しと `#include` の展開 |
 | `ShaderCompiler` | static class | HLSL の実行時コンパイル |
+| `ShaderMaterial` | class | 自分のアセンブリに埋め込んだ hlsl（`VSMain` / `PSMain`）から作るマテリアル |
 | `DeviceResourceCache<T>` | class | デバイスごとの資源を保持する |
 | `GraphicsDevicePool` | static class | 3D 描画用の独立デバイスを貸し出す |
 | `D3D11Buffers` | static class | 頂点・インデックス・定数バッファの生成 |
-| `BlendMode` / `FaceCulling` | enum | 合成方法とカリング |
+| `BlendMode` / `FaceCulling` | enum | 合成方法とカリング。`Accumulate` は乗算済みアルファのまま足し込む |
+| `SceneLightBuffer` | class | 光の並びを t1 に置く。`Render3DContext.BindLights` から使われる |
 
 ### FrameContext と Animation
 
@@ -886,6 +911,19 @@ public Animation X { get; } = new(0, -1000000, 1000000);
 `SceneDepthCollector.IsPlacedIn3D` が、有効なエフェクトのうち最後にあるものだけを遮蔽物として認めます。後ろに有効なエフェクトがあるものは、他アイテムに穴を開けず、自分も他アイテムの穴を受け取りません。前後関係は失われますが、位置の合わない穴は出ません。
 
 3D 図形アイテム（`Shape3DSourceBase`）はソースなので、常に遮蔽に参加します。図形アイテムにカメラ系エフェクトを付けた場合は、この判定では防げません。
+
+**光の筋や煙のように、物を隠さないものを描くときは、深度だけを書く番で何も描かないでください。**
+
+```csharp
+public override void Draw(in Render3DContext render, DrawContext3D item)
+{
+    if (item.DepthOnly)
+        return;
+    ...
+}
+```
+
+自分を描くときも `DrawSettings.SkipDepthWrite` を立てておくと、同じ絵の中で後から描かれるものを隠しません。深度の比較そのものは効いたままなので、手前にある物にはちゃんと遮られます。
 
 ### 後ろに置かれたときの遠近
 

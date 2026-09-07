@@ -38,6 +38,9 @@ namespace YMM43D.Player
                 if (item is ISceneLightSource source)
                     lights.Add(source.GetLight(itemTime));
 
+                if (FindPlacedLight(item) is { } placed && placed.IsLightEnabled && item is IVideoItem video)
+                    lights.Add(placed.GetLight(itemTime, ItemPlacement.GetWorldMatrix(video, itemTime)));
+
                 if (item is not ISceneEnvironment)
                     continue;
 
@@ -58,5 +61,12 @@ namespace YMM43D.Player
 
             return new SceneLighting(lights, environment.GetAmbient(time), environment.GetFog(time));
         }
+
+        private static IPlacedSceneLightSource? FindPlacedLight(IItem item) => item switch
+        {
+            IPlacedSceneLightSource placed => placed,
+            ShapeItem shape => shape.ShapeParameter as IPlacedSceneLightSource,
+            _ => null,
+        };
     }
 }

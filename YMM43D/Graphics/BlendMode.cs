@@ -7,5 +7,8 @@ namespace YMM43D.Graphics
         Subtract,
         Multiply,
         Screen,
+
+        // 乗算済みアルファのまま足し込む。重ねた枚数がそのまま濃さになる。
+        Accumulate,
     }
 }
