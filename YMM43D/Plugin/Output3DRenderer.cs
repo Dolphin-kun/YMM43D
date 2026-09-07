@@ -74,6 +74,7 @@ namespace YMM43D.Plugin
 
             return renderer.Render(
                 devices, target.Width, target.Height, view, projection, target.Origin, lighting,
+                SceneDepthCollector.CollectCasters(description),
                 render =>
                 {
                     DrawOccluders(render, scene.Occluders);

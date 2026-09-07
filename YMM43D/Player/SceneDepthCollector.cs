@@ -66,6 +66,31 @@ namespace YMM43D.Player
             return new SceneView(owner, ownerTime, ownerPlacement, ownerScreen, occluders);
         }
 
+        // 影を落とすものは、どのアイテムを描くときでも同じ顔ぶれになる。
+        // 誰から見た場かに関わらないので、1フレームぶんを使い回せる。
+        public static IReadOnlyList<Occluder> CollectCasters(TimelineItemSourceDescription description)
+        {
+            if (TimelineLookup.Find(description) is not { } timeline || timeline.Items is not { } items)
+                return [];
+
+            var frame = description.TimelinePosition.Frame;
+            var casters = new List<Occluder>();
+
+            foreach (var item in items.OfType<IVideoItem>())
+            {
+                if (!LayerVisibility.IsShown(timeline, item) || !ItemPlacement.IsAliveAt(item, frame))
+                    continue;
+
+                var itemTime = new FrameContext(frame - item.Frame, item.Length, description.FPS);
+                var placement = ItemPlacement.GetWorldMatrix(item, itemTime);
+
+                foreach (var provider in FindProviders(item))
+                    casters.Add(new Occluder(provider, GetLocalMatrix(provider) * placement, itemTime));
+            }
+
+            return casters;
+        }
+
         public static bool IsPlacedIn3D(IVideoItem item, I3DProvider provider)
         {
             var effects = (item.VideoEffects ?? []).ToArray();

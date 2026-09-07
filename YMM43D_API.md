@@ -492,7 +492,7 @@ float4 PSMain(PS_IN input) : SV_TARGET
 
 **b0 は場のもの、b1 はあなたのもの**です。自前の値は `register(b1)` に置いてください。b0 には触らなくてよく、並び順を合わせる必要もありません（「立体化3D」と「点群3D」がこの形です）。
 
-同じように、**テクスチャの t0 はアイテムの絵、t1 は光の並び**です。自前のテクスチャは `t2` から使ってください。t1 は `Render3DContext` が描画の頭でまとめて割り当てるので、あなたが渡す必要はありません。
+同じように、**テクスチャの t0 はアイテムの絵、t1 は光の並び、t2 は影の板**です。自前のテクスチャは `t3` から、サンプラーは `s2` から使ってください（s0 は絵、s1 は影の比較用）。t1 と t2 は描画の頭でまとめて割り当てられるので、あなたが渡す必要はありません。
 
 ```hlsl
 #include "Standard.hlsli"
@@ -612,6 +612,8 @@ var pipeline = pipelines.Get(render.Device);
 | `LightKind` | enum | 光の種類。平行光・点光源・スポットライト |
 | `SceneFog` | struct | 霧。色・濃さ・効き始める距離・届く距離 |
 | `SceneConstants` | static class | シーンの光を `TransformConstants` に流し込む |
+| `ShadowPlacement` | struct | 影の濃さと、その光に割り当てられた板の番号・行列 |
+| `SceneShadows` | static class | 光源から場を描き直して影の板を作る |
 
 #### 3Dプレビューで掴む
 
@@ -693,6 +695,18 @@ public interface I3DProvider
 
 広がりは円錐の半頂角（度）で、`SceneLight.MinSpread`〜`MaxSpread` に収められます。ふちのぼかしは 0〜1 で、0 なら円の境目がくっきり、1 なら中心から外へなだらかに暗くなります。
 
+#### 影
+
+`SceneLight.WithShadow(濃さ)` を付けた光は、**さえぎった物の後ろを暗くします**。濃さは 0〜1 で、1 ならその光がまったく届かなくなります。
+
+影を落とせるのは**平行光とスポットライト**です（`SceneLight.CanCastShadow`）。点光源は全方向へ照らすので板 1 枚では足りず、まだ対応していません。同時に影を落とせる光の数は `ShadowMapArray.MaxSlices` までです。数に上限があるのは、1 灯ごとに場をもう一度描くためです。
+
+**影を落とすかどうかは、深度だけを書く番に描くかどうかで決まります。** つまり遮蔽（穴あけ）に参加するものは、そのまま影も落とします。光の筋のように物を隠さないものは、`item.DepthOnly` で早く返せば影からも外れます。
+
+`SceneShadows.Build` が光源から場を描き直し、板の番号と行列を持たせた `SceneLighting` を返します。これは `Renderer3DTo2D` と 3Dプレビューが描画の頭で呼ぶので、**プラグイン側ですることはありません。** `ApplyLight` を通していれば、自作のマテリアルでも影を受け取ります。
+
+板は 1 コマぶん使い回されます。場も光も動いていなければ描き直しません。
+
 #### 絵を描くものが光源も兼ねる
 
 光源アイテムは自分で位置を持ちますが、3D 図形のように **YMM4 側の座標で動かされるもの**は、自分がどこに置かれたのかを知りません。`IPlacedSceneLightSource` を実装すると、アイテムの置き場所を受け取ってから光を返せます。3D 図形アイテムの場合は、**形状パラメータ側**に実装します。
@@ -764,6 +778,7 @@ public void MoveMarker(in Vector3 shift, in FrameContext itemTime, in EditScope 
 | `D3D11Buffers` | static class | 頂点・インデックス・定数バッファの生成 |
 | `BlendMode` / `FaceCulling` | enum | 合成方法とカリング。`Accumulate` は乗算済みアルファのまま足し込む |
 | `SceneLightBuffer` | class | 光の並びを t1 に置く。`Render3DContext.BindLights` から使われる |
+| `ShadowMapArray` | class | 影の板。光源ごとに1枚ずつ、t2 に置く |
 
 ### FrameContext と Animation
 

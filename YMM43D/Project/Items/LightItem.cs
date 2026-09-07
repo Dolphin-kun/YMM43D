@@ -15,6 +15,8 @@ namespace YMM43D.Project.Items
     {
         private const string Lamp = "3D光源";
 
+        private const string Shade = "影";
+
         private const int FirstOrder = 100;
 
         [Display(GroupName = Lamp, Name = "種類",
@@ -29,6 +31,7 @@ namespace YMM43D.Project.Items
                 OnPropertyChanged(nameof(IsSpot));
                 OnPropertyChanged(nameof(IsAimed));
                 OnPropertyChanged(nameof(IsPlaced));
+                OnPropertyChanged(nameof(IsShadowed));
             }
         }
         private LightKind kind = LightKind.Directional;
@@ -99,6 +102,31 @@ namespace YMM43D.Project.Items
         [AnimationSlider("F0", "%", 0, 200)]
         public Animation Brightness { get; } = new(SceneLighting.DefaultBrightness * 100, 0, 10000);
 
+        [Display(GroupName = Shade, Name = "影を落とす",
+            Description = "光をさえぎった物の後ろを暗くします。点光源では使えません", Order = 100)]
+        [ToggleSlider]
+        [ShowPropertyEditorWhen(nameof(IsAimed), true)]
+        public bool CastsShadow
+        {
+            get => castsShadow;
+            set
+            {
+                Set(ref castsShadow, value);
+                OnPropertyChanged(nameof(IsShadowed));
+            }
+        }
+        private bool castsShadow;
+
+        [Browsable(false)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public bool IsShadowed => CastsShadow && Kind != LightKind.Point;
+
+        [Display(GroupName = Shade, Name = "影の濃さ",
+            Description = "100 で光がまったく届かなくなります", Order = 200)]
+        [AnimationSlider("F0", "%", 0, 100)]
+        [ShowPropertyEditorWhen(nameof(IsShadowed), true)]
+        public Animation ShadowStrength { get; } = new(80, 0, 100);
+
         public override string Label => "3D光源";
 
         public override Color ItemColor
@@ -118,13 +146,13 @@ namespace YMM43D.Project.Items
 
             if (Kind == LightKind.Spot)
             {
-                return SceneLight.Spot(
+                return WithShade(SceneLight.Spot(
                     GetPosition(itemTime),
                     GetShines(itemTime),
                     color,
                     WorldScale.ToWorld(Reach.GetFloat(itemTime)),
                     Spread.GetFloat(itemTime),
-                    EdgeBlur.GetFloat(itemTime) / 100f);
+                    EdgeBlur.GetFloat(itemTime) / 100f), itemTime);
             }
 
             if (Kind == LightKind.Point)
@@ -133,8 +161,12 @@ namespace YMM43D.Project.Items
                     GetPosition(itemTime), color, WorldScale.ToWorld(Reach.GetFloat(itemTime)));
             }
 
-            return SceneLight.FromAngles(Yaw.GetFloat(itemTime), Pitch.GetFloat(itemTime), color);
+            return WithShade(
+                SceneLight.FromAngles(Yaw.GetFloat(itemTime), Pitch.GetFloat(itemTime), color), itemTime);
         }
+
+        private SceneLight WithShade(in SceneLight light, in FrameContext itemTime)
+            => CastsShadow ? light.WithShadow(ShadowStrength.GetFloat(itemTime) / 100f) : light;
 
         public SceneMarker GetMarker(in FrameContext itemTime) => Kind switch
         {
@@ -188,7 +220,7 @@ namespace YMM43D.Project.Items
             => new(color.R / 255f, color.G / 255f, color.B / 255f);
 
         protected override IEnumerable<IAnimatable> GetAnimatables()
-            => [Yaw, Pitch, X, Y, Z, Reach, Spread, EdgeBlur, Brightness];
+            => [Yaw, Pitch, X, Y, Z, Reach, Spread, EdgeBlur, Brightness, ShadowStrength];
 
         public override IAsyncEnumerable<ExoItem> GetExoItemsAsync(ExoOutputDescription outputDescription)
             => AsyncEnumerable.Empty<ExoItem>();

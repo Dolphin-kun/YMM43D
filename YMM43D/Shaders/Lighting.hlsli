@@ -49,7 +49,12 @@ float3 ApplyLight(float3 color, float3 normal, float3 world)
         if (light.Vector.w > 0.5)
             fade = LightFalloff(light, world, toLight);
 
-        sum += light.Color.rgb * saturate(dot(n, toLight)) * fade;
+        float lambert = saturate(dot(n, toLight));
+
+        if (lambert <= 0.0 || fade <= 0.0)
+            continue;
+
+        sum += light.Color.rgb * lambert * fade * ShadowAt(light, world, n, lambert);
     }
 
     return color * sum;

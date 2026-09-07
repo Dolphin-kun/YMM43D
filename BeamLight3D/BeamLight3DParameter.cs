@@ -89,6 +89,7 @@ namespace BeamLight3D
             {
                 Set(ref isLightEnabled, value);
                 OnPropertyChanged(nameof(IsLit));
+                OnPropertyChanged(nameof(IsShadowed));
             }
         }
         private bool isLightEnabled = true;
@@ -102,6 +103,31 @@ namespace BeamLight3D
         [AnimationSlider("F0", "%", 0, 200)]
         [ShowPropertyEditorWhen(nameof(IsLit), true)]
         public Animation Brightness { get; } = new(80, 0, 10000);
+
+        [Display(GroupName = Lamp, Name = "影を落とす",
+            Description = "光をさえぎった物の後ろを暗くします", Order = 300)]
+        [ToggleSlider]
+        [ShowPropertyEditorWhen(nameof(IsLit), true)]
+        public bool CastsShadow
+        {
+            get => castsShadow;
+            set
+            {
+                Set(ref castsShadow, value);
+                OnPropertyChanged(nameof(IsShadowed));
+            }
+        }
+        private bool castsShadow;
+
+        [Browsable(false)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public bool IsShadowed => IsLightEnabled && CastsShadow;
+
+        [Display(GroupName = Lamp, Name = "影の濃さ",
+            Description = "100 で光がまったく届かなくなります", Order = 400)]
+        [AnimationSlider("F0", "%", 0, 100)]
+        [ShowPropertyEditorWhen(nameof(IsShadowed), true)]
+        public Animation ShadowStrength { get; } = new(80, 0, 100);
 
         public BeamLight3DParameter(SharedDataStore? sharedData) : base(sharedData)
         {
@@ -144,13 +170,17 @@ namespace BeamLight3D
             // アイテムの拡大率のぶん、描かれる円錐も伸びる。届く距離もそろえる。
             var stretch = axis.Length();
 
-            return SceneLight.Spot(
+            var light = SceneLight.Spot(
                 Vector3.Transform(Vector3.Zero, aimed),
                 axis,
                 GetColor() * (Brightness.GetFloat(itemTime) / 100f),
                 GetLength(itemTime) * (float.IsFinite(stretch) && stretch > 0f ? stretch : 1f),
                 GetSpread(itemTime),
                 EdgeBlur / 100f);
+
+            return CastsShadow
+                ? light.WithShadow(ShadowStrength.GetFloat(itemTime) / 100f)
+                : light;
         }
 
         protected override Shape3DSourceBase Create3DSource(IGraphicsDevicesAndContext devices)
@@ -158,7 +188,7 @@ namespace BeamLight3D
 
         protected override IEnumerable<IAnimatable> GetAnimatables()
             => [Length, Spread, Density, Decay, RotationX, RotationY, RotationZ,
-                Brightness, CameraSyncAnimation];
+                Brightness, ShadowStrength, CameraSyncAnimation];
 
         public override IEnumerable<string> CreateMaskExoFilter(
             int keyFrameIndex, ExoOutputDescription desc, ShapeMaskExoOutputDescription shapeMaskDesc) => [];
@@ -182,10 +212,12 @@ namespace BeamLight3D
             public Animation RotationY { get; } = new(0, -100000, 100000);
             public Animation RotationZ { get; } = new(0, -100000, 100000);
             public Animation Brightness { get; } = new(80, 0, 10000);
+            public Animation ShadowStrength { get; } = new(80, 0, 100);
             public int EdgeBlur { get; set; }
             public int Detail { get; set; }
             public Color BeamColor { get; set; }
             public bool IsLightEnabled { get; set; }
+            public bool CastsShadow { get; set; }
 
             public SharedData(BeamLight3DParameter parameter)
             {
@@ -197,10 +229,12 @@ namespace BeamLight3D
                 RotationY.CopyFrom(parameter.RotationY);
                 RotationZ.CopyFrom(parameter.RotationZ);
                 Brightness.CopyFrom(parameter.Brightness);
+                ShadowStrength.CopyFrom(parameter.ShadowStrength);
                 EdgeBlur = parameter.EdgeBlur;
                 Detail = parameter.Detail;
                 BeamColor = parameter.BeamColor;
                 IsLightEnabled = parameter.IsLightEnabled;
+                CastsShadow = parameter.CastsShadow;
             }
 
             public void CopyTo(BeamLight3DParameter parameter)
@@ -213,10 +247,12 @@ namespace BeamLight3D
                 parameter.RotationY.CopyFrom(RotationY);
                 parameter.RotationZ.CopyFrom(RotationZ);
                 parameter.Brightness.CopyFrom(Brightness);
+                parameter.ShadowStrength.CopyFrom(ShadowStrength);
                 parameter.EdgeBlur = EdgeBlur;
                 parameter.Detail = Detail;
                 parameter.BeamColor = BeamColor;
                 parameter.IsLightEnabled = IsLightEnabled;
+                parameter.CastsShadow = CastsShadow;
             }
         }
     }

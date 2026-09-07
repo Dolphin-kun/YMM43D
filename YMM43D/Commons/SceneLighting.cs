@@ -34,7 +34,12 @@ namespace YMM43D.Commons
             Vector = new Vector4(light.Vector, ToShaderKind(light.Kind)),
             Color = new Vector4(light.Color, light.Reach),
             Cone = new Vector4(light.Axis, Cosine(light.OuterAngle)),
-            Edge = new Vector4(Cosine(light.InnerAngle), 0f, 0f, 0f),
+            Edge = new Vector4(
+                Cosine(light.InnerAngle),
+                light.Shadow.Slice,
+                light.Shadow.Strength,
+                light.Shadow.Texel),
+            Shadow = Matrix4x4.Transpose(light.Shadow.Matrix),
         };
 
         private static float ToShaderKind(LightKind kind) => kind switch
@@ -59,6 +64,21 @@ namespace YMM43D.Commons
         Spot,
     }
 
+    // 影の板の何枚目を使うか。Slice が -1 の間は影を落とさない。
+    // 板は光源ごとに、描く直前に割り当てられる。
+    public readonly record struct ShadowPlacement(
+        float Strength,
+        int Slice = -1,
+        float Texel = 0f,
+        Matrix4x4 Matrix = default)
+    {
+        public static ShadowPlacement None => default;
+
+        public bool IsWanted => Strength > 0f;
+
+        public bool IsPlaced => Slice >= 0;
+    }
+
     public readonly record struct SceneLight(
         LightKind Kind,
         Vector3 Vector,
@@ -66,8 +86,17 @@ namespace YMM43D.Commons
         float Reach,
         Vector3 Axis = default,
         float InnerAngle = 0f,
-        float OuterAngle = 0f)
+        float OuterAngle = 0f,
+        ShadowPlacement Shadow = default)
     {
+        public bool CanCastShadow => Kind is LightKind.Directional or LightKind.Spot;
+
+        public SceneLight WithShadow(float strength)
+            => this with { Shadow = new ShadowPlacement(Math.Clamp(strength, 0f, 1f)) };
+
+        public SceneLight PlacedAt(int slice, float texel, in Matrix4x4 matrix)
+            => this with { Shadow = Shadow with { Slice = slice, Texel = texel, Matrix = matrix } };
+
         public static SceneLight Directional(Vector3 direction, Vector3 color)
             => new(LightKind.Directional, Normalize(direction), color, 0f);
 

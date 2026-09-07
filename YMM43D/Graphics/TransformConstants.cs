@@ -13,6 +13,8 @@ namespace YMM43D.Graphics
         public Vector4 Cone;
 
         public Vector4 Edge;
+
+        public Matrix4x4 Shadow;
     }
 
     [StructLayout(LayoutKind.Sequential)]

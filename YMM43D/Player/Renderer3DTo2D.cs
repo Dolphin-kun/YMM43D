@@ -30,6 +30,7 @@ namespace YMM43D.Player
             Matrix4x4 projection,
             Vector2 offset,
             SceneLighting? lighting,
+            IReadOnlyList<SceneDepthCollector.Occluder> shadowCasters,
             Action<Render3DContext> draw)
         {
             if (width <= 0 || height <= 0)
@@ -66,6 +67,9 @@ namespace YMM43D.Player
 
                 try
                 {
+                    var lit = SceneShadows.Build(
+                        lease.Device, context, lighting ?? SceneLighting.Default, shadowCasters);
+
                     context.OMSetRenderTargets(surface.RenderTargetView, surface.DepthStencilView);
                     context.ClearRenderTargetView(surface.RenderTargetView, new Color4(0, 0, 0, 0));
                     if (surface.DepthStencilView is not null)
@@ -73,7 +77,7 @@ namespace YMM43D.Player
 
                     context.RSSetViewport(new Viewport(0, 0, width, height));
 
-                    draw(new Render3DContext(lease.Device, context, view, projection, lighting).BindLights());
+                    draw(new Render3DContext(lease.Device, context, view, projection, lit).BindLights());
 
                     context.Flush();
                 }

@@ -98,8 +98,19 @@ namespace YMM43D.PreviewTool
             var projection = SceneProjection.GetProjectionMatrix(
                 (float)width / Math.Max(1, height), scene.ScreenHeight, pixelsPerTangent);
 
+            // 影を落とすのは、この場に置かれている 3D のものすべて。
+            // 置き場所は、いま描くのに使う値をそのまま渡す。
+            var casters = new SceneDepthCollector.Occluder[scene.Items.Count];
+            for (var i = 0; i < scene.Items.Count; i++)
+            {
+                casters[i] = new SceneDepthCollector.Occluder(
+                    scene.Items[i].Provider, drawContexts[i].World, drawContexts[i].Time);
+            }
+
+            var lit = SceneShadows.Build(device, context, scene.Lighting, casters);
+
             var render = new Render3DContext(
-                device, context, viewPose.ViewMatrix, projection, scene.Lighting).BindLights();
+                device, context, viewPose.ViewMatrix, projection, lit).BindLights();
 
             var sceneCameraPose = scene.SceneCameraPose;
             var screenTangent = scene.GetScreenTangent(pixelsPerTangent);
