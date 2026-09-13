@@ -66,6 +66,21 @@ namespace YMM43D.PreviewTool
             public Vector3 Origin => Vector3.Transform(Bounds.Center, World);
         }
 
+        public void Prepare(PreviewScene scene)
+        {
+            contextBuilder.RetainOnly(scene.Items.Select(i => i.Item).ToHashSet());
+
+            foreach (var previewItem in scene.Items)
+            {
+                contextBuilder.Prepare(
+                    previewItem.Item,
+                    previewItem.GetItemTime(scene.Time),
+                    scene.Environment,
+                    previewItem.Provider,
+                    previewItem.Effects);
+            }
+        }
+
         public void Draw(
             ID3D11Device device,
             ID3D11DeviceContext context,
@@ -87,11 +102,8 @@ namespace YMM43D.PreviewTool
                     previewItem.GetItemTime(scene.Time),
                     scene.Environment,
                     previewItem.Provider,
-                    previewItem.Effects,
                     groups);
             }
-
-            contextBuilder.RetainOnly(scene.Items.Select(i => i.Item).ToHashSet());
 
             context.OMSetRenderTargets(renderTarget, depthStencil);
             context.ClearRenderTargetView(renderTarget, BackgroundColor);

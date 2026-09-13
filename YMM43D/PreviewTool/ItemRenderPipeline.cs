@@ -39,8 +39,7 @@ namespace YMM43D.PreviewTool
             if (!needsImage && effects.IsEmpty)
                 return new ItemRenderResult(null, seed);
 
-            lock (D2DGate.Sync)
-                return RenderCore(item, time, environment, effects, provider, seed);
+            return RenderCore(item, time, environment, effects, provider, seed);
         }
 
         private ItemRenderResult RenderCore(

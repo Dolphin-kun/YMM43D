@@ -1,4 +1,4 @@
-using System.Collections.Immutable;
+﻿using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.CompilerServices;
@@ -18,6 +18,8 @@ namespace YMM43D.Player
         private const long ProcessorLifetimeMs = 30_000;
 
         private const float Tolerance = 1e-3f;
+
+        private static readonly Lock gate = new();
 
         private static readonly ConditionalWeakTable<GroupItem, Verdict> verdicts = [];
 
@@ -89,7 +91,7 @@ namespace YMM43D.Player
 
         public static void Forget()
         {
-            lock (D2DGate.Sync)
+            lock (gate)
             {
                 foreach (var entry in processors.Values)
                     Release(entry.Processor);
@@ -111,7 +113,7 @@ namespace YMM43D.Player
             TimelineSourceDescription source,
             int timelineFrame)
         {
-            lock (D2DGate.Sync)
+            lock (gate)
             {
                 try
                 {

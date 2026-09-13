@@ -14,30 +14,30 @@ namespace YMM43D.PreviewTool
 {
     internal sealed class ItemDrawContextBuilder : IDisposable
     {
+        private readonly record struct Prepared(
+            DrawDescription Draw, ID3D11ShaderResourceView? ImageTexture, RawRectF? ImageBounds);
+
         private readonly ItemRenderPipeline pipeline = new();
         private readonly D2DTextureBridge textureBridge = new();
+        private readonly Dictionary<(IVideoItem Item, I3DProvider Provider), Prepared> prepared = [];
 
-        public DrawContext3D Build(
+        public void Prepare(
             IVideoItem item,
             in FrameContext itemTime,
             PreviewEnvironment environment,
             I3DProvider provider,
-            ImmutableList<IVideoEffect> effects,
-            in GroupLookup groups)
+            ImmutableList<IVideoEffect> effects)
         {
-            var providerTexture = provider is I3DTextureProvider textureProvider
-                ? textureProvider.GetTexture(environment.Device)
-                : null;
-
-            var needsImage = provider.RequiresMappedTexture && providerTexture is null;
+            var needsImage = provider.RequiresMappedTexture && GetProviderTexture(provider, environment) is null;
 
             var rendered = pipeline.Render(
                 item, itemTime, environment, needsImage, provider, effects,
                 ItemPlacement.ToDrawDescription(item, itemTime));
 
-            var texture = providerTexture;
+            ID3D11ShaderResourceView? texture = null;
             RawRectF? imageBounds = null;
-            if (texture is null && needsImage && rendered.Image is { } image)
+
+            if (needsImage && rendered.Image is { } image)
             {
                 texture = textureBridge.GetTexture(
                     environment.Device, environment.Devices, image, item, out var bounds);
@@ -46,13 +46,32 @@ namespace YMM43D.PreviewTool
                     imageBounds = bounds;
             }
 
+            prepared[(item, provider)] = new Prepared(rendered.Draw, texture, imageBounds);
+        }
+
+        public DrawContext3D Build(
+            IVideoItem item,
+            in FrameContext itemTime,
+            PreviewEnvironment environment,
+            I3DProvider provider,
+            in GroupLookup groups)
+        {
+            var providerTexture = GetProviderTexture(provider, environment);
+
+            var ready = prepared.TryGetValue((item, provider), out var found)
+                ? found
+                : new Prepared(ItemPlacement.ToDrawDescription(item, itemTime), null, null);
+
+            var texture = providerTexture ?? (provider.RequiresMappedTexture ? ready.ImageTexture : null);
+            var imageBounds = providerTexture is null && texture is not null ? ready.ImageBounds : null;
+
             return new DrawContext3D
             {
                 World = ItemPlacement.WithCamera(
-                            BuildSizeMatrix(provider, imageBounds), rendered.Draw.Camera)
-                      * ItemPlacement.GetWorldMatrix(rendered.Draw)
+                            BuildSizeMatrix(provider, imageBounds), ready.Draw.Camera)
+                      * ItemPlacement.GetWorldMatrix(ready.Draw)
                       * groups.GetTransform(item),
-                Opacity = Math.Clamp((float)rendered.Draw.Opacity, 0f, 1f),
+                Opacity = Math.Clamp((float)ready.Draw.Opacity, 0f, 1f),
                 Blend = ToBlendMode(item.Blend),
                 IsAlwaysOnTop = item.IsAlwaysOnTop,
                 Time = itemTime,
@@ -60,14 +79,21 @@ namespace YMM43D.PreviewTool
             };
         }
 
+        private static ID3D11ShaderResourceView? GetProviderTexture(I3DProvider provider, PreviewEnvironment environment)
+            => provider is I3DTextureProvider textureProvider ? textureProvider.GetTexture(environment.Device) : null;
+
         public void Reset()
         {
+            prepared.Clear();
             pipeline.Clear();
             textureBridge.Clear();
         }
 
         public void RetainOnly(IReadOnlySet<IVideoItem> aliveItems)
         {
+            foreach (var key in prepared.Keys.Where(key => !aliveItems.Contains(key.Item)).ToArray())
+                prepared.Remove(key);
+
             pipeline.RetainOnly(aliveItems);
 
             textureBridge.RetainOnly(aliveItems.Cast<object>().ToHashSet());

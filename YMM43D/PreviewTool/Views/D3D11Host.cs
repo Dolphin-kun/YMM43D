@@ -44,6 +44,7 @@ namespace YMM43D.PreviewTool.Views
         public ID3D11RenderTargetView? RenderTargetView { get; private set; }
         public ID3D11DepthStencilView? DepthStencilView { get; private set; }
 
+        public event Action<ID3D11Device>? Preparing;
         public event Action<ID3D11Device, ID3D11DeviceContext, int, int>? Render;
         public event Action<Point, MouseEventKind, int>? MouseAction;
 
@@ -74,6 +75,8 @@ namespace YMM43D.PreviewTool.Views
         {
             if (device is null || deviceContext is null || swapChain is null)
                 return;
+
+            Preparing?.Invoke(device);
 
             lock (D2DGate.Sync)
             lock (device)

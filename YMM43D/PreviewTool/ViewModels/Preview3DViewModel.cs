@@ -37,6 +37,7 @@ namespace YMM43D.PreviewTool.ViewModels
         private IReadOnlyList<IVideoItem> selection = [];
         private IItem? selectedMarker;
         private ImmutableList<IItem>? lastItems;
+        private PreviewScene? preparedScene;
 
         private bool drivesSceneCamera;
         private bool insertsKeyFrame;
@@ -157,6 +158,7 @@ namespace YMM43D.PreviewTool.ViewModels
             disposer.RemoveAndDispose(ref d3dHost);
             disposer.RemoveAndDispose(ref sourceAndDevices);
             D3DHost = null;
+            preparedScene = null;
 
             toolInfo = info;
             timeline = info.Timeline;
@@ -191,11 +193,13 @@ namespace YMM43D.PreviewTool.ViewModels
             D3DHost = host;
             disposer.Collect(host);
 
+            host.Preparing += OnPreparing;
             host.Render += OnRender;
             host.MouseAction += OnMouseAction;
             host.KeyHandler = HandleKey;
             disposer.CollectAction(host, () =>
             {
+                host.Preparing -= OnPreparing;
                 host.Render -= OnRender;
                 host.MouseAction -= OnMouseAction;
                 host.KeyHandler = null;
@@ -331,22 +335,37 @@ namespace YMM43D.PreviewTool.ViewModels
             d3dHost.RenderFrame();
         }
 
+        private void OnPreparing(ID3D11Device device)
+        {
+            preparedScene = CreatePreviewScene(device);
+
+            if (preparedScene is not null)
+                renderer.Prepare(preparedScene);
+        }
+
         private void OnRender(ID3D11Device device, ID3D11DeviceContext context, int width, int height)
         {
             if (d3dHost?.RenderTargetView is not { } renderTarget
                 || d3dHost.DepthStencilView is not { } depthStencil
-                || timeline is null
-                || sourceAndDevices is null
+                || preparedScene is not { } prepared
                 || width <= 0 || height <= 0)
             {
                 return;
             }
 
+            renderer.Draw(device, context, renderTarget, depthStencil, width, height, prepared);
+        }
+
+        private PreviewScene? CreatePreviewScene(ID3D11Device device)
+        {
+            if (timeline is null || sourceAndDevices is null)
+                return null;
+
             var time = TimelineRefresher.GetTime(timeline);
             var camera = ResolveCamera();
             freeCamera.EnsureInitialized(camera);
 
-            renderer.Draw(device, context, renderTarget, depthStencil, width, height, new PreviewScene
+            return new PreviewScene
             {
                 ViewPose = freeCamera.GetPose(),
                 SceneCamera = camera,
@@ -360,7 +379,7 @@ namespace YMM43D.PreviewTool.ViewModels
                 SelectedMarker = selectedMarker,
                 ShowsGrid = showsGrid,
                 ActiveHandle = itemDrag.Handle,
-            });
+            };
         }
 
         private void OnMouseAction(Point position, D3D11Host.MouseEventKind kind, int delta)
