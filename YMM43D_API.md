@@ -595,7 +595,9 @@ var pipeline = pipelines.Get(render.Device);
 | `Rotation3D` | static class | 度からの回転行列の生成と、角度の折り返し |
 | `FrameContext` | struct | フレーム位置・長さ・FPS の組。`ForItem` でタイムライン上の位置からアイテムの頭から数えた時刻を作り、`IsAlive` でその位置にアイテムがいるかを調べる |
 | `AnimationExtensions` | static class | `Animation` を `FrameContext` で評価する。差分で動かす `Nudge` / `NudgeAt` も持つ |
-| `EditScope` | struct | ドラッグの結果をアニメーションのどこに書き込むか（全体か、中間点か） |
+| `EditScope` | struct | ドラッグの結果をアニメーションのどこに書き込むか（全体か、中間点か）。`NudgePosition` で位置3つをまとめて動かす |
+| `SnapGrid` | struct | ドラッグの吸い付き。位置は間隔の倍数、回転は角度の倍数に丸める |
+| `SurfaceGloss` | struct | 光の映り込みの強さと鋭さ |
 
 #### カメラと光
 
@@ -698,17 +700,29 @@ public interface I3DProvider
 
 広がりは円錐の半頂角（度）で、`SceneLight.MinSpread`〜`MaxSpread` に収められます。ふちのぼかしは 0〜1 で、0 なら円の境目がくっきり、1 なら中心から外へなだらかに暗くなります。
 
+#### つや
+
+`SurfaceGloss.FromPercent(つや, 鋭さ)` を定数の組み立てに渡すと、光の映り込み（鏡面反射）が乗ります。どちらも 0〜100 の百分率で、鋭さを上げるほど映り込みが小さく締まります。
+
+```csharp
+var constants = render.CreateConstants(world, item, unlit: false, gloss: SurfaceGloss.FromPercent(40f, 60f));
+```
+
+`ApplyLight` を通していれば、自作のマテリアルでもそのまま効きます。`SurfaceGloss.None`（既定）なら、これまでどおり映り込みは乗りません。
+
 #### 影
 
-`SceneLight.WithShadow(濃さ)` を付けた光は、**さえぎった物の後ろを暗くします**。濃さは 0〜1 で、1 ならその光がまったく届かなくなります。
+`SceneLight.WithShadow(濃さ, ぼかし)` を付けた光は、**さえぎった物の後ろを暗くします**。濃さは 0〜1 で、1 ならその光がまったく届かなくなります。ぼかしも 0〜1 で、大きいほど影のふちがやわらかくなります（板の上で 1.5〜12 画素ぶんの範囲を混ぜます）。
 
-影を落とせるのは**平行光とスポットライト**です（`SceneLight.CanCastShadow`）。点光源は全方向へ照らすので板 1 枚では足りず、まだ対応していません。同時に影を落とせる光の数は `ShadowMapArray.MaxSlices` までです。数に上限があるのは、1 灯ごとに場をもう一度描くためです。
+影は**平行光・スポットライト・点光源のどれでも落とせます**。使う板の枚数は種類で変わり、平行光とスポットは 1 枚、**点光源は 6 面ぶんで 6 枚**です（`ShadowPlacement.SliceCount`）。合計 `ShadowMapArray.MaxSlices` 枚に収まるところまで、光源の並び順に割り当てます。枚数に上限があるのは、1 枚ごとに場をもう一度描くためです。
+
+板の解像度は `SceneLighting.ShadowResolution`（既定 1024、256〜4096）で、`ISceneEnvironment.ShadowResolution` から決まります。標準の「3D環境」アイテムでは「影の細かさ」がこれにあたります。板は必要な枚数ぶんだけ作られ、足りなくなったときと解像度が変わったときに作り直されます。
 
 **影を落とすかどうかは、深度だけを書く番に描くかどうかで決まります。** つまり遮蔽（穴あけ）に参加するものは、そのまま影も落とします。光の筋のように物を隠さないものは、`item.DepthOnly` で早く返せば影からも外れます。
 
 `SceneShadows.Build` が光源から場を描き直し、板の番号と行列を持たせた `SceneLighting` を返します。これは `Renderer3DTo2D` と 3Dプレビューが描画の頭で呼ぶので、**プラグイン側ですることはありません。** `ApplyLight` を通していれば、自作のマテリアルでも影を受け取ります。
 
-板は 1 コマぶん使い回されます。場も光も動いていなければ描き直しません。
+板は**同じコマの中でだけ**使い回されます。同じ描き手がもう一度呼んだときは、次のコマに移った（または描き直しを求められた）とみなして描き直すので、一時停止したまま形を変えても影が古いままにはなりません。
 
 #### 絵を描くものが光源も兼ねる
 
@@ -777,7 +791,9 @@ public void MoveMarker(in Vector3 shift, in FrameContext itemTime, in EditScope 
 | `D3D11Buffers` | static class | 頂点・インデックス・定数バッファの生成 |
 | `BlendMode` / `FaceCulling` | enum | 合成方法とカリング。`Accumulate` は乗算済みアルファのまま足し込む |
 | `SceneLightBuffer` | class | 光の並びを t1 に置く。`Render3DContext.BindLights` から使われる |
-| `ShadowMapArray` | class | 影の板。光源ごとに1枚ずつ、t2 に置く |
+| `ShadowMapArray` | class | 影の板。t2 に置く。解像度と枚数は場に合わせて作り直す |
+| `ModelLibrary` / `ObjModelLoader` / `GltfModelLoader` | static class | `.obj` / `.gltf` / `.glb` の読み込みと、読んだ結果の使い回し |
+| `ModelMesh` | class | 読んだモデルを GPU へ載せたもの。材質ごとの部品と画像を持つ |
 
 ### FrameContext と Animation
 
@@ -908,7 +924,11 @@ var world = ItemPlacement.GetWorldMatrix(draw)
 
 1 コマの間はグループの顔ぶれも置き場所も変わらないので、**`GroupLookup.Build` で一度だけ数えて持ち回ってください。** アイテムごとに `TimelineGroups.GetTransform` を呼ぶと、そのたびにタイムライン全体を数え直します。
 
-> **グループ制御に付けたエフェクトは、まだ 3D 側に反映されません。** グループ制御のエフェクトは、その下のアイテムそれぞれに配られ、**アイテム自身のエフェクトを通し終えた後に**掛かります。つまり 3D エフェクトより後ろに置いたのと同じ並びになり、出来上がった平らな絵が動かされます。位置を変えるもの（カメラ位置・回り込み・登場退場など）を付けると、絵は動くのに 3D 空間での居場所は動かないため、穴あけと影がずれます。位置を変えないもの（ぼかしや色調補正など）は問題ありません。
+**グループ制御に付けたエフェクトが位置を変えるときは、その中のアイテムを 3D から外して板として扱います。** グループ制御のエフェクトは、その下のアイテムそれぞれに配られ、**アイテム自身のエフェクトを通し終えた後に**掛かります。つまり 3D エフェクトより後ろに置いたのと同じ並びで、出来上がった平らな絵が動かされます。そのまま 3D に置くと、絵は動くのに 3D 空間での居場所が動かず、穴あけと影がずれます。
+
+`GroupEffectProbe.MovesPlacement` が、そのグループのエフェクトを 1 コマに 1 回だけ空の絵に通し、`Draw` / `CenterPoint` / `Zoom` / `Rotation` / `Camera` のどれかが変わるかを見ます。変わるときだけ `GroupFlattening.Flattens` が真になり、`SceneDepthCollector` は穴あけと影から外し、`PreviewSceneBuilder` は板に切り替えて**グループのエフェクトも板に通します**。標準プレビューと 3Dプレビューが揃うためです。
+
+ぼかしや色調補正のように位置を変えないエフェクトなら、これまでどおり 3D のままです。グループ自身の位置・拡大・回転（YMM4 が内部で配る `GroupedDrawingEffect`）は、`GroupLookup` が行列として掛けるので、この判定には含めません。
 
 なお `DrawDescription.DrawPoint` と `DrawPointX/Y/Z` は `Draw` を読みやすくしただけの読み取り専用の値で、中身は同じです（後者は非推奨になっています）。
 
