@@ -36,6 +36,8 @@ namespace YMM43D.Graphics
 
         public ID3D11SamplerState PointSampler { get; }
 
+        public ID3D11SamplerState LinearWrapSampler { get; }
+
         public RenderStates(ID3D11Device device)
         {
             normal = CreateBlend(device, D3DBlend.SourceAlpha, D3DBlend.InverseSourceAlpha, BlendOperation.Add);
@@ -85,6 +87,7 @@ namespace YMM43D.Graphics
 
             LinearSampler = CreateSampler(device, Filter.MinMagMipLinear);
             PointSampler = CreateSampler(device, Filter.MinMagMipPoint);
+            LinearWrapSampler = CreateSampler(device, Filter.MinMagMipLinear, TextureAddressMode.Wrap);
         }
 
         public ID3D11BlendState NoColorWrite => noColorWrite;
@@ -135,14 +138,15 @@ namespace YMM43D.Graphics
             }));
         }
 
-        private ID3D11SamplerState CreateSampler(ID3D11Device device, Filter filter)
+        private ID3D11SamplerState CreateSampler(
+            ID3D11Device device, Filter filter, TextureAddressMode address = TextureAddressMode.Clamp)
         {
             return Collect(device.CreateSamplerState(new SamplerDescription
             {
                 Filter = filter,
-                AddressU = TextureAddressMode.Clamp,
-                AddressV = TextureAddressMode.Clamp,
-                AddressW = TextureAddressMode.Clamp,
+                AddressU = address,
+                AddressV = address,
+                AddressW = address,
                 ComparisonFunction = ComparisonFunction.Never,
                 MinLOD = 0,
                 MaxLOD = float.MaxValue,
