@@ -22,7 +22,6 @@ namespace YMM43D.PreviewTool
         private readonly CameraGizmoRenderer cameraGizmo = new();
         private readonly MarkerRenderer markers = new();
         private readonly TransformGizmoRenderer transformGizmo = new();
-        private readonly SelectionRenderer selection = new();
         private readonly AxisIndicatorRenderer axisIndicator = new();
         private readonly FlatItemProvider flatItemProvider = new();
         private readonly ItemDrawContextBuilder contextBuilder = new();
@@ -148,12 +147,6 @@ namespace YMM43D.PreviewTool
                     item.Provider,
                     drawContexts[i]))
             ];
-
-            foreach (var target in pickTargets)
-            {
-                if (scene.Selection.Contains(target.Item))
-                    selection.Draw(render, target.Bounds, target.World);
-            }
 
             gizmoMarker = FindGizmoMarker(scene);
 
@@ -567,7 +560,6 @@ namespace YMM43D.PreviewTool
             cameraGizmo.Dispose();
             markers.Dispose();
             transformGizmo.Dispose();
-            selection.Dispose();
             axisIndicator.Dispose();
             flatItemProvider.Dispose();
             contextBuilder.Dispose();
