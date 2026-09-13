@@ -2,6 +2,7 @@
 using YMM43D.Commons;
 using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Player.Video;
+using YukkuriMovieMaker.Project;
 using YukkuriMovieMaker.Project.Items;
 
 namespace YMM43D.Player
@@ -39,21 +40,7 @@ namespace YMM43D.Player
             var groups = GroupLookup.Build(timeline, frame, fps);
             var flattening = new GroupFlattening(groups, devices, description, frame);
 
-            IVideoItem? owner = null;
-
-            foreach (var item in items)
-            {
-                if (item is IVideoItem video
-                    && video.Layer == description.Layer
-                    && LayerVisibility.IsShown(timeline, video)
-                    && FrameContext.IsAlive(video, frame))
-                {
-                    owner = video;
-                    break;
-                }
-            }
-
-            if (owner is null)
+            if (FindOwner(timeline, description.Layer, frame) is not { } owner)
                 return SceneView.None;
 
             var ownerTime = FrameContext.ForItem(owner, frame, fps);
@@ -108,6 +95,27 @@ namespace YMM43D.Player
             }
 
             return new SceneView(owner, ownerTime, ownerPlacement, ownerScreen, occluders, casters);
+        }
+
+        public static IVideoItem? FindOwner(TimelineItemSourceDescription description)
+            => TimelineLookup.Find(description) is { } timeline
+                ? FindOwner(timeline, description.Layer, description.TimelinePosition.Frame)
+                : null;
+
+        private static IVideoItem? FindOwner(Timeline timeline, int layer, int frame)
+        {
+            foreach (var item in timeline.Items ?? [])
+            {
+                if (item is IVideoItem video
+                    && video.Layer == layer
+                    && LayerVisibility.IsShown(timeline, video)
+                    && FrameContext.IsAlive(video, frame))
+                {
+                    return video;
+                }
+            }
+
+            return null;
         }
 
         public static bool IsPlacedIn3D(IVideoItem item, I3DProvider provider)

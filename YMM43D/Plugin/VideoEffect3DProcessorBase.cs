@@ -49,6 +49,7 @@ namespace YMM43D.Plugin
         {
             EffectDescription = effectDescription;
             owner?.ReportInput(this, effectDescription.InputIndex, effectDescription.InputCount);
+            OnUpdating(effectDescription);
 
             BakeInput();
 
@@ -70,6 +71,10 @@ namespace YMM43D.Plugin
                 placement: placement);
 
             return Neutralize(effectDescription.DrawDescription, imageReach);
+        }
+
+        protected virtual void OnUpdating(EffectDescription effectDescription)
+        {
         }
 
         private static DrawDescription Neutralize(DrawDescription draw, float imageReach) => draw with

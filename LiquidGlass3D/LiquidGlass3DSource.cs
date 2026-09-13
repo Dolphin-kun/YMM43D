@@ -115,6 +115,7 @@ namespace LiquidGlass3D
             private int width;
             private int height;
             private int mipLevels;
+            private (object? Scene, Matrix4x4 View, Matrix4x4 Projection) captured;
 
             public RenderPipeline<TransformConstants> Pipeline { get; } = new(
                 device,
@@ -140,10 +141,22 @@ namespace LiquidGlass3D
                 var captureWidth = Math.Clamp((int)MathF.Ceiling(viewports[0].Width), 1, MaxCaptureSize);
                 var captureHeight = Math.Clamp((int)MathF.Ceiling(viewports[0].Height), 1, MaxCaptureSize);
 
+                var reusable = colorView is not null
+                    && width == captureWidth
+                    && height == captureHeight
+                    && ReferenceEquals(captured.Scene, render.Scene)
+                    && captured.View == render.View
+                    && captured.Projection == render.Projection;
+
+                if (reusable)
+                    return new CaptureTarget(colorView!, mipLevels);
+
                 Ensure(captureWidth, captureHeight);
 
                 if (colorTarget is null || depthTarget is null || colorView is null)
                     return null;
+
+                captured = (render.Scene, render.View, render.Projection);
 
                 var previousTargets = new ID3D11RenderTargetView[1];
                 context.OMGetRenderTargets(1, previousTargets, out var previousDepth);
@@ -231,6 +244,8 @@ namespace LiquidGlass3D
 
             private void ReleaseTargets()
             {
+                captured = default;
+
                 colorView?.Dispose();
                 colorTarget?.Dispose();
                 color?.Dispose();
