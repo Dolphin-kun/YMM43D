@@ -28,13 +28,12 @@ namespace BeamLight3D
 
         public override void Draw(in Render3DContext render, DrawContext3D item)
         {
-            if (item.DepthOnly)
+            if (item.DepthOnly || !resources.TryGet(render.Device, out var shared))
                 return;
 
             var world = parameter.GetLocalMatrix(item.Time) * item.World;
             var scene = render.CreateConstants(world, item.Opacity, unlit: true);
 
-            var shared = resources.Get(render.Device);
             var mesh = shared.GetMesh(BeamShape.Create(parameter.Detail, parameter.EdgeBlur));
 
             shared.Pipeline.Draw(render.Context, scene, Constants(item.Time), new DrawSettings

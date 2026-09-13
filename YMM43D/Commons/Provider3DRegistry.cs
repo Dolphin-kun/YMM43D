@@ -24,6 +24,12 @@ namespace YMM43D.Commons
             registry.AddOrUpdate(parameter, provider);
         }
 
+        public static void Unregister(object parameter, I3DProvider provider)
+        {
+            if (registry.TryGetValue(parameter, out var current) && ReferenceEquals(current, provider))
+                registry.Remove(parameter);
+        }
+
         private sealed class Suppression : IDisposable
         {
             private bool disposed;

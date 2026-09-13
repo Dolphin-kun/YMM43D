@@ -43,8 +43,11 @@ namespace Extrusion3D
                 ExtrusionType = (int)effect.ExtrusionType,
             };
 
+            if (!pipelines.TryGet(render.Device, out var pipeline))
+                return;
+
             var settings = item.ToDrawSettings(FaceCulling.Front, texture) with { Blend = BlendMode.Normal };
-            pipelines.Get(render.Device).Draw(render.Context, scene, constants, settings);
+            pipeline.Draw(render.Context, scene, constants, settings);
         }
 
         private float GetThickness(in FrameContext time)

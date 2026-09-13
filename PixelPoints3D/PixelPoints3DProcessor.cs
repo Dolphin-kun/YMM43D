@@ -39,7 +39,9 @@ namespace PixelPoints3D
             var size = GetGridSize(time, sizePixels);
             var world = GetLocalMatrix(time, offsetPixels + sizePixels / 2f) * item.World;
 
-            var shared = resources.Get(render.Device);
+            if (!resources.TryGet(render.Device, out var shared))
+                return;
+
             var grid = shared.GetGrid(size);
             var pipeline = shared.Pipeline;
 

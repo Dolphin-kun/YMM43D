@@ -40,7 +40,23 @@ namespace YMM43D.Player
             var flattening = new GroupFlattening(groups, devices, description, frame);
 
             IVideoItem? owner = null;
-            var ownerTime = default(FrameContext);
+
+            foreach (var item in items)
+            {
+                if (item is IVideoItem video
+                    && video.Layer == description.Layer
+                    && LayerVisibility.IsShown(timeline, video)
+                    && FrameContext.IsAlive(video, frame))
+                {
+                    owner = video;
+                    break;
+                }
+            }
+
+            if (owner is null)
+                return SceneView.None;
+
+            var ownerTime = FrameContext.ForItem(owner, frame, fps);
 
             var casters = new List<Occluder>();
             var found = new List<I3DProvider>();
@@ -49,33 +65,30 @@ namespace YMM43D.Player
             {
                 if (item is not IVideoItem video
                     || !LayerVisibility.IsShown(timeline, video)
-                    || !FrameContext.IsAlive(video, frame))
+                    || !FrameContext.IsAlive(video, frame)
+                    || flattening.Flattens(video)
+                    || Composes(owner, video)
+                    || Composes(video, owner))
                 {
                     continue;
                 }
 
                 var itemTime = FrameContext.ForItem(video, frame, fps);
-
-                if (owner is null && video.Layer == description.Layer)
-                {
-                    owner = video;
-                    ownerTime = itemTime;
-                }
-
-                if (flattening.Flattens(video))
-                    continue;
-
-                var placement = ItemPlacement.GetWorldMatrix(video, itemTime) * groups.GetTransform(video);
+                var groupTransform = groups.GetTransform(video);
+                var placement = ItemPlacement.GetWorldMatrix(video, itemTime) * groupTransform;
 
                 found.Clear();
                 FindProviders(video, found);
 
                 foreach (var provider in found)
-                    casters.Add(new Occluder(provider, GetLocalMatrix(provider) * placement, itemTime));
-            }
+                {
+                    var world = provider is I3DPlacedInstance placed && placed.TryGetPlacement(out var own)
+                        ? GetLocalMatrix(provider) * own * groupTransform
+                        : GetLocalMatrix(provider) * placement;
 
-            if (owner is null)
-                return SceneView.None;
+                    casters.Add(new Occluder(provider, world, itemTime));
+                }
+            }
 
             var ownerPlacement = ItemPlacement.GetWorldMatrix(owner, ownerTime);
             var ownerScreen = ItemPlacement.GetScreenPlacement(owner, ownerTime);
@@ -180,8 +193,33 @@ namespace YMM43D.Player
                 return;
             }
 
-            if (last >= 0 && effects[last] is I3DProvider placed && !into.Contains(placed))
-                into.Add(placed);
+            if (last >= 0 && effects[last] is I3DProvider placed)
+            {
+                foreach (var instance in Instances(placed))
+                {
+                    if (!into.Contains(instance))
+                        into.Add(instance);
+                }
+            }
+        }
+
+        public static IReadOnlyList<I3DProvider> Instances(I3DProvider provider)
+            => provider is I3DInstances instances ? instances.GetInstances() : [provider];
+
+        public static bool Composes(IVideoItem composer, IVideoItem composed)
+        {
+            if (ReferenceEquals(composer, composed))
+                return false;
+
+            return composer switch
+            {
+                GroupItem { IsComposite: true } group =>
+                    composed.Layer > group.Layer
+                    && composed.Layer <= group.Layer + group.GroupRange
+                    && (!group.IsGroupOnly || group.Group == composed.Group),
+                FrameBufferItem or EffectItem => composed.Layer < composer.Layer,
+                _ => false,
+            };
         }
 
         private static Matrix4x4 GetLocalMatrix(I3DProvider provider)

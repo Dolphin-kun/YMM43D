@@ -65,12 +65,17 @@ namespace YMM43D.PreviewTool
             var texture = providerTexture ?? (provider.RequiresMappedTexture ? ready.ImageTexture : null);
             var imageBounds = providerTexture is null && texture is not null ? ready.ImageBounds : null;
 
+            var world = provider is I3DPlacedInstance placed
+                && placed.TryGetPlacement(out var own)
+                && provider is I3DLocalTransform local
+                && local.TryGetLocalMatrix(out var localMatrix)
+                    ? localMatrix * own
+                    : ItemPlacement.WithCamera(BuildSizeMatrix(provider, imageBounds), ready.Draw.Camera)
+                      * ItemPlacement.GetWorldMatrix(ready.Draw);
+
             return new DrawContext3D
             {
-                World = ItemPlacement.WithCamera(
-                            BuildSizeMatrix(provider, imageBounds), ready.Draw.Camera)
-                      * ItemPlacement.GetWorldMatrix(ready.Draw)
-                      * groups.GetTransform(item),
+                World = world * groups.GetTransform(item),
                 Opacity = Math.Clamp((float)ready.Draw.Opacity, 0f, 1f),
                 Blend = ToBlendMode(item.Blend),
                 IsAlwaysOnTop = item.IsAlwaysOnTop,

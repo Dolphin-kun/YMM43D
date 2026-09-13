@@ -28,6 +28,7 @@ namespace YMM43D.Plugin
         {
             var source = Create3DSource(devices);
             Provider3DRegistry.Register(this, source);
+            source.Disposed = () => Provider3DRegistry.Unregister(this, source);
             return source;
         }
     }

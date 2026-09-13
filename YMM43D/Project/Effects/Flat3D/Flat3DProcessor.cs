@@ -30,7 +30,7 @@ namespace YMM43D.Project.Effects.Flat3D
         public override void Draw(in Render3DContext render, DrawContext3D item)
         {
             var texture = item.Texture ?? GetTexture(render.Device);
-            if (texture is null)
+            if (texture is null || !pipelines.TryGet(render.Device, out var pipeline))
                 return;
 
             var time = EffectDescription is { } description
@@ -46,7 +46,7 @@ namespace YMM43D.Project.Effects.Flat3D
                 SkipDepthWrite = !effect.WritesDepth,
             };
 
-            pipelines.Get(render.Device).Draw(render.Context, constants, settings);
+            pipeline.Draw(render.Context, constants, settings);
         }
 
         private Matrix4x4 GetLocalMatrix(in FrameContext time)

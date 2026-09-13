@@ -53,11 +53,19 @@ namespace YMM43D.PreviewTool
             var flattening = new GroupFlattening(
                 GroupLookup.Build(timeline, frame, fps), devices, SourceDescription, frame);
 
-            var visible = items
+            var alive = items
                 .OfType<IVideoItem>()
-                .Where(item => !IsComposite(item))
                 .Where(item => LayerVisibility.IsShown(timeline, item))
                 .Where(item => FrameContext.IsAlive(item, frame))
+                .ToArray();
+
+            var placedComposites = alive
+                .Where(item => item is GroupItem { IsComposite: true } && SceneDepthCollector.HasSolidEffect(item))
+                .ToArray();
+
+            var visible = alive
+                .Where(item => IsDrawn(item))
+                .Where(item => !placedComposites.Any(composite => SceneDepthCollector.Composes(composite, item)))
                 .OrderBy(item => item.Layer);
 
             foreach (var item in visible)
@@ -71,8 +79,13 @@ namespace YMM43D.PreviewTool
 
         public void Clear() => Items = [];
 
-        private static bool IsComposite(IVideoItem item)
-            => item is EffectItem or GroupItem or FrameBufferItem or TransitionItem;
+        private static bool IsDrawn(IVideoItem item) => item switch
+        {
+            EffectItem or TransitionItem => false,
+            GroupItem group => group.IsComposite && SceneDepthCollector.HasSolidEffect(group),
+            FrameBufferItem => SceneDepthCollector.HasSolidEffect(item),
+            _ => true,
+        };
 
         private IEnumerable<Placed> FindProviders(IVideoItem item, GroupFlattening flattening)
         {
@@ -98,7 +111,10 @@ namespace YMM43D.PreviewTool
                     && effect is I3DProvider provider
                     && SceneDepthCollector.IsPlacedIn3D(item, provider))
                 {
-                    solids.Add(new Placed(provider, Preceding(effects, effect)));
+                    var preceding = Preceding(effects, effect);
+
+                    foreach (var instance in SceneDepthCollector.Instances(provider))
+                        solids.Add(new Placed(instance, preceding));
                 }
             }
 

@@ -32,5 +32,15 @@ namespace YMM43D.Commons
         bool TryGetLocalMatrix(out Matrix4x4 matrix);
     }
 
+    public interface I3DInstances
+    {
+        IReadOnlyList<I3DProvider> GetInstances();
+    }
+
+    public interface I3DPlacedInstance
+    {
+        bool TryGetPlacement(out Matrix4x4 world);
+    }
+
     public interface I3DVideoEffect : I3DProvider, I3DTextureProvider;
 }

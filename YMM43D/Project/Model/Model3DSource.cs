@@ -17,14 +17,13 @@ namespace YMM43D.Project.Model
 
         public override void Draw(in Render3DContext render, DrawContext3D item)
         {
-            if (parameter.Model is not { } model)
+            if (parameter.Model is not { } model || !resources.TryGet(render.Device, out var shared))
                 return;
 
             var world = parameter.GetLocalMatrix(model, item.Time) * item.World;
             var constants = render.CreateConstants(
                 world, item.Opacity, parameter.IsUnlit, item.AlphaCutoff, parameter.GetGloss(item.Time));
 
-            var shared = resources.Get(render.Device);
             var mesh = shared.GetMesh(render.Context, model, parameter.Tint.ToVector4(), parameter.GetReplacements(model));
             var states = RenderStates.For(render.Device);
 

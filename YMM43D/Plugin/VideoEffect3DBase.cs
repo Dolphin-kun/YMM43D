@@ -7,9 +7,12 @@ using YukkuriMovieMaker.Plugin.Effects;
 namespace YMM43D.Plugin
 {
     public abstract class VideoEffect3DBase
-        : VideoEffectBase, I3DVideoEffect, ICameraSync, I3DSizeProvider, I3DLocalTransform, I3DBounds
+        : VideoEffectBase, I3DVideoEffect, ICameraSync, I3DSizeProvider, I3DLocalTransform, I3DBounds, I3DInstances
     {
         private readonly CameraSync cameraSync = new();
+        private readonly Lock instanceGate = new();
+        private readonly HashSet<I3DProvider> attached = new(ReferenceEqualityComparer.Instance);
+        private I3DProvider?[] inputs = [];
 
         protected VideoEffect3DBase()
         {
@@ -28,8 +31,13 @@ namespace YMM43D.Plugin
 
         protected TProcessor AttachProcessor<TProcessor>(TProcessor processor) where TProcessor : I3DProvider
         {
-            if (!Provider3DRegistry.IsSuppressed)
-                Processor = processor;
+            if (Provider3DRegistry.IsSuppressed)
+                return processor;
+
+            Processor = processor;
+
+            lock (instanceGate)
+                attached.Add(processor);
 
             return processor;
         }
@@ -38,6 +46,44 @@ namespace YMM43D.Plugin
         {
             if (ReferenceEquals(Processor, processor))
                 Processor = null;
+
+            lock (instanceGate)
+            {
+                attached.Remove(processor);
+
+                for (var i = 0; i < inputs.Length; i++)
+                {
+                    if (ReferenceEquals(inputs[i], processor))
+                        inputs[i] = null;
+                }
+            }
+        }
+
+        internal void ReportInput(I3DProvider processor, int index, int count)
+        {
+            lock (instanceGate)
+            {
+                if (!attached.Contains(processor) || index < 0 || index >= count)
+                    return;
+
+                if (inputs.Length != count)
+                    inputs = new I3DProvider?[count];
+
+                inputs[index] = processor;
+            }
+        }
+
+        public IReadOnlyList<I3DProvider> GetInstances()
+        {
+            lock (instanceGate)
+            {
+                if (inputs.Length < 2)
+                    return [this];
+
+                I3DProvider[] found = [.. inputs.OfType<I3DProvider>()];
+
+                return found.Length > 0 ? found : [this];
+            }
         }
 
         public virtual void Draw(in Render3DContext render, DrawContext3D item)

@@ -41,8 +41,12 @@ namespace YMM43D.Plugin
                 hostAppliesPlacement: true);
         }
 
+        internal Action? Disposed { get; set; }
+
         public virtual void Dispose()
         {
+            Disposed?.Invoke();
+            Disposed = null;
             renderer.Dispose();
             GC.SuppressFinalize(this);
         }

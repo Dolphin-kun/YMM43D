@@ -10,7 +10,7 @@ using YukkuriMovieMaker.Player.Video;
 namespace YMM43D.Plugin
 {
     public abstract class VideoEffect3DProcessorBase(VideoEffect3DBase? owner, IGraphicsDevicesAndContext devices)
-                : IVideoEffectProcessor, I3DVideoEffect, I3DSizeProvider, I3DLocalTransform, I3DBounds
+                : IVideoEffectProcessor, I3DVideoEffect, I3DSizeProvider, I3DLocalTransform, I3DBounds, I3DPlacedInstance
     {
         private readonly VideoEffect3DBase? owner = owner;
         private readonly D2DTextureBridge textureBridge = new();
@@ -20,6 +20,7 @@ namespace YMM43D.Plugin
         private Vector2 inputSize;
         private Vector2 inputOffset;
         private Matrix4x4? localMatrix;
+        private Matrix4x4? placement;
         private DeviceLease? lease;
         private ID3D11ShaderResourceView? bakedTexture;
         private nint bakedDeviceKey;
@@ -47,6 +48,7 @@ namespace YMM43D.Plugin
         public DrawDescription Update(EffectDescription effectDescription)
         {
             EffectDescription = effectDescription;
+            owner?.ReportInput(this, effectDescription.InputIndex, effectDescription.InputCount);
 
             BakeInput();
 
@@ -59,12 +61,13 @@ namespace YMM43D.Plugin
             ConsumeCamera(effectDescription.DrawDescription, ref world);
 
             localMatrix = world;
+            placement = ItemPlacement.GetWorldMatrix(effectDescription.DrawDescription);
 
             output = renderer.Render(
                 Devices, effectDescription, GetLocalBounds(itemTime), world, Draw,
                 out var imageReach,
                 self: (I3DProvider?)owner ?? this,
-                placement: ItemPlacement.GetWorldMatrix(effectDescription.DrawDescription));
+                placement: placement);
 
             return Neutralize(effectDescription.DrawDescription, imageReach);
         }
@@ -126,6 +129,12 @@ namespace YMM43D.Plugin
         {
             matrix = localMatrix ?? Matrix4x4.Identity;
             return localMatrix.HasValue;
+        }
+
+        public bool TryGetPlacement(out Matrix4x4 world)
+        {
+            world = placement ?? Matrix4x4.Identity;
+            return placement.HasValue;
         }
 
         public bool TryGetSize(out Vector2 size, out Vector2 offset)
