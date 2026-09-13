@@ -19,7 +19,7 @@ namespace YMM43D.Project.Shape
         public override void Draw(in Render3DContext render, DrawContext3D item)
         {
             var world = GetLocalMatrix(item.Time) * item.World;
-            var constants = render.CreateConstants(world, item.Opacity, parameter.IsUnlit, item.AlphaCutoff);
+            var constants = render.CreateConstants(world, item.Opacity, parameter.IsUnlit, item.AlphaCutoff, parameter.GetGloss(item.Time));
 
             var shared = resources.Get(render.Device);
             var mesh = shared.GetMesh(Shape(), parameter.ResolvedColors);

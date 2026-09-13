@@ -1,7 +1,9 @@
 ﻿using System.ComponentModel.DataAnnotations;
+using YMM43D.Commons;
 using YMM43D.Plugin;
 using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Controls;
+using YukkuriMovieMaker.ItemEditor.CustomVisibilityAttributes;
 using YukkuriMovieMaker.Exo;
 using YukkuriMovieMaker.Player.Video;
 using YukkuriMovieMaker.Plugin.Effects;
@@ -33,6 +35,21 @@ namespace YMM43D.Project.Effects.Flat3D
         public bool IsUnlit { get => isUnlit; set => Set(ref isUnlit, value); }
         private bool isUnlit;
 
+        [Display(GroupName = Group, Name = "つや",
+            Description = "光が映り込んだ明るい点の強さ。0 でつやなし", Order = 5)]
+        [AnimationSlider("F0", "%", 0, 100)]
+        [ShowPropertyEditorWhen(nameof(IsUnlit), false)]
+        public Animation Gloss { get; } = new(0, 0, 1000);
+
+        [Display(GroupName = Group, Name = "つやの鋭さ",
+            Description = "大きいほど映り込みが小さく締まり、磨いたように見えます", Order = 6)]
+        [AnimationSlider("F0", "%", 0, 100)]
+        [ShowPropertyEditorWhen(nameof(IsUnlit), false)]
+        public Animation GlossSharpness { get; } = new(50, 0, 100);
+
+        internal SurfaceGloss GetGloss(in FrameContext time)
+            => IsUnlit ? SurfaceGloss.None : SurfaceGloss.FromPercent(Gloss.GetFloat(time), GlossSharpness.GetFloat(time));
+
         [Display(GroupName = Group, Name = "他のものを隠す",
             Description = "入れると板が奥行きを持ち、後ろにあるものを隠します。"
                 + "同じ面に並べたり半透明にしたりすると、境目がちらつくことがあります",
@@ -49,7 +66,7 @@ namespace YMM43D.Project.Effects.Flat3D
             => AttachProcessor(new Flat3DProcessor(this, devices));
 
         protected override IEnumerable<IAnimatable> GetAnimatables()
-            => [RotationX, RotationY, RotationZ, CameraSyncAnimation];
+            => [RotationX, RotationY, RotationZ, Gloss, GlossSharpness, CameraSyncAnimation];
 
         public override IEnumerable<string> CreateExoVideoFilters(
             int keyFrameIndex, ExoOutputDescription exoOutputDescription) => [];

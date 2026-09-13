@@ -39,7 +39,7 @@ namespace YMM43D.Project.Effects.Flat3D
 
             var world = GetLocalMatrix(time) * item.World;
 
-            var constants = render.CreateConstants(world, item.Opacity, effect.IsUnlit, item.AlphaCutoff);
+            var constants = render.CreateConstants(world, item.Opacity, effect.IsUnlit, item.AlphaCutoff, effect.GetGloss(time));
 
             var settings = item.ToDrawSettings(FaceCulling.None, texture) with
             {

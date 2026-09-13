@@ -35,7 +35,7 @@ namespace Extrusion3D
             Matrix4x4.Invert(world, out var inverseWorld);
             var cameraLocalPos = Vector3.Transform(render.GetCameraPosition(), inverseWorld);
 
-            var scene = render.CreateConstants(world, item, effect.IsUnlit);
+            var scene = render.CreateConstants(world, item, effect.IsUnlit, effect.GetGloss(time));
             var constants = new ExtrusionConstants
             {
                 SideColor = effect.SideColor.ToVector4(),

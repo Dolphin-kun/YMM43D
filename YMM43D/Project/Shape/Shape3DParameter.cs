@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Windows.Media;
 using YMM43D.Graphics.Meshes;
+using YMM43D.Commons;
 using YMM43D.Plugin;
 using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Controls;
@@ -89,6 +90,21 @@ namespace YMM43D.Project.Shape
         [ToggleSlider]
         public bool IsUnlit { get => isUnlit; set => Set(ref isUnlit, value); }
         private bool isUnlit;
+
+        [Display(GroupName = Paint, Name = "つや",
+            Description = "光が映り込んだ明るい点の強さ。0 でつやなし")]
+        [AnimationSlider("F0", "%", 0, 100)]
+        [ShowPropertyEditorWhen(nameof(IsUnlit), false)]
+        public Animation Gloss { get; } = new(0, 0, 1000);
+
+        [Display(GroupName = Paint, Name = "つやの鋭さ",
+            Description = "大きいほど映り込みが小さく締まり、磨いたように見えます")]
+        [AnimationSlider("F0", "%", 0, 100)]
+        [ShowPropertyEditorWhen(nameof(IsUnlit), false)]
+        public Animation GlossSharpness { get; } = new(50, 0, 100);
+
+        internal SurfaceGloss GetGloss(in FrameContext time)
+            => IsUnlit ? SurfaceGloss.None : SurfaceGloss.FromPercent(Gloss.GetFloat(time), GlossSharpness.GetFloat(time));
 
         [Display(GroupName = Paint, Name = "色")]
         [ColorPicker]
@@ -189,7 +205,7 @@ namespace YMM43D.Project.Shape
             => new Shape3DSource(devices, this);
 
         protected override IEnumerable<IAnimatable> GetAnimatables()
-            => [Size, RotationX, RotationY, RotationZ, CameraSyncAnimation];
+            => [Size, RotationX, RotationY, RotationZ, Gloss, GlossSharpness, CameraSyncAnimation];
 
         public override IEnumerable<string> CreateMaskExoFilter(
             int keyFrameIndex, ExoOutputDescription desc, ShapeMaskExoOutputDescription shapeMaskDesc) => [];
@@ -209,6 +225,8 @@ namespace YMM43D.Project.Shape
             public Animation RotationX { get; } = new(0, -100000, 100000);
             public Animation RotationY { get; } = new(0, -100000, 100000);
             public Animation RotationZ { get; } = new(0, -100000, 100000);
+            public Animation Gloss { get; } = new(0, 0, 1000);
+            public Animation GlossSharpness { get; } = new(50, 0, 100);
             public SolidKind Solid { get; set; }
             public int Segments { get; set; }
             public int Thickness { get; set; }
@@ -224,6 +242,8 @@ namespace YMM43D.Project.Shape
                 RotationX.CopyFrom(parameter.RotationX);
                 RotationY.CopyFrom(parameter.RotationY);
                 RotationZ.CopyFrom(parameter.RotationZ);
+                Gloss.CopyFrom(parameter.Gloss);
+                GlossSharpness.CopyFrom(parameter.GlossSharpness);
                 Solid = parameter.Solid;
                 Segments = parameter.Segments;
                 Thickness = parameter.Thickness;
@@ -240,6 +260,8 @@ namespace YMM43D.Project.Shape
                 parameter.RotationX.CopyFrom(RotationX);
                 parameter.RotationY.CopyFrom(RotationY);
                 parameter.RotationZ.CopyFrom(RotationZ);
+                parameter.Gloss.CopyFrom(Gloss);
+                parameter.GlossSharpness.CopyFrom(GlossSharpness);
                 parameter.Solid = Solid;
                 parameter.Segments = Segments;
                 parameter.Thickness = Thickness;

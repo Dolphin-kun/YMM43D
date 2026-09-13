@@ -32,6 +32,8 @@ namespace YMM43D.Plugin
 
         protected abstract DeformExtent GetExtent(in FrameContext time);
 
+        protected virtual SurfaceGloss GetGloss(in FrameContext time) => SurfaceGloss.None;
+
         private float DepthScale => TryGetSize(out var size, out _)
             ? WorldScale.ToWorld(size.X)
             : 1f;
@@ -48,7 +50,7 @@ namespace YMM43D.Plugin
 
             var world = Matrix4x4.CreateScale(1f, 1f, DepthScale) * item.World;
 
-            var scene = render.CreateConstants(world, item, IsUnlit);
+            var scene = render.CreateConstants(world, item, IsUnlit, GetGloss(time));
             var constants = GetConstants(time);
 
             var shared = resources.Get(render.Device);

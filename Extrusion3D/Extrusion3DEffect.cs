@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Windows.Media;
+using YMM43D.Commons;
 using YMM43D.Plugin;
 using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Controls;
@@ -43,6 +44,21 @@ namespace Extrusion3D
         public bool IsUnlit { get => isUnlit; set => Set(ref isUnlit, value); }
         private bool isUnlit;
 
+        [Display(GroupName = "立体化3D", Name = "つや",
+            Description = "光が映り込んだ明るい点の強さ。0 でつやなし")]
+        [AnimationSlider("F0", "%", 0, 100)]
+        [ShowPropertyEditorWhen(nameof(IsUnlit), false)]
+        public Animation Gloss { get; } = new(0, 0, 1000);
+
+        [Display(GroupName = "立体化3D", Name = "つやの鋭さ",
+            Description = "大きいほど映り込みが小さく締まり、磨いたように見えます")]
+        [AnimationSlider("F0", "%", 0, 100)]
+        [ShowPropertyEditorWhen(nameof(IsUnlit), false)]
+        public Animation GlossSharpness { get; } = new(50, 0, 100);
+
+        internal SurfaceGloss GetGloss(in FrameContext time)
+            => IsUnlit ? SurfaceGloss.None : SurfaceGloss.FromPercent(Gloss.GetFloat(time), GlossSharpness.GetFloat(time));
+
         [Display(GroupName = "立体化3D", Name = "色", Description = "側面の塗りつぶし色を設定します")]
         [ColorPicker]
         [ShowPropertyEditorWhen(nameof(IsSolidSide), true)]
@@ -57,7 +73,7 @@ namespace Extrusion3D
             => AttachProcessor(new Extrusion3DProcessor(this, devices));
 
         protected override IEnumerable<IAnimatable> GetAnimatables()
-            => [Thickness, CameraSyncAnimation];
+            => [Thickness, Gloss, GlossSharpness, CameraSyncAnimation];
 
         public override IEnumerable<string> CreateExoVideoFilters(
             int keyFrameIndex, ExoOutputDescription exoOutputDescription) => [];

@@ -2,6 +2,7 @@
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Windows.Media;
+using YMM43D.Commons;
 using YMM43D.Plugin;
 using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Controls;
@@ -63,6 +64,21 @@ namespace PixelPoints3D
         [ToggleSlider]
         public bool IsUnlit { get => isUnlit; set => Set(ref isUnlit, value); }
         private bool isUnlit;
+
+        [Display(GroupName = Shape, Name = "つや",
+            Description = "光が映り込んだ明るい点の強さ。0 でつやなし")]
+        [AnimationSlider("F0", "%", 0, 100)]
+        [ShowPropertyEditorWhen(nameof(IsUnlit), false)]
+        public Animation Gloss { get; } = new(0, 0, 1000);
+
+        [Display(GroupName = Shape, Name = "つやの鋭さ",
+            Description = "大きいほど映り込みが小さく締まり、磨いたように見えます")]
+        [AnimationSlider("F0", "%", 0, 100)]
+        [ShowPropertyEditorWhen(nameof(IsUnlit), false)]
+        public Animation GlossSharpness { get; } = new(50, 0, 100);
+
+        internal SurfaceGloss GetGloss(in FrameContext time)
+            => IsUnlit ? SurfaceGloss.None : SurfaceGloss.FromPercent(Gloss.GetFloat(time), GlossSharpness.GetFloat(time));
 
         [Display(AutoGenerateField = true)]
         public ImmutableList<PointParams> PointSettings { get => pointSettings; set => Set(ref pointSettings, value); }
@@ -199,6 +215,7 @@ namespace PixelPoints3D
             ScatterX, ScatterY, ScatterZ, Seed,
             PositionX, PositionY, PositionZ, Scale,
             RotationX, RotationY, RotationZ,
+            Gloss, GlossSharpness,
             CameraSyncAnimation,
         ];
 

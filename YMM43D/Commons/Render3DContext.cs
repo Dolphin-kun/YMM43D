@@ -29,10 +29,11 @@ namespace YMM43D.Commons
         }
 
         public TransformConstants CreateConstants(
-            in Matrix4x4 world, float opacity, bool unlit = false, float alphaCutoff = 0f)
-            => SceneConstants.Create(world, View, Projection, opacity, Lighting, unlit, alphaCutoff);
+            in Matrix4x4 world, float opacity, bool unlit = false, float alphaCutoff = 0f, SurfaceGloss gloss = default)
+            => SceneConstants.Create(world, View, Projection, opacity, Lighting, unlit, alphaCutoff, gloss);
 
-        public TransformConstants CreateConstants(in Matrix4x4 world, DrawContext3D item, bool unlit = false)
-            => SceneConstants.Create(world, View, Projection, item.Opacity, Lighting, unlit, item.AlphaCutoff);
+        public TransformConstants CreateConstants(
+            in Matrix4x4 world, DrawContext3D item, bool unlit = false, SurfaceGloss gloss = default)
+            => SceneConstants.Create(world, View, Projection, item.Opacity, Lighting, unlit, item.AlphaCutoff, gloss);
     }
 }

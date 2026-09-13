@@ -33,7 +33,11 @@ float3 ApplyLight(float3 color, float3 normal, float3 world)
     if (dot(n, toEye) < 0.0)
         n = -n;
 
+    float eyeDistance = length(toEye);
+    toEye = eyeDistance > 1e-6 ? toEye / eyeDistance : n;
+
     float3 sum = Ambient.rgb;
+    float3 shine = float3(0.0, 0.0, 0.0);
     int count = (int)LightCount;
 
     for (int i = 0; i < count; i++)
@@ -51,10 +55,20 @@ float3 ApplyLight(float3 color, float3 normal, float3 world)
         if (lambert <= 0.0 || fade <= 0.0)
             continue;
 
-        sum += light.Color.rgb * lambert * fade * ShadowAt(light, world, n, lambert);
+        float3 received = light.Color.rgb * fade * ShadowAt(light, world, n, lambert);
+
+        sum += received * lambert;
+
+        if (Gloss > 0.0)
+        {
+            float3 halfway = normalize(toLight + toEye);
+            float normalization = (GlossPower + 8.0) / 8.0;
+
+            shine += received * lambert * normalization * pow(saturate(dot(n, halfway)), GlossPower);
+        }
     }
 
-    return color * sum;
+    return color * sum + shine * Gloss;
 }
 
 float3 ApplyFog(float3 color, float3 world)

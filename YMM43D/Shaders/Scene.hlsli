@@ -20,5 +20,7 @@ cbuffer SceneConstants : register(b0)
 #define FogEnd      Options.w
 #define AlphaCutoff Surface.x
 #define LightCount  Surface.y
+#define Gloss       Surface.z
+#define GlossPower  Surface.w
 
 #endif

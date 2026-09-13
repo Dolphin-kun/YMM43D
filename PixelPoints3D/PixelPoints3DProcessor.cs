@@ -43,7 +43,7 @@ namespace PixelPoints3D
             var grid = shared.GetGrid(size);
             var pipeline = shared.Pipeline;
 
-            var scene = render.CreateConstants(world, item, effect.IsUnlit);
+            var scene = render.CreateConstants(world, item, effect.IsUnlit, effect.GetGloss(time));
             var constants = BuildConstants(time, size, extent, render, world);
             var settings = item.ToDrawSettings(FaceCulling.None, texture);
 

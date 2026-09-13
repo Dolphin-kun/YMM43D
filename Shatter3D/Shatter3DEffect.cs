@@ -6,6 +6,7 @@ using YMM43D.Commons;
 using YMM43D.Plugin;
 using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Controls;
+using YukkuriMovieMaker.ItemEditor.CustomVisibilityAttributes;
 using YukkuriMovieMaker.Exo;
 using YukkuriMovieMaker.Player.Video;
 using YukkuriMovieMaker.Plugin.Effects;
@@ -107,11 +108,26 @@ namespace Shatter3D
         public bool IsUnlit { get => isUnlit; set => Set(ref isUnlit, value); }
         private bool isUnlit;
 
+        [Display(GroupName = DetailGroup, Name = "つや",
+            Description = "光が映り込んだ明るい点の強さ。0 でつやなし", Order = 800)]
+        [AnimationSlider("F0", "%", 0, 100)]
+        [ShowPropertyEditorWhen(nameof(IsUnlit), false)]
+        public Animation Gloss { get; } = new(0, 0, 1000);
+
+        [Display(GroupName = DetailGroup, Name = "つやの鋭さ",
+            Description = "大きいほど映り込みが小さく締まり、磨いたように見えます", Order = 900)]
+        [AnimationSlider("F0", "%", 0, 100)]
+        [ShowPropertyEditorWhen(nameof(IsUnlit), false)]
+        public Animation GlossSharpness { get; } = new(50, 0, 100);
+
+        internal SurfaceGloss GetGloss(in FrameContext time)
+            => IsUnlit ? SurfaceGloss.None : SurfaceGloss.FromPercent(Gloss.GetFloat(time), GlossSharpness.GetFloat(time));
+
         public override IVideoEffectProcessor CreateVideoEffect(IGraphicsDevicesAndContext devices)
             => AttachProcessor(new Shatter3DProcessor(this, devices));
 
         protected override IEnumerable<IAnimatable> GetAnimatables()
-            => [X, Y, Z, CameraSyncAnimation];
+            => [X, Y, Z, Gloss, GlossSharpness, CameraSyncAnimation];
 
         public override IEnumerable<string> CreateExoVideoFilters(
             int keyFrameIndex, ExoOutputDescription exoOutputDescription) => [];
@@ -147,6 +163,8 @@ namespace Shatter3D
         protected override string ShaderName => "Shatter.hlsl";
 
         protected override bool IsUnlit => effect.IsUnlit;
+
+        protected override SurfaceGloss GetGloss(in FrameContext time) => effect.GetGloss(time);
 
         protected override DeformGrid GetGrid(in FrameContext time)
         {
