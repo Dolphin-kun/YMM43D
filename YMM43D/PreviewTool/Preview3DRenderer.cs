@@ -22,6 +22,7 @@ namespace YMM43D.PreviewTool
         private readonly CameraGizmoRenderer cameraGizmo = new();
         private readonly MarkerRenderer markers = new();
         private readonly TransformGizmoRenderer transformGizmo = new();
+        private readonly SelectionRenderer selection = new();
         private readonly AxisIndicatorRenderer axisIndicator = new();
         private readonly FlatItemProvider flatItemProvider = new();
         private readonly ItemDrawContextBuilder contextBuilder = new();
@@ -144,11 +145,17 @@ namespace YMM43D.PreviewTool
                     drawContexts[i]))
             ];
 
+            foreach (var target in pickTargets)
+            {
+                if (scene.Selection.Contains(target.Item))
+                    selection.Draw(render, target.Bounds, target.World);
+            }
+
             gizmoMarker = FindGizmoMarker(scene);
 
             lastGizmo = gizmoMarker is { } placed
                 ? TransformGizmo.Create(placed.Marker.Position, viewPose.Position)
-                : FindGizmo(scene.Selected, viewPose.Position);
+                : FindGizmo(scene.Selection, viewPose.Position);
 
             if (lastGizmo is { } gizmo)
                 transformGizmo.Draw(render, gizmo, scene.ActiveHandle, gizmoMarker is null);
@@ -211,15 +218,31 @@ namespace YMM43D.PreviewTool
             return null;
         }
 
-        private TransformGizmo? FindGizmo(IVideoItem? selected, in Vector3 cameraPosition)
+        private TransformGizmo? FindGizmo(IReadOnlyCollection<IVideoItem> selected, in Vector3 cameraPosition)
         {
-            if (selected is null || selected.IsLocked)
-                return null;
+            var sum = Vector3.Zero;
+            var count = 0;
 
             foreach (var target in pickTargets)
             {
-                if (target.Item == selected)
-                    return TransformGizmo.Create(target.Origin, cameraPosition);
+                if (target.Item.IsLocked || !selected.Contains(target.Item))
+                    continue;
+
+                sum += target.Origin;
+                count++;
+            }
+
+            return count > 0 ? TransformGizmo.Create(sum / count, cameraPosition) : null;
+        }
+
+        public IReadOnlyList<IVideoItem> VisibleItems => [.. pickTargets.Select(target => target.Item).Distinct()];
+
+        public PickTarget? FindTarget(IVideoItem item)
+        {
+            foreach (var target in pickTargets)
+            {
+                if (target.Item == item)
+                    return target;
             }
 
             return null;
@@ -357,7 +380,7 @@ namespace YMM43D.PreviewTool
             return found;
         }
 
-        public WorldBounds? GetBounds(IVideoItem? item)
+        public WorldBounds? GetBounds(IReadOnlyCollection<IVideoItem>? items)
         {
             var min = new Vector3(float.MaxValue);
             var max = new Vector3(float.MinValue);
@@ -365,7 +388,7 @@ namespace YMM43D.PreviewTool
 
             foreach (var target in pickTargets)
             {
-                if (item is not null && target.Item != item)
+                if (items is not null && !items.Contains(target.Item))
                     continue;
 
                 var box = target.Bounds.Transform(target.World);
@@ -540,6 +563,7 @@ namespace YMM43D.PreviewTool
             cameraGizmo.Dispose();
             markers.Dispose();
             transformGizmo.Dispose();
+            selection.Dispose();
             axisIndicator.Dispose();
             flatItemProvider.Dispose();
             contextBuilder.Dispose();
@@ -576,7 +600,7 @@ namespace YMM43D.PreviewTool
 
         public required IReadOnlyList<PreviewItem> Items { get; init; }
 
-        public IVideoItem? Selected { get; init; }
+        public IReadOnlyCollection<IVideoItem> Selection { get; init; } = [];
 
         public IReadOnlyList<SceneMarkerResolver.PlacedMarker> Markers { get; init; } = [];
 

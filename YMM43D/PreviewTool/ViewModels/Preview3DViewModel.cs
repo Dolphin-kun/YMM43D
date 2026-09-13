@@ -34,13 +34,15 @@ namespace YMM43D.PreviewTool.ViewModels
         private D3D11Host? d3dHost;
         private Scene? scene;
         private TimelineSourceAndDevices? sourceAndDevices;
-        private IVideoItem? selected;
+        private IReadOnlyList<IVideoItem> selection = [];
         private IItem? selectedMarker;
         private ImmutableList<IItem>? lastItems;
 
         private bool drivesSceneCamera;
         private bool insertsKeyFrame;
         private bool showsGrid = true;
+        private bool snapsToGrid;
+        private float snapStep = SnapGrid.DefaultStep;
         private bool hadSelectedItem;
         private bool isDisposed;
 
@@ -77,6 +79,40 @@ namespace YMM43D.PreviewTool.ViewModels
             set => Set(ref showsGrid, value, nameof(ShowsGrid));
         }
 
+        public bool SnapsToGrid
+        {
+            get => snapsToGrid;
+            set => Set(ref snapsToGrid, value, nameof(SnapsToGrid));
+        }
+
+        public bool SnapsEvery10
+        {
+            get => snapStep == 10f;
+            set => SetSnapStep(value, 10f);
+        }
+
+        public bool SnapsEvery50
+        {
+            get => snapStep == 50f;
+            set => SetSnapStep(value, 50f);
+        }
+
+        public bool SnapsEvery100
+        {
+            get => snapStep == 100f;
+            set => SetSnapStep(value, 100f);
+        }
+
+        private void SetSnapStep(bool chosen, float step)
+        {
+            if (chosen)
+                snapStep = step;
+
+            OnPropertyChanged(nameof(SnapsEvery10));
+            OnPropertyChanged(nameof(SnapsEvery50));
+            OnPropertyChanged(nameof(SnapsEvery100));
+        }
+
         public bool CanAddItem => timeline is not null;
 
         public bool HasSelectedItem => timeline?.SelectedItems is { IsEmpty: false };
@@ -89,6 +125,8 @@ namespace YMM43D.PreviewTool.ViewModels
         public ICommand ViewAllCommand { get; }
         public ICommand LevelRollCommand { get; }
         public ICommand ViewFromCommand { get; }
+        public ICommand SelectAllCommand { get; }
+        public ICommand ClearSelectionCommand { get; }
         public ActionCommand AddKeyFrameCommand { get; }
 
         public Preview3DViewModel()
@@ -104,6 +142,8 @@ namespace YMM43D.PreviewTool.ViewModels
             ViewAllCommand = new ActionCommand(_ => true, _ => ViewAll());
             LevelRollCommand = new ActionCommand(_ => true, _ => LevelRoll());
             ViewFromCommand = new ActionCommand(_ => true, p => ViewFrom(p as string));
+            SelectAllCommand = new ActionCommand(_ => true, _ => SelectAll());
+            ClearSelectionCommand = new ActionCommand(_ => true, _ => ClearSelection());
             AddKeyFrameCommand = new ActionCommand(
                 _ => HasSelectedItem,
                 _ => HostCommands.Execute(CommandType.AddKeyFrameAtCurrentFrame, d3dHost));
@@ -175,17 +215,15 @@ namespace YMM43D.PreviewTool.ViewModels
 
         public void FocusSelected()
         {
-            var item = selected ?? timeline?.SelectedItems.OfType<IVideoItem>().FirstOrDefault();
-
-            if (item is not null)
-                Focus(item);
+            if (selection.Count > 0)
+                Focus(selection);
         }
 
         public void ViewAll() => Focus(null);
 
-        private void Focus(IVideoItem? item)
+        private void Focus(IReadOnlyCollection<IVideoItem>? items)
         {
-            if (renderer.GetBounds(item) is not { } bounds)
+            if (renderer.GetBounds(items) is not { } bounds)
                 return;
 
             ApplyCameraMove(basis => freeCamera.Focus(bounds, basis));
@@ -317,7 +355,7 @@ namespace YMM43D.PreviewTool.ViewModels
                 Environment = new PreviewEnvironment(
                     device, sourceAndDevices.Devices, scene, sceneBuilder.SourceDescription),
                 Items = sceneBuilder.Items,
-                Selected = selected,
+                Selection = selection,
                 Markers = SceneMarkerResolver.Resolve(timeline),
                 SelectedMarker = selectedMarker,
                 ShowsGrid = showsGrid,
@@ -360,7 +398,7 @@ namespace YMM43D.PreviewTool.ViewModels
                     return TryGrab(position);
 
                 case D3D11Host.MouseEventKind.Move when itemDrag.IsDragging:
-                    if (renderer.CreateRay(ToVector(position)) is { } ray && itemDrag.Update(ray))
+                    if (renderer.CreateRay(ToVector(position)) is { } ray && itemDrag.Update(ray, CurrentSnap()))
                         refresher?.ForceRefresh(timeline!);
 
                     return true;
@@ -377,8 +415,10 @@ namespace YMM43D.PreviewTool.ViewModels
         private bool TryGrab(Point position)
         {
             var screen = ToVector(position);
+            var toggles = (Keyboard.Modifiers & ModifierKeys.Control) != 0;
 
-            if (renderer.PickGizmo(screen) is var grabbed and not GizmoHandle.None
+            if (!toggles
+                && renderer.PickGizmo(screen) is var grabbed and not GizmoHandle.None
                 && renderer.Gizmo is { } gizmo
                 && renderer.CreateRay(screen) is { } gizmoRay)
             {
@@ -389,20 +429,16 @@ namespace YMM43D.PreviewTool.ViewModels
                         freeCamera.State.Forward, GetEditScope(held.Item));
                 }
 
-                if (selected is not null)
-                {
-                    return itemDrag.Begin(
-                        selected, gizmo.Origin, grabbed, gizmoRay, freeCamera.State.Forward,
-                        GetEditScope(selected));
-                }
+                if (MovableSelection() is { Count: > 0 } movable)
+                    return BeginItems(movable, movable[0], gizmo.Origin, grabbed, gizmoRay);
             }
 
-            if (renderer.PickMarker(screen) is { } placed && CanGrab(placed)
+            if (!toggles
+                && renderer.PickMarker(screen) is { } placed
+                && CanGrab(placed)
                 && renderer.CreateRay(screen) is { } markerRay)
             {
-                selected = null;
-                selectedMarker = placed.Item;
-                timeline?.SelectedItems = [placed.Item];
+                Select([placed.Item]);
 
                 return itemDrag.BeginMarker(
                     placed.Source, placed.ItemTime, placed.Marker.Position, GizmoHandle.Free, markerRay,
@@ -415,25 +451,70 @@ namespace YMM43D.PreviewTool.ViewModels
             if (renderer.TakePickResult() is not { } picked
                 || renderer.CreateRay(screen) is not { } ray)
             {
-                ClearSelection();
+                if (!toggles)
+                    ClearSelection();
+
                 return false;
             }
 
-            selected = picked.Item;
+            if (toggles)
+            {
+                Select(selection.Contains(picked.Item)
+                    ? [.. selection.Where(item => item != picked.Item)]
+                    : [.. selection, picked.Item]);
 
-            timeline?.SelectedItems = [picked.Item];
+                return true;
+            }
+
+            if (!selection.Contains(picked.Item))
+                Select([picked.Item]);
+
+            return MovableSelection() is { Count: > 0 } targets
+                && BeginItems(targets, picked.Item, picked.Origin, GizmoHandle.Free, ray);
+        }
+
+        private IReadOnlyList<IVideoItem> MovableSelection()
+            => [.. selection.Where(item => !item.IsLocked)];
+
+        private bool BeginItems(
+            IReadOnlyList<IVideoItem> items, IVideoItem primary, Vector3 origin, GizmoHandle grabbed, PickRay ray)
+        {
+            if (timeline is null)
+                return false;
+
+            var fps = Math.Max(1, timeline.VideoInfo.FPS);
 
             return itemDrag.Begin(
-                picked.Item, picked.Origin, GizmoHandle.Free, ray, freeCamera.State.Forward,
-                GetEditScope(picked.Item));
+                [.. items.Select(item => new DragTarget(item, GetEditScope(item)))],
+                primary,
+                FrameContext.ForItem(primary, timeline.CurrentFrame, fps),
+                origin,
+                grabbed,
+                ray,
+                freeCamera.State.Forward);
         }
+
+        private SnapGrid CurrentSnap()
+            => new SnapGrid(snapsToGrid, snapStep, SnapGrid.DefaultAngleStep)
+                .Inverted((Keyboard.Modifiers & ModifierKeys.Shift) != 0);
 
         private bool CanGrab(in SceneMarkerResolver.PlacedMarker marker)
             => !drivesSceneCamera || marker.Marker.Kind != MarkerKind.Camera;
 
+        private void Select(IReadOnlyList<IItem> items)
+        {
+            if (timeline is null)
+                return;
+
+            timeline.SelectedItems = [.. items];
+            SyncSelectionState();
+        }
+
+        public void SelectAll() => Select(renderer.VisibleItems);
+
         public void ClearSelection()
         {
-            selected = null;
+            selection = [];
             selectedMarker = null;
 
             if (timeline?.SelectedItems is { Count: > 0 })
@@ -471,6 +552,14 @@ namespace YMM43D.PreviewTool.ViewModels
 
                 case Key.G when modifiers == ModifierKeys.None:
                     ShowsGrid = !ShowsGrid;
+                    return true;
+
+                case Key.S when modifiers == ModifierKeys.None:
+                    SnapsToGrid = !SnapsToGrid;
+                    return true;
+
+                case Key.A when modifiers == ModifierKeys.Control:
+                    SelectAll();
                     return true;
 
                 case Key.Escape when modifiers == ModifierKeys.None:
@@ -523,6 +612,7 @@ namespace YMM43D.PreviewTool.ViewModels
         private void SyncSelectionState()
         {
             selectedMarker = timeline?.SelectedItems?.FirstOrDefault(item => item is ISceneMarkerSource);
+            selection = timeline?.SelectedItems is { } items ? [.. items.OfType<IVideoItem>()] : [];
 
             var has = HasSelectedItem;
 

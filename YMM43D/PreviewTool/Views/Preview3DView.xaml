@@ -65,6 +65,31 @@
                           ToolTip="床の格子と、原点を通る2本の座標軸を出すかどうか。動画の出力には関係ありません。"/>
             </MenuItem>
 
+            <MenuItem Header="編集">
+                <MenuItem Header="すべて選ぶ"
+                          Command="{Binding SelectAllCommand}"
+                          InputGestureText="Ctrl+A"
+                          ToolTip="3Dプレビューに出ているアイテムをすべて選びます。Ctrl を押しながらクリックすると、1つずつ足したり外したりできます。選んだものはまとめて動かせます。"/>
+
+                <MenuItem Header="選択を解除"
+                          Command="{Binding ClearSelectionCommand}"
+                          InputGestureText="Esc"/>
+
+                <Separator/>
+
+                <MenuItem Header="スナップ"
+                          IsCheckable="True"
+                          IsChecked="{Binding SnapsToGrid}"
+                          InputGestureText="S"
+                          ToolTip="入れると、ドラッグで動かした位置が決まった間隔に、回転が 15° ずつに吸い付きます。ドラッグ中に Shift を押している間は、入り切りが逆になります。"/>
+
+                <MenuItem Header="スナップの間隔">
+                    <MenuItem Header="10 px" IsCheckable="True" IsChecked="{Binding SnapsEvery10}"/>
+                    <MenuItem Header="50 px" IsCheckable="True" IsChecked="{Binding SnapsEvery50}"/>
+                    <MenuItem Header="100 px" IsCheckable="True" IsChecked="{Binding SnapsEvery100}"/>
+                </MenuItem>
+            </MenuItem>
+
             <MenuItem Header="視点">
                 <MenuItem Header="選んだものを注目"
                           Command="{Binding FocusSelectedCommand}"

@@ -4,11 +4,13 @@ using YukkuriMovieMaker.Project.Items;
 
 namespace YMM43D.PreviewTool
 {
+    internal readonly record struct DragTarget(IVideoItem Item, EditScope Scope);
+
     internal sealed class ItemDragController
     {
-        private IVideoItem? target;
+        private IReadOnlyList<DragTarget> targets = [];
         private ISceneMarkerSource? marker;
-        private FrameContext markerTime;
+        private FrameContext time;
         private GizmoHandle handle;
         private EditScope scope;
 
@@ -21,11 +23,17 @@ namespace YMM43D.PreviewTool
 
         private float lastAngle;
 
-        public IVideoItem? Target => target;
+        private Vector3 startPosition;
+        private float startRotation;
+
+        private Vector3 rawShift;
+        private Vector3 appliedShift;
+        private float rawTurn;
+        private float appliedTurn;
 
         public GizmoHandle Handle => handle;
 
-        public bool IsDragging => target is not null || marker is not null;
+        public bool IsDragging => targets.Count > 0 || marker is not null;
 
         public bool BeginMarker(
             ISceneMarkerSource source,
@@ -36,41 +44,52 @@ namespace YMM43D.PreviewTool
             in Vector3 viewDirection,
             in EditScope edit)
         {
-            planePoint = origin;
-
-            if (grabbed is GizmoHandle.MoveX or GizmoHandle.MoveY or GizmoHandle.MoveZ)
-            {
-                axis = TransformGizmo.AxisDirection(grabbed);
-
-                if (TransformGizmo.ClosestOnAxis(ray, origin, axis) is not { } position)
-                    return false;
-
-                axisPosition = position;
-            }
-            else
-            {
+            if (grabbed == GizmoHandle.RotateZ)
                 grabbed = GizmoHandle.Free;
-                planeNormal = -viewDirection;
-                anchor = ray.IntersectPlane(planePoint, planeNormal) ?? planePoint;
-            }
+
+            if (!Grab(origin, ref grabbed, ray, viewDirection))
+                return false;
 
             marker = source;
-            markerTime = itemTime;
+            targets = [];
+            time = itemTime;
             handle = grabbed;
             scope = edit;
+            startPosition = source.GetMarker(itemTime).Position;
+            startRotation = 0f;
 
             return true;
         }
 
         public bool Begin(
-            IVideoItem item,
+            IReadOnlyList<DragTarget> items,
+            IVideoItem primary,
+            in FrameContext primaryTime,
             in Vector3 origin,
             GizmoHandle grabbed,
             in PickRay ray,
-            in Vector3 viewDirection,
-            in EditScope edit)
+            in Vector3 viewDirection)
+        {
+            if (items.Count == 0 || !Grab(origin, ref grabbed, ray, viewDirection))
+                return false;
+
+            marker = null;
+            targets = items;
+            time = primaryTime;
+            handle = grabbed;
+            scope = EditScope.Whole;
+            startPosition = WorldScale.ToWorldPosition(
+                primary.X.GetFloat(primaryTime), primary.Y.GetFloat(primaryTime), primary.Z.GetFloat(primaryTime));
+            startRotation = primary.Rotation.GetFloat(primaryTime);
+
+            return true;
+        }
+
+        private bool Grab(in Vector3 origin, ref GizmoHandle grabbed, in PickRay ray, in Vector3 viewDirection)
         {
             planePoint = origin;
+            rawShift = appliedShift = Vector3.Zero;
+            rawTurn = appliedTurn = 0f;
 
             switch (grabbed)
             {
@@ -81,135 +100,109 @@ namespace YMM43D.PreviewTool
                         return false;
 
                     axisPosition = position;
-                    break;
+                    return true;
 
                 case GizmoHandle.RotateZ:
                     if (GetAngle(ray, origin) is not { } angle)
                         return false;
 
                     lastAngle = angle;
-                    break;
+                    return true;
 
                 default:
                     grabbed = GizmoHandle.Free;
                     planeNormal = -viewDirection;
                     anchor = ray.IntersectPlane(planePoint, planeNormal) ?? planePoint;
-                    break;
+                    return true;
             }
-
-            target = item;
-            handle = grabbed;
-            scope = edit;
-
-            return true;
         }
 
-        public bool Update(in PickRay ray)
+        public bool Update(in PickRay ray, in SnapGrid snap)
         {
-            if (marker is { } source)
-                return MoveMarker(source, ray);
-
-            if (target is not { } item)
+            if (!IsDragging)
                 return false;
 
-            return handle switch
+            if (handle == GizmoHandle.RotateZ)
+                return Turn(ray, snap);
+
+            if (!Follow(ray, out var step))
+                return false;
+
+            rawShift += step;
+
+            var wanted = snap.SnapShift(startPosition, rawShift);
+            var delta = wanted - appliedShift;
+
+            if (delta == Vector3.Zero)
+                return false;
+
+            appliedShift = wanted;
+
+            if (marker is { } source)
             {
-                GizmoHandle.MoveX or GizmoHandle.MoveY or GizmoHandle.MoveZ => MoveAlongAxis(item, ray),
-                GizmoHandle.RotateZ => Rotate(item, ray),
-                _ => MoveOnPlane(item, ray),
-            };
+                source.MoveMarker(delta, time, scope);
+                return true;
+            }
+
+            foreach (var (item, itemScope) in targets)
+                itemScope.NudgePosition(item.X, item.Y, item.Z, delta);
+
+            return true;
         }
 
         public void End()
         {
-            target = null;
+            targets = [];
             marker = null;
             handle = GizmoHandle.None;
         }
 
-        private bool MoveMarker(ISceneMarkerSource source, in PickRay ray)
+        private bool Follow(in PickRay ray, out Vector3 step)
         {
+            step = Vector3.Zero;
+
             if (handle is GizmoHandle.MoveX or GizmoHandle.MoveY or GizmoHandle.MoveZ)
-                return MoveMarkerAlongAxis(source, ray);
+            {
+                if (TransformGizmo.ClosestOnAxis(ray, planePoint, axis) is not { } position)
+                    return false;
+
+                step = axis * (position - axisPosition);
+                axisPosition = position;
+                return true;
+            }
 
             if (ray.IntersectPlane(planePoint, planeNormal) is not { } hit)
                 return false;
 
-            var shift = hit - anchor;
-            if (shift == Vector3.Zero)
-                return false;
-
+            step = hit - anchor;
             anchor = hit;
-            source.MoveMarker(shift, markerTime, scope);
-
             return true;
         }
 
-        private bool MoveMarkerAlongAxis(ISceneMarkerSource source, in PickRay ray)
-        {
-            if (TransformGizmo.ClosestOnAxis(ray, planePoint, axis) is not { } position)
-                return false;
-
-            var delta = position - axisPosition;
-            if (delta == 0f)
-                return false;
-
-            axisPosition = position;
-            source.MoveMarker(axis * delta, markerTime, scope);
-
-            return true;
-        }
-
-        private bool MoveAlongAxis(IVideoItem item, in PickRay ray)
-        {
-            if (TransformGizmo.ClosestOnAxis(ray, planePoint, axis) is not { } position)
-                return false;
-
-            var delta = position - axisPosition;
-            if (delta == 0f)
-                return false;
-
-            axisPosition = position;
-            Shift(item, axis * delta);
-
-            return true;
-        }
-
-        private bool MoveOnPlane(IVideoItem item, in PickRay ray)
-        {
-            if (ray.IntersectPlane(planePoint, planeNormal) is not { } hit)
-                return false;
-
-            var shift = hit - anchor;
-            if (shift == Vector3.Zero)
-                return false;
-
-            anchor = hit;
-            Shift(item, shift);
-
-            return true;
-        }
-
-        private bool Rotate(IVideoItem item, in PickRay ray)
+        private bool Turn(in PickRay ray, in SnapGrid snap)
         {
             if (GetAngle(ray, planePoint) is not { } angle)
                 return false;
 
             var delta = angle - lastAngle;
             delta -= MathF.Tau * MathF.Round(delta / MathF.Tau);
-
-            if (delta == 0f)
-                return false;
-
             lastAngle = angle;
 
-            scope.Nudge(item.Rotation, -float.RadiansToDegrees(delta));
+            rawTurn -= float.RadiansToDegrees(delta);
+
+            var wanted = snap.SnapTurn(startRotation, rawTurn);
+            var change = wanted - appliedTurn;
+
+            if (change == 0f)
+                return false;
+
+            appliedTurn = wanted;
+
+            foreach (var (item, itemScope) in targets)
+                itemScope.Nudge(item.Rotation, change);
 
             return true;
         }
-
-        private void Shift(IVideoItem item, in Vector3 shift)
-            => scope.NudgePosition(item.X, item.Y, item.Z, shift);
 
         private static float? GetAngle(in PickRay ray, in Vector3 origin)
         {
