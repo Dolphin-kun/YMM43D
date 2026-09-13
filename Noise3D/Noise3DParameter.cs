@@ -64,7 +64,7 @@ namespace Noise3D
         public Animation EdgeBlur { get; } = new(30, 0, 100);
 
         [Display(GroupName = Volume, Name = "分割の細かさ",
-            Description = "箱を何枚の板に切って描くか。大きいほど滑らかで、そのぶん重くなります", Order = 700)]
+            Description = "箱を切って描く板の枚数の上限。ノイズの大きさに合わせて必要な分だけ使います。板の筋が見えるときに上げてください", Order = 700)]
         [TextBoxSlider("F0", "枚", MinSlices, MaxSlices)]
         [Range(MinSlices, MaxSlices)]
         public int Slices { get => slices; set => Set(ref slices, Math.Clamp(value, MinSlices, MaxSlices)); }

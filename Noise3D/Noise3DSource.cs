@@ -56,24 +56,34 @@ namespace Noise3D
             var camera = Vector3.Transform(render.GetCameraPosition(), inverse);
             var axis = NoiseSliceMesh.ChooseAxis(camera, box);
 
+            var feature = parameter.GetFeatureSize(time);
+            var smallest = MathF.Min(feature.X, MathF.Min(feature.Y, feature.Z));
+            var slices = NoiseSliceMesh.NeededSlices(box[axis], smallest, parameter.Slices);
+
             var mesh = shared.GetMesh(parameter.Slices);
-            mesh.Arrange(render.Context, axis, camera[axis]);
+            mesh.Arrange(render.Context, axis, camera[axis], slices);
+
+            var kind = NoiseVolume.KindOf(parameter.NoiseType) ?? NoiseVolumeKind.Value;
 
             shared.Pipeline.Draw(
                 render.Context,
                 render.CreateConstants(world, item.Opacity, unlit: true),
-                CreateConstants(time, box, camera, axis),
+                CreateConstants(time, box, camera, axis, slices),
                 new DrawSettings
                 {
                     Blend = BlendMode.Normal,
                     Culling = FaceCulling.None,
                     IgnoreDepth = item.IsAlwaysOnTop,
                     SkipDepthWrite = true,
+                    Texture = shared.GetVolume(render.Context, kind, parameter.Seed),
+                    Sampler = NoiseVolume.IsPeriodic(kind)
+                        ? RenderStates.For(render.Device).LinearWrapSampler
+                        : shared.MirrorSampler,
                 },
                 mesh);
         }
 
-        private NoiseConstants CreateConstants(in FrameContext time, Vector3 box, Vector3 camera, int axis)
+        private NoiseConstants CreateConstants(in FrameContext time, Vector3 box, Vector3 camera, int axis, int slices)
         {
             var featureSize = parameter.GetFeatureSize(time);
 
@@ -83,7 +93,7 @@ namespace Noise3D
                     parameter.Color.ToVector3(),
                     parameter.Density.GetFloat(time) / 100f * DensityPerPixel),
                 Box = new Vector4(box, Math.Clamp(parameter.EdgeBlur.GetFloat(time) / 100f, 0f, 1f)),
-                Camera = new Vector4(camera, parameter.Slices),
+                Camera = new Vector4(camera, slices),
                 Offset = new Vector4(parameter.GetOffset(time), float.DegreesToRadians(parameter.Angle.GetFloat(time))),
                 Feature = new Vector4(featureSize, parameter.Seed % 65536),
                 Tone = new Vector4(
@@ -123,11 +133,60 @@ namespace Noise3D
         private sealed class NoiseResources(ID3D11Device device) : IDisposable
         {
             private NoiseSliceMesh? mesh;
+            private ID3D11Texture3D? volume;
+            private ID3D11ShaderResourceView? volumeView;
+            private (NoiseVolumeKind Kind, int Seed) volumeKey;
 
             public RenderPipeline<TransformConstants> Pipeline { get; } = new(
                 device,
                 NoiseVertex.InputElements,
                 new ShaderMaterial(device, typeof(NoiseResources).Assembly, "Noise3D.hlsl"));
+
+            public ID3D11SamplerState MirrorSampler { get; } = device.CreateSamplerState(new SamplerDescription
+            {
+                Filter = Filter.MinMagMipLinear,
+                AddressU = TextureAddressMode.Mirror,
+                AddressV = TextureAddressMode.Mirror,
+                AddressW = TextureAddressMode.Mirror,
+                MaxLOD = float.MaxValue,
+            });
+
+            public unsafe ID3D11ShaderResourceView GetVolume(ID3D11DeviceContext context, NoiseVolumeKind kind, int seed)
+            {
+                if (volumeView is { } existing && volumeKey == (kind, seed))
+                    return existing;
+
+                volumeView?.Dispose();
+                volume?.Dispose();
+
+                var data = NoiseVolume.Get(kind, seed);
+
+                volume = device.CreateTexture3D(new Texture3DDescription
+                {
+                    Width = NoiseVolume.Size,
+                    Height = NoiseVolume.Size,
+                    Depth = NoiseVolume.Size,
+                    MipLevels = 0,
+                    Format = Vortice.DXGI.Format.R16_UNorm,
+                    Usage = ResourceUsage.Default,
+                    BindFlags = BindFlags.ShaderResource | BindFlags.RenderTarget,
+                    MiscFlags = ResourceOptionFlags.GenerateMips,
+                });
+
+                fixed (ushort* pointer = data)
+                {
+                    context.UpdateSubresource(
+                        volume, 0, null, (nint)pointer,
+                        NoiseVolume.Size * sizeof(ushort),
+                        NoiseVolume.Size * NoiseVolume.Size * sizeof(ushort));
+                }
+
+                volumeView = device.CreateShaderResourceView(volume);
+                context.GenerateMips(volumeView);
+                volumeKey = (kind, seed);
+
+                return volumeView;
+            }
 
             public NoiseSliceMesh GetMesh(int slices)
             {
@@ -143,6 +202,11 @@ namespace Noise3D
             {
                 mesh?.Dispose();
                 mesh = null;
+                volumeView?.Dispose();
+                volumeView = null;
+                volume?.Dispose();
+                volume = null;
+                MirrorSampler.Dispose();
                 Pipeline.Dispose();
             }
         }

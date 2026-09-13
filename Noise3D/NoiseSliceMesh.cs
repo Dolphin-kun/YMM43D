@@ -32,7 +32,7 @@ namespace Noise3D
 
         public ID3D11Buffer? IndexBuffer => null;
 
-        public int DrawCount => vertices.Length;
+        public int DrawCount { get; private set; }
 
         public int VertexStride => NoiseVertex.Stride;
 
@@ -66,21 +66,23 @@ namespace Noise3D
             return magnitude.Y >= magnitude.Z ? 1 : 2;
         }
 
-        public void Arrange(ID3D11DeviceContext context, int axis, float cameraCoordinate)
+        public void Arrange(ID3D11DeviceContext context, int axis, float cameraCoordinate, int count)
         {
-            for (var i = 0; i < SliceCount; i++)
+            count = Math.Clamp(count, 1, SliceCount);
+
+            for (var i = 0; i < count; i++)
             {
                 order[i] = i;
-                distances[i] = -MathF.Abs(SlicePosition(i, SliceCount) - cameraCoordinate);
+                distances[i] = -MathF.Abs(SlicePosition(i, count) - cameraCoordinate);
             }
 
-            Array.Sort(distances, order);
+            Array.Sort(distances, order, 0, count);
 
             var v = 0;
 
-            foreach (var index in order)
+            for (var slot = 0; slot < count; slot++)
             {
-                var t = SlicePosition(index, SliceCount);
+                var t = SlicePosition(order[slot], count);
 
                 var a = Corner(axis, t, -0.5f, -0.5f);
                 var b = Corner(axis, t, 0.5f, -0.5f);
@@ -96,6 +98,16 @@ namespace Noise3D
             }
 
             context.UpdateSubresource(vertices, VertexBuffer);
+            DrawCount = count * VerticesPerSlice;
+        }
+
+        public static int NeededSlices(float thicknessPixels, float smallestFeaturePixels, int limit)
+        {
+            const float SlicesPerFeature = 8f;
+
+            var needed = MathF.Ceiling(thicknessPixels / MathF.Max(smallestFeaturePixels, 1f) * SlicesPerFeature);
+
+            return (int)Math.Clamp(needed, Noise3DParameter.MinSlices, Math.Max(limit, Noise3DParameter.MinSlices));
         }
 
         private static Vector3 Corner(int axis, float along, float u, float w) => axis switch
