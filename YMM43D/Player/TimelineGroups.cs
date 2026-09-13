@@ -57,6 +57,28 @@ namespace YMM43D.Player
             return transform;
         }
 
+        public IReadOnlyList<GroupItem> GetGroups(IItem item)
+        {
+            if (groups is null || groups.Length == 0)
+                return [];
+
+            List<GroupItem>? found = null;
+            var current = item;
+
+            for (var depth = 0; depth < groups.Length; depth++)
+            {
+                var parent = FindParent(current);
+
+                if (parent < 0)
+                    break;
+
+                current = groups[parent].Group;
+                (found ??= []).Add(groups[parent].Group);
+            }
+
+            return found is null ? [] : found;
+        }
+
         private int FindParent(IItem item)
         {
             var found = -1;

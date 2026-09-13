@@ -106,11 +106,15 @@ namespace YMM43D.PreviewTool
             var projection = SceneProjection.GetProjectionMatrix(
                 (float)width / Math.Max(1, height), scene.ScreenHeight, pixelsPerTangent);
 
-            var casters = new SceneDepthCollector.Occluder[scene.Items.Count];
+            var casters = new List<SceneDepthCollector.Occluder>(scene.Items.Count);
+
             for (var i = 0; i < scene.Items.Count; i++)
             {
-                casters[i] = new SceneDepthCollector.Occluder(
-                    scene.Items[i].Provider, drawContexts[i].World, drawContexts[i].Time);
+                if (ReferenceEquals(scene.Items[i].Provider, flatItemProvider))
+                    continue;
+
+                casters.Add(new SceneDepthCollector.Occluder(
+                    scene.Items[i].Provider, drawContexts[i].World, drawContexts[i].Time));
             }
 
             var lit = SceneShadows.Build(device, context, scene.Lighting, casters, this);

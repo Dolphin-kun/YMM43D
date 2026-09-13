@@ -41,13 +41,17 @@ namespace YMM43D.PreviewTool
                 toolInfo.Scenes?.AllScenes?.Cast<ISceneInfo>() ?? []);
         }
 
-        public void UpdateItems(Timeline timeline)
+        public void UpdateItems(Timeline timeline, IGraphicsDevicesAndContext? devices)
         {
             if (timeline.Items is not { } items)
                 return;
 
             var frame = timeline.CurrentFrame;
+            var fps = Math.Max(1, timeline.VideoInfo.FPS);
             var updated = new List<PreviewItem>();
+
+            var flattening = new GroupFlattening(
+                GroupLookup.Build(timeline, frame, fps), devices, SourceDescription, frame);
 
             var visible = items
                 .OfType<IVideoItem>()
@@ -58,7 +62,7 @@ namespace YMM43D.PreviewTool
 
             foreach (var item in visible)
             {
-                foreach (var (provider, effects) in FindProviders(item))
+                foreach (var (provider, effects) in FindProviders(item, flattening))
                     updated.Add(new PreviewItem(provider, effects, item));
             }
 
@@ -70,9 +74,12 @@ namespace YMM43D.PreviewTool
         private static bool IsComposite(IVideoItem item)
             => item is EffectItem or GroupItem or FrameBufferItem or TransitionItem;
 
-        private IEnumerable<Placed> FindProviders(IVideoItem item)
+        private IEnumerable<Placed> FindProviders(IVideoItem item, GroupFlattening flattening)
         {
             var effects = item.VideoEffects ?? [];
+
+            if (flattening.Flattens(item))
+                return [new Placed(fallbackProvider, [.. Flattened(effects), .. flattening.EffectsFor(item)])];
 
             if (!SceneDepthCollector.HasSolidEffect(item))
             {

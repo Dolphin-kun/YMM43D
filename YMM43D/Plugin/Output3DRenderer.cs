@@ -37,7 +37,7 @@ namespace YMM43D.Plugin
             var pixelsPerTangent = SceneProjection.GetPixelsPerTangent(
                 camera, description.ScreenSize.Height);
 
-            var scene = SceneDepthCollector.Collect(description, self);
+            var scene = SceneDepthCollector.Collect(description, self, devices);
             var lighting = SceneLightingResolver.Resolve(description);
 
             var placedWorld = world * (placement ?? scene.OwnerPlacement);

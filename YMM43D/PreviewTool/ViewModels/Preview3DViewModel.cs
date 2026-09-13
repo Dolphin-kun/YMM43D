@@ -641,7 +641,7 @@ namespace YMM43D.PreviewTool.ViewModels
                 renderer.ResetItemCaches();
             }
 
-            sceneBuilder.UpdateItems(timeline);
+            sceneBuilder.UpdateItems(timeline, sourceAndDevices?.Devices);
         }
 
         public void Dispose()

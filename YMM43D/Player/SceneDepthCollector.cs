@@ -1,6 +1,6 @@
 ﻿using System.Numerics;
 using YMM43D.Commons;
-
+using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Player.Video;
 using YukkuriMovieMaker.Project.Items;
 
@@ -24,7 +24,8 @@ namespace YMM43D.Player
 
         public static SceneView Collect(
             TimelineItemSourceDescription description,
-            I3DProvider? self)
+            I3DProvider? self,
+            IGraphicsDevicesAndContext? devices = null)
         {
             if (self is null)
                 return SceneView.None;
@@ -36,6 +37,7 @@ namespace YMM43D.Player
             var fps = description.FPS;
 
             var groups = GroupLookup.Build(timeline, frame, fps);
+            var flattening = new GroupFlattening(groups, devices, description, frame);
 
             IVideoItem? owner = null;
             var ownerTime = default(FrameContext);
@@ -60,6 +62,9 @@ namespace YMM43D.Player
                     ownerTime = itemTime;
                 }
 
+                if (flattening.Flattens(video))
+                    continue;
+
                 var placement = ItemPlacement.GetWorldMatrix(video, itemTime) * groups.GetTransform(video);
 
                 found.Clear();
@@ -75,7 +80,7 @@ namespace YMM43D.Player
             var ownerPlacement = ItemPlacement.GetWorldMatrix(owner, ownerTime);
             var ownerScreen = ItemPlacement.GetScreenPlacement(owner, ownerTime);
 
-            if (!IsPlacedIn3D(owner, self))
+            if (flattening.Flattens(owner) || !IsPlacedIn3D(owner, self))
                 return new SceneView(owner, ownerTime, ownerPlacement, ownerScreen, [], casters);
 
             var occluders = new List<Occluder>(casters.Count);

@@ -22,7 +22,7 @@ namespace YMM43D.PreviewTool.Rendering
 
         public void Draw(in Render3DContext render, DrawContext3D item)
         {
-            if (item.Texture is null)
+            if (item.Texture is null || item.DepthOnly)
                 return;
 
             var constants = render.CreateConstants(item.World, item.Opacity);
