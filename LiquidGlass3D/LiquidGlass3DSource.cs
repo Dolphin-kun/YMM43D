@@ -59,7 +59,7 @@ namespace LiquidGlass3D
                 Size = new Vector4(size, MathF.Max(parameter.CornerRadius.GetFloat(time), 0f)),
                 Camera = new Vector4(
                     Vector3.Transform(render.GetCameraPosition(), inverse),
-                    parameter.Shape == GlassShape.Ellipsoid ? 1f : 0f),
+                    parameter.IsSphere ? 1f : 0f),
                 Optics = new Vector4(
                     Math.Clamp(parameter.RefractiveIndex.GetFloat(time), 1f, 4f),
                     MathF.Max(parameter.Distance.GetFloat(time), 0f),

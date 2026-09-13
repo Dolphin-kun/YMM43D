@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Numerics;
 using System.Windows.Media;
@@ -6,6 +7,7 @@ using YMM43D.Plugin;
 using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Controls;
 using YukkuriMovieMaker.Exo;
+using YukkuriMovieMaker.ItemEditor.CustomVisibilityAttributes;
 using YukkuriMovieMaker.Plugin.Shape;
 using YukkuriMovieMaker.Project;
 
@@ -16,8 +18,8 @@ namespace LiquidGlass3D
         [Display(Name = "角丸の箱")]
         RoundedBox,
 
-        [Display(Name = "楕円体")]
-        Ellipsoid,
+        [Display(Name = "球")]
+        Sphere,
     }
 
     public sealed class LiquidGlass3DParameter : ShapeParameter3DBase
@@ -29,25 +31,51 @@ namespace LiquidGlass3D
 
         [Display(GroupName = Form, Name = "形", Order = 100)]
         [EnumComboBox]
-        public GlassShape Shape { get => shape; set => Set(ref shape, value); }
+        public GlassShape Shape
+        {
+            get => shape;
+            set
+            {
+                Set(ref shape, value);
+                OnPropertyChanged(nameof(IsBox));
+                OnPropertyChanged(nameof(IsSphere));
+            }
+        }
         private GlassShape shape = GlassShape.RoundedBox;
+
+        [Browsable(false)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public bool IsBox => Shape == GlassShape.RoundedBox;
+
+        [Browsable(false)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public bool IsSphere => Shape == GlassShape.Sphere;
 
         [Display(GroupName = Form, Name = "幅", Order = 200)]
         [AnimationSlider("F1", "px", 0, 1000)]
+        [ShowPropertyEditorWhen(nameof(IsBox), true)]
         public Animation Width { get; } = new(400, 0, 100000);
 
         [Display(GroupName = Form, Name = "高さ", Order = 300)]
         [AnimationSlider("F1", "px", 0, 1000)]
+        [ShowPropertyEditorWhen(nameof(IsBox), true)]
         public Animation Height { get; } = new(240, 0, 100000);
 
         [Display(GroupName = Form, Name = "厚み", Order = 400)]
         [AnimationSlider("F1", "px", 0, 500)]
+        [ShowPropertyEditorWhen(nameof(IsBox), true)]
         public Animation Thickness { get; } = new(60, 0, 100000);
 
         [Display(GroupName = Form, Name = "角の丸み",
             Description = "角丸の箱の角の半径。いちばん短い辺の半分で、ふちが完全に丸くなります", Order = 500)]
         [AnimationSlider("F1", "px", 0, 250)]
+        [ShowPropertyEditorWhen(nameof(IsBox), true)]
         public Animation CornerRadius { get; } = new(30, 0, 100000);
+
+        [Display(GroupName = Form, Name = "直径", Order = 600)]
+        [AnimationSlider("F1", "px", 0, 1000)]
+        [ShowPropertyEditorWhen(nameof(IsSphere), true)]
+        public Animation Diameter { get; } = new(300, 0, 100000);
 
         [Display(GroupName = Rotation, Name = "X", Order = 100)]
         [AnimationSlider("F1", "°", -360, 360)]
@@ -110,10 +138,12 @@ namespace LiquidGlass3D
         }
 
         internal Vector3 GetSizePixels(in FrameContext time)
-            => new(
-                MathF.Max(Width.GetFloat(time), 0f),
-                MathF.Max(Height.GetFloat(time), 0f),
-                MathF.Max(Thickness.GetFloat(time), 0f));
+            => IsSphere
+                ? new Vector3(MathF.Max(Diameter.GetFloat(time), 0f))
+                : new Vector3(
+                    MathF.Max(Width.GetFloat(time), 0f),
+                    MathF.Max(Height.GetFloat(time), 0f),
+                    MathF.Max(Thickness.GetFloat(time), 0f));
 
         internal Matrix4x4 GetLocalMatrix(in FrameContext time)
         {
@@ -127,7 +157,7 @@ namespace LiquidGlass3D
             => new LiquidGlass3DSource(devices, this);
 
         protected override IEnumerable<IAnimatable> GetAnimatables()
-            => [Width, Height, Thickness, CornerRadius, RotationX, RotationY, RotationZ, RefractiveIndex, Distance,
+            => [Width, Height, Thickness, CornerRadius, Diameter, RotationX, RotationY, RotationZ, RefractiveIndex, Distance,
                 Frost, Dispersion, TintAmount, Reflection, Gloss, GlossSharpness, CameraSyncAnimation];
 
         public override IEnumerable<string> CreateMaskExoFilter(
@@ -150,6 +180,7 @@ namespace LiquidGlass3D
             public Animation Height { get; } = new(240, 0, 100000);
             public Animation Thickness { get; } = new(60, 0, 100000);
             public Animation CornerRadius { get; } = new(30, 0, 100000);
+            public Animation Diameter { get; } = new(300, 0, 100000);
             public Animation RotationX { get; } = new(0, -100000, 100000);
             public Animation RotationY { get; } = new(0, -100000, 100000);
             public Animation RotationZ { get; } = new(0, -100000, 100000);
@@ -183,7 +214,7 @@ namespace LiquidGlass3D
             private static (Animation Shared, Animation Parameter)[] Pairs(SharedData shared, LiquidGlass3DParameter parameter) =>
             [
                 (shared.Width, parameter.Width), (shared.Height, parameter.Height), (shared.Thickness, parameter.Thickness),
-                (shared.CornerRadius, parameter.CornerRadius),
+                (shared.CornerRadius, parameter.CornerRadius), (shared.Diameter, parameter.Diameter),
                 (shared.RotationX, parameter.RotationX), (shared.RotationY, parameter.RotationY), (shared.RotationZ, parameter.RotationZ),
                 (shared.RefractiveIndex, parameter.RefractiveIndex), (shared.Distance, parameter.Distance),
                 (shared.Frost, parameter.Frost), (shared.Dispersion, parameter.Dispersion), (shared.TintAmount, parameter.TintAmount),

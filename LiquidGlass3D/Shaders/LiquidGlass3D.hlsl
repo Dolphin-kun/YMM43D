@@ -13,7 +13,7 @@ cbuffer GlassConstants : register(b1)
 };
 
 #define CornerRadius    GlassSize.w
-#define IsEllipsoid     GlassCamera.w
+#define IsSphere        GlassCamera.w
 #define RefractiveIndex GlassOptics.x
 #define BehindDistance  GlassOptics.y
 #define FrostAmount     GlassOptics.z
@@ -65,18 +65,14 @@ float RoundedBoxDistance(float3 p)
     return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0) - radius;
 }
 
-float EllipsoidDistance(float3 p)
+float SphereDistance(float3 p)
 {
-    float3 radius = max(GlassSize.xyz * 0.5, 1e-3);
-    float k0 = length(p / radius);
-    float k1 = length(p / (radius * radius));
-
-    return k0 * (k0 - 1.0) / max(k1, 1e-6);
+    return length(p) - GlassSize.x * 0.5;
 }
 
 float ShapeDistance(float3 p)
 {
-    return IsEllipsoid > 0.5 ? EllipsoidDistance(p) : RoundedBoxDistance(p);
+    return IsSphere > 0.5 ? SphereDistance(p) : RoundedBoxDistance(p);
 }
 
 float3 ShapeNormal(float3 p)
