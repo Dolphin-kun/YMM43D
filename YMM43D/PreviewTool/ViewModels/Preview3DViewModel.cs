@@ -22,6 +22,8 @@ namespace YMM43D.PreviewTool.ViewModels
     {
         private const int DefaultItemLength = 300;
 
+        private const double ClickSlop = 4;
+
         private readonly DisposeCollector disposer = new();
         private readonly Preview3DRenderer renderer = new();
         private readonly FreeCameraController freeCamera = new();
@@ -38,6 +40,7 @@ namespace YMM43D.PreviewTool.ViewModels
         private IItem? selectedMarker;
         private ImmutableList<IItem>? lastItems;
         private PreviewScene? preparedScene;
+        private Point? toggleClickAt;
 
         private bool drivesSceneCamera;
         private bool insertsKeyFrame;
@@ -392,7 +395,7 @@ namespace YMM43D.PreviewTool.ViewModels
             if (boundary)
                 SeparateHistory();
 
-            if (!HandleItemDrag(position, kind))
+            if (!HandleItemDrag(position, kind) && !HoldsToggleClick(position, kind))
             {
                 var modifiers = Keyboard.Modifiers;
 
@@ -411,7 +414,15 @@ namespace YMM43D.PreviewTool.ViewModels
             switch (kind)
             {
                 case D3D11Host.MouseEventKind.Down:
-                    if ((Keyboard.Modifiers & ModifierKeys.Alt) != 0)
+                    var modifiers = Keyboard.Modifiers;
+
+                    if ((modifiers & ModifierKeys.Control) != 0)
+                    {
+                        toggleClickAt = position;
+                        return false;
+                    }
+
+                    if ((modifiers & ModifierKeys.Alt) != 0)
                         return false;
 
                     return TryGrab(position);
@@ -431,13 +442,52 @@ namespace YMM43D.PreviewTool.ViewModels
             }
         }
 
+        private bool HoldsToggleClick(Point position, D3D11Host.MouseEventKind kind)
+        {
+            if (toggleClickAt is not { } pressedAt)
+                return false;
+
+            switch (kind)
+            {
+                case D3D11Host.MouseEventKind.Move:
+                    if ((position - pressedAt).Length <= ClickSlop)
+                        return true;
+
+                    toggleClickAt = null;
+                    return false;
+
+                case D3D11Host.MouseEventKind.Up:
+                    toggleClickAt = null;
+                    ToggleAt(position);
+                    return false;
+
+                case D3D11Host.MouseEventKind.Down:
+                    return false;
+
+                default:
+                    toggleClickAt = null;
+                    return false;
+            }
+        }
+
+        private void ToggleAt(Point position)
+        {
+            renderer.RequestPick(ToVector(position));
+            d3dHost?.RenderFrame();
+
+            if (renderer.TakePickResult() is not { } picked)
+                return;
+
+            Select(selection.Contains(picked.Item)
+                ? [.. selection.Where(item => item != picked.Item)]
+                : [.. selection, picked.Item]);
+        }
+
         private bool TryGrab(Point position)
         {
             var screen = ToVector(position);
-            var toggles = (Keyboard.Modifiers & ModifierKeys.Control) != 0;
 
-            if (!toggles
-                && renderer.PickGizmo(screen) is var grabbed and not GizmoHandle.None
+            if (renderer.PickGizmo(screen) is var grabbed and not GizmoHandle.None
                 && renderer.Gizmo is { } gizmo
                 && renderer.CreateRay(screen) is { } gizmoRay)
             {
@@ -452,8 +502,7 @@ namespace YMM43D.PreviewTool.ViewModels
                     return BeginItems(movable, movable[0], gizmo.Origin, grabbed, gizmoRay);
             }
 
-            if (!toggles
-                && renderer.PickMarker(screen) is { } placed
+            if (renderer.PickMarker(screen) is { } placed
                 && CanGrab(placed)
                 && renderer.CreateRay(screen) is { } markerRay)
             {
@@ -470,19 +519,7 @@ namespace YMM43D.PreviewTool.ViewModels
             if (renderer.TakePickResult() is not { } picked
                 || renderer.CreateRay(screen) is not { } ray)
             {
-                if (!toggles)
-                    ClearSelection();
-
                 return false;
-            }
-
-            if (toggles)
-            {
-                Select(selection.Contains(picked.Item)
-                    ? [.. selection.Where(item => item != picked.Item)]
-                    : [.. selection, picked.Item]);
-
-                return true;
             }
 
             if (!selection.Contains(picked.Item))

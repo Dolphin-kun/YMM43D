@@ -106,7 +106,7 @@ namespace YMM43D.PreviewTool
             if ((modifiers & ModifierKeys.Shift) != 0)
                 return DragMode.Pan;
 
-            if ((modifiers & ModifierKeys.Control) != 0)
+            if ((modifiers & ModifierKeys.Alt) != 0)
                 return DragMode.Roll;
 
             return DragMode.Rotate;
