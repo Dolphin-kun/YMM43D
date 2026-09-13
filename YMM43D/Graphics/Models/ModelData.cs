@@ -5,12 +5,17 @@ using YMM43D.Commons;
 
 namespace YMM43D.Graphics.Models
 {
-    public readonly record struct ModelPart(int IndexStart, int IndexCount, Vector4 Color, int Image);
+    public readonly record struct ModelPart(int IndexStart, int IndexCount, Vector4 Color, int Image, int Material);
 
     public sealed record ModelImage(int Width, int Height, byte[] Pixels);
 
-    public sealed class ModelData(Vertex[] vertices, uint[] indices, ModelPart[] parts, ModelImage[] images)
+    public sealed class ModelData(
+        Vertex[] vertices, uint[] indices, ModelPart[] parts, ModelImage[] images, string[] materials)
     {
+        public const string NoMaterial = "（材質なし）";
+
+        public string[] Materials { get; } = materials;
+
         public Vertex[] Vertices { get; } = vertices;
 
         public uint[] Indices { get; } = indices;
@@ -45,10 +50,13 @@ namespace YMM43D.Graphics.Models
         private readonly List<uint> indices = [];
         private readonly List<ModelPart> parts = [];
         private readonly List<ModelImage> images = [];
+        private readonly List<string> materials = [];
+        private readonly Dictionary<string, int> materialKeys = new(StringComparer.Ordinal);
 
         private int partStart;
         private Vector4 partColor = Vector4.One;
         private int partImage = -1;
+        private int partMaterial = -1;
 
         public int VertexCount => vertices.Count;
 
@@ -58,11 +66,17 @@ namespace YMM43D.Graphics.Models
             return images.Count - 1;
         }
 
-        public void BeginPart(Vector4 color, int image)
+        public void BeginPart(Vector4 color, int image, string key, string name)
         {
             EndPart();
             partColor = color;
             partImage = image;
+
+            if (!materialKeys.TryGetValue(key, out partMaterial))
+            {
+                materials.Add(name);
+                partMaterial = materialKeys[key] = materials.Count - 1;
+            }
         }
 
         public uint AddVertex(Vector3 position, Vector3 normal, Vector2 texCoord, Vector4 color)
@@ -94,13 +108,19 @@ namespace YMM43D.Graphics.Models
             if (indices.Count == 0)
                 throw new InvalidDataException("三角形が1つもありません。");
 
-            return new ModelData([.. vertices], [.. indices], [.. parts], [.. images]);
+            var used = parts.Select(part => part.Material).Distinct().Order().ToArray();
+            var renumbered = parts
+                .Select(part => part with { Material = Array.IndexOf(used, part.Material) })
+                .ToArray();
+
+            return new ModelData(
+                [.. vertices], [.. indices], renumbered, [.. images], [.. used.Select(index => materials[index])]);
         }
 
         private void EndPart()
         {
             if (indices.Count > partStart)
-                parts.Add(new ModelPart(partStart, indices.Count - partStart, partColor, partImage));
+                parts.Add(new ModelPart(partStart, indices.Count - partStart, partColor, partImage, partMaterial));
 
             partStart = indices.Count;
         }

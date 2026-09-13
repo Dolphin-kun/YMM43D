@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.ComponentModel.DataAnnotations;
 using System.Numerics;
 using System.Windows.Media;
@@ -64,8 +65,59 @@ namespace YMM43D.Project.Model
         [ShowPropertyEditorWhen(nameof(IsUnlit), false)]
         public Animation GlossSharpness { get; } = new(50, 0, 100);
 
+        [Display(AutoGenerateField = true)]
+        public ImmutableList<ModelMaterialSlot> Materials { get => materials; set => Set(ref materials, value); }
+        private ImmutableList<ModelMaterialSlot> materials = [];
+
         public Model3DParameter(SharedDataStore? sharedData) : base(sharedData)
         {
+            SubscribeChildUndoRedoable(Materials);
+        }
+
+        public override async ValueTask EndEditAsync()
+        {
+            await base.EndEditAsync();
+
+            SyncMaterials();
+        }
+
+        private void SyncMaterials()
+        {
+            if (Model is not { } model)
+                return;
+
+            if (Materials.Select(slot => slot.Name).SequenceEqual(model.Materials))
+                return;
+
+            var remaining = Materials.ToList();
+
+            Materials = [.. model.Materials.Select(name =>
+            {
+                var kept = remaining.FirstOrDefault(slot => slot.Name == name);
+
+                if (kept is not null)
+                    remaining.Remove(kept);
+
+                return new ModelMaterialSlot(name, kept?.Texture ?? string.Empty);
+            })];
+        }
+
+        internal IReadOnlyList<ModelImage?> GetReplacements(ModelData model)
+        {
+            var replacements = new ModelImage?[model.Materials.Length];
+            var slots = Materials;
+
+            for (var i = 0; i < replacements.Length; i++)
+            {
+                var slot = i < slots.Count && slots[i].Name == model.Materials[i]
+                    ? slots[i]
+                    : slots.FirstOrDefault(candidate => candidate.Name == model.Materials[i]);
+
+                if (slot is { Texture.Length: > 0 })
+                    replacements[i] = ModelLibrary.FindImage(slot.Texture);
+            }
+
+            return replacements;
         }
 
         public Model3DParameter() : this(null)
@@ -119,6 +171,8 @@ namespace YMM43D.Project.Model
             public Animation GlossSharpness { get; } = new(50, 0, 100);
             public Color Tint { get; set; } = Colors.White;
             public bool IsUnlit { get; set; }
+            public ImmutableList<string> MaterialNames { get; set; } = [];
+            public ImmutableList<string> MaterialTextures { get; set; } = [];
 
             public SharedData(Model3DParameter parameter)
             {
@@ -131,6 +185,8 @@ namespace YMM43D.Project.Model
                 GlossSharpness.CopyFrom(parameter.GlossSharpness);
                 Tint = parameter.Tint;
                 IsUnlit = parameter.IsUnlit;
+                MaterialNames = [.. parameter.Materials.Select(slot => slot.Name)];
+                MaterialTextures = [.. parameter.Materials.Select(slot => slot.Texture)];
             }
 
             public void CopyTo(Model3DParameter parameter)
@@ -144,6 +200,8 @@ namespace YMM43D.Project.Model
                 parameter.GlossSharpness.CopyFrom(GlossSharpness);
                 parameter.Tint = Tint;
                 parameter.IsUnlit = IsUnlit;
+                parameter.Materials = [.. MaterialNames.Select((name, i) =>
+                    new ModelMaterialSlot(name, i < MaterialTextures.Count ? MaterialTextures[i] : string.Empty))];
             }
         }
     }

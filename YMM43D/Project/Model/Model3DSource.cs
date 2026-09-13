@@ -25,7 +25,7 @@ namespace YMM43D.Project.Model
                 world, item.Opacity, parameter.IsUnlit, item.AlphaCutoff, parameter.GetGloss(item.Time));
 
             var shared = resources.Get(render.Device);
-            var mesh = shared.GetMesh(render.Context, model, parameter.Tint.ToVector4());
+            var mesh = shared.GetMesh(render.Context, model, parameter.Tint.ToVector4(), parameter.GetReplacements(model));
             var states = RenderStates.For(render.Device);
 
             foreach (var (part, texture) in mesh.Parts)
@@ -92,14 +92,20 @@ namespace YMM43D.Project.Model
                 return white = device.CreateShaderResourceView(whiteTexture);
             }
 
-            public ModelMesh GetMesh(ID3D11DeviceContext context, ModelData model, Vector4 tint)
+            public ModelMesh GetMesh(
+                ID3D11DeviceContext context, ModelData model, Vector4 tint, IReadOnlyList<ModelImage?> replacements)
             {
-                if (mesh is { } existing && ReferenceEquals(existing.Source, model) && existing.Tint == tint)
+                if (mesh is { } existing
+                    && ReferenceEquals(existing.Source, model)
+                    && existing.Tint == tint
+                    && existing.Replacements.SequenceEqual(replacements, ReferenceEqualityComparer.Instance))
+                {
                     return existing;
+                }
 
                 mesh?.Dispose();
 
-                return mesh = new ModelMesh(device, context, model, tint);
+                return mesh = new ModelMesh(device, context, model, tint, replacements);
             }
 
             public void Dispose()

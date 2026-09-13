@@ -11,6 +11,8 @@ namespace YMM43D.Graphics.Models
 
         private static readonly List<(string Key, ModelData? Model)> cache = [];
 
+        private static readonly List<(string Key, ModelImage? Image)> imageCache = [];
+
         public static bool IsSupported(string? path)
             => Path.GetExtension(path ?? string.Empty).ToLowerInvariant() is ".obj" or ".gltf" or ".glb";
 
@@ -19,6 +21,20 @@ namespace YMM43D.Graphics.Models
             if (string.IsNullOrWhiteSpace(path) || !IsSupported(path))
                 return null;
 
+            return Cached(cache, path, MaxCached, TryLoad);
+        }
+
+        public static ModelImage? FindImage(string? path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                return null;
+
+            return Cached(imageCache, path, MaxCached * 4, TryLoadImage);
+        }
+
+        private static T? Cached<T>(List<(string Key, T? Value)> entries, string path, int limit, Func<string, T?> load)
+            where T : class
+        {
             string key;
 
             try
@@ -37,29 +53,42 @@ namespace YMM43D.Graphics.Models
 
             lock (gate)
             {
-                var index = cache.FindIndex(entry => entry.Key == key);
+                var index = entries.FindIndex(entry => entry.Key == key);
 
                 if (index >= 0)
                 {
-                    var hit = cache[index];
-                    cache.RemoveAt(index);
-                    cache.Add(hit);
-                    return hit.Model;
+                    var hit = entries[index];
+                    entries.RemoveAt(index);
+                    entries.Add(hit);
+                    return hit.Value;
                 }
             }
 
-            var model = TryLoad(path);
+            var value = load(path);
 
             lock (gate)
             {
-                cache.RemoveAll(entry => entry.Key == key);
-                cache.Add((key, model));
+                entries.RemoveAll(entry => entry.Key == key);
+                entries.Add((key, value));
 
-                while (cache.Count > MaxCached)
-                    cache.RemoveAt(0);
+                while (entries.Count > limit)
+                    entries.RemoveAt(0);
             }
 
-            return model;
+            return value;
+        }
+
+        private static ModelImage? TryLoadImage(string path)
+        {
+            try
+            {
+                return ModelImageDecoder.DecodeFile(path);
+            }
+            catch (Exception error)
+            {
+                Trace.TraceError($"[YMM43D] 画像 {path} を読み込めませんでした。{error.Message}");
+                return null;
+            }
         }
 
         public static ModelData Load(string path) => Path.GetExtension(path).ToLowerInvariant() switch

@@ -25,7 +25,7 @@ namespace YMM43D.Graphics.Models
             var shared = new Dictionary<Corner, uint>();
             var corners = new List<Corner>();
 
-            builder.BeginPart(Vector4.One, -1);
+            builder.BeginPart(Vector4.One, -1, ModelData.NoMaterial, ModelData.NoMaterial);
 
             foreach (var raw in File.ReadLines(path))
             {
@@ -62,7 +62,8 @@ namespace YMM43D.Graphics.Models
                         var name = line[parts[0].Length..].Trim();
                         var material = materials.TryGetValue(name, out var found) ? found : new Material(Vector4.One, null);
 
-                        builder.BeginPart(material.Color, ImageOf(material.Texture, directory, images, builder));
+                        builder.BeginPart(
+                            material.Color, ImageOf(material.Texture, directory, images, builder), name, name);
                         shared.Clear();
                         break;
 

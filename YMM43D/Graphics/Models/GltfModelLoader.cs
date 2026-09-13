@@ -188,8 +188,9 @@ namespace YMM43D.Graphics.Models
                         : [.. Enumerable.Range(0, count).Select(index => (uint)index)];
 
                     var (color, image) = ReadMaterial(primitive);
+                    var (key, name) = MaterialName(primitive);
 
-                    builder.BeginPart(color, image);
+                    builder.BeginPart(color, image, key, name);
 
                     var start = (uint)builder.VertexCount;
 
@@ -237,6 +238,21 @@ namespace YMM43D.Graphics.Models
                 builder.SetNormal(a, normal);
                 builder.SetNormal(b, normal);
                 builder.SetNormal(c, normal);
+            }
+
+            private (string Key, string Name) MaterialName(JsonElement primitive)
+            {
+                if (!primitive.TryGetProperty("material", out var index) || !root.TryGetProperty("materials", out var materials))
+                    return (ModelData.NoMaterial, ModelData.NoMaterial);
+
+                var number = index.GetInt32();
+                var material = materials[number];
+
+                var name = material.TryGetProperty("name", out var given) && given.GetString() is { Length: > 0 } text
+                    ? text
+                    : $"材質 {number + 1}";
+
+                return ($"#{number}", name);
             }
 
             private (Vector4 Color, int Image) ReadMaterial(JsonElement primitive)

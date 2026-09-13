@@ -15,12 +15,20 @@ namespace YMM43D.Graphics.Models
 
         public Vector4 Tint { get; }
 
+        public IReadOnlyList<ModelImage?> Replacements { get; }
+
         public IReadOnlyList<(IMesh Mesh, ID3D11ShaderResourceView? Texture)> Parts { get; }
 
-        public ModelMesh(ID3D11Device device, ID3D11DeviceContext context, ModelData source, Vector4 tint)
+        public ModelMesh(
+            ID3D11Device device,
+            ID3D11DeviceContext context,
+            ModelData source,
+            Vector4 tint,
+            IReadOnlyList<ModelImage?>? replacements = null)
         {
             Source = source;
             Tint = tint;
+            Replacements = replacements ?? [];
 
             var vertices = (Vertex[])source.Vertices.Clone();
             var painted = new bool[vertices.Length];
@@ -51,6 +59,14 @@ namespace YMM43D.Graphics.Models
             for (var i = 0; i < textures.Length; i++)
                 textures[i] = CreateTexture(device, context, source.Images[i]);
 
+            var replaced = new ID3D11ShaderResourceView?[source.Materials.Length];
+
+            for (var i = 0; i < replaced.Length && i < Replacements.Count; i++)
+            {
+                if (Replacements[i] is { } image)
+                    replaced[i] = CreateTexture(device, context, image);
+            }
+
             var parts = new List<(IMesh, ID3D11ShaderResourceView?)>();
 
             foreach (var part in source.Parts)
@@ -59,7 +75,9 @@ namespace YMM43D.Graphics.Models
                 var mesh = new PartMesh(vertexBuffer, D3D11Buffers.Create(device, indices, BindFlags.IndexBuffer), indices.Length);
                 disposer.Collect(mesh);
 
-                parts.Add((mesh, part.Image >= 0 ? textures[part.Image] : null));
+                var texture = part.Material >= 0 && part.Material < replaced.Length ? replaced[part.Material] : null;
+
+                parts.Add((mesh, texture ?? (part.Image >= 0 ? textures[part.Image] : null)));
             }
 
             Parts = parts;
