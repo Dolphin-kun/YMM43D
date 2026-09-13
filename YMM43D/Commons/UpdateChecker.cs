@@ -8,7 +8,7 @@ namespace YMM43D.Commons
 {
     public sealed class UpdateChecker : Bindable
     {
-        private const string PostId = "";
+        private const string PostId = "1789299160303180";
 
         private static readonly HttpClient httpClient = new() { Timeout = TimeSpan.FromSeconds(10) };
 
