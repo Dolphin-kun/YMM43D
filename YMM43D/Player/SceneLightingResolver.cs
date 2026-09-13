@@ -29,12 +29,12 @@ namespace YMM43D.Player
             foreach (var item in items)
             {
                 if (!LayerVisibility.IsShown(timeline, item)
-                    || frame < item.Frame || frame >= item.Frame + item.Length)
+                    || !FrameContext.IsAlive(item, frame))
                 {
                     continue;
                 }
 
-                var itemTime = new FrameContext(frame - item.Frame, Math.Max(1, item.Length), fps);
+                var itemTime = FrameContext.ForItem(item, frame, fps);
 
                 if (item is ISceneLightSource source)
                     lights.Add(source.GetLight(itemTime));
@@ -61,8 +61,7 @@ namespace YMM43D.Player
             if (environmentItem is not ISceneEnvironment environment)
                 return new SceneLighting(lights, SceneLighting.Default.Ambient, SceneFog.None);
 
-            var time = new FrameContext(
-                frame - environmentItem.Frame, Math.Max(1, environmentItem.Length), fps);
+            var time = FrameContext.ForItem(environmentItem, frame, fps);
 
             return new SceneLighting(lights, environment.GetAmbient(time), environment.GetFog(time));
         }

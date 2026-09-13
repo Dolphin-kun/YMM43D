@@ -12,6 +12,7 @@ namespace YMM43D.Graphics
         private readonly RenderStates states;
 
         private ID3D11Buffer? extraBuffer;
+        private Type? extraType;
 
         public IMesh? Mesh { get; }
 
@@ -49,10 +50,13 @@ namespace YMM43D.Graphics
             IMesh? mesh = null)
             where TExtra : unmanaged
         {
-            if (extraBuffer is null)
+            if (extraBuffer is null || extraType != typeof(TExtra))
             {
+                disposer.RemoveAndDispose(ref extraBuffer);
+
                 extraBuffer = D3D11Buffers.CreateConstantBuffer<TExtra>(device);
                 disposer.Collect(extraBuffer);
+                extraType = typeof(TExtra);
             }
 
             context.UpdateSubresource(in extra, extraBuffer);

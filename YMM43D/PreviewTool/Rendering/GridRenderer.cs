@@ -1,10 +1,9 @@
 ﻿using System.Numerics;
 using System.Runtime.InteropServices;
-using Vortice.Direct3D11;
+using YMM43D.Graphics.Materials;
 using YMM43D.Graphics.Meshes;
 using YMM43D.Graphics;
 using YMM43D.Commons;
-using YukkuriMovieMaker.Commons;
 
 namespace YMM43D.PreviewTool.Rendering
 {
@@ -25,7 +24,7 @@ namespace YMM43D.PreviewTool.Rendering
                 device => new RenderPipeline<GridConstants>(
                     device,
                     new GroundPlaneMesh(device),
-                    new GridMaterial(device)));
+                    new ShaderMaterial(device, typeof(GridRenderer).Assembly, "Grid.hlsl")));
         }
 
         public void Draw(in Render3DContext render, Vector3 cameraPosition)
@@ -44,31 +43,5 @@ namespace YMM43D.PreviewTool.Rendering
         }
 
         public void Dispose() => pipelines.Dispose();
-    }
-
-    internal sealed class GridMaterial : IMaterial
-    {
-        private readonly DisposeCollector disposer = new();
-
-        public ID3D11VertexShader VertexShader { get; }
-        public ID3D11PixelShader PixelShader { get; }
-        public byte[] VertexShaderBytecode { get; }
-
-        private const string Shader = "Grid.hlsl";
-
-        public GridMaterial(ID3D11Device device)
-        {
-            var assembly = typeof(GridMaterial).Assembly;
-
-            VertexShaderBytecode = ShaderLibrary.Compile(assembly, Shader, "VSMain", "vs_5_0");
-            VertexShader = device.CreateVertexShader(VertexShaderBytecode);
-            disposer.Collect(VertexShader);
-
-            PixelShader = device.CreatePixelShader(
-                ShaderLibrary.Compile(assembly, Shader, "PSMain", "ps_5_0"));
-            disposer.Collect(PixelShader);
-        }
-
-        public void Dispose() => disposer.Dispose();
     }
 }

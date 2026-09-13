@@ -22,7 +22,7 @@ namespace YMM43D.Commons
 
             var degrees = Math.Clamp(camera.FieldOfView, MinFieldOfViewDegrees, MaxFieldOfViewDegrees);
 
-            return screenHeight / (2f * MathF.Tan(Rotation3D.ToRadians(degrees) / 2f));
+            return screenHeight / (2f * MathF.Tan(float.DegreesToRadians(degrees) / 2f));
         }
 
         public static Matrix4x4 GetTangentProjection()

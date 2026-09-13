@@ -38,7 +38,7 @@ namespace PixelPoints3D
                 axis,
                 amount,
                 MathF.Max(WorldScale.ToWorld(effect.DeformPeriod.GetFloat(time)), 1e-4f),
-                Rotation3D.ToRadians(effect.DeformPhase.GetFloat(time)));
+                float.DegreesToRadians(effect.DeformPhase.GetFloat(time)));
         }
 
         public Vector3 Expand(Vector3 half) => Kind switch

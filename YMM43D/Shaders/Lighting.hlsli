@@ -3,8 +3,6 @@
 
 #include "Scene.hlsli"
 
-// 置いてある光源（点光源とスポット）の、その場所での強さ。
-// ついでに、そこから光源へ向かう向きも返す。
 float LightFalloff(Light light, float3 world, out float3 toLight)
 {
     float3 offset = light.Vector.xyz - world;
@@ -18,7 +16,6 @@ float LightFalloff(Light light, float3 world, out float3 toLight)
     if (light.Vector.w < 1.5)
         return fade;
 
-    // 円錐の外側から内側へ向かって明るくする。
     float aligned = dot(-toLight, light.Cone.xyz);
     float cone = saturate((aligned - light.Cone.w) / max(light.Edge.x - light.Cone.w, 1e-4));
 

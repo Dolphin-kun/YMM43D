@@ -51,7 +51,6 @@ namespace YMM43D.PreviewTool.Rendering
             _ => [],
         };
 
-        // 光の向きを +Z としたときの形。実際の向きは行列で合わせる。
         private static Vector3[] Sun()
         {
             var lines = new List<Vector3>();
@@ -75,7 +74,6 @@ namespace YMM43D.PreviewTool.Rendering
             return [.. lines];
         }
 
-        // 先端が原点、+Z へ長さ 1・半径 1 の円錐。広がりと届く距離は行列で与える。
         private static Vector3[] Cone()
         {
             var lines = new List<Vector3>();
@@ -134,7 +132,6 @@ namespace YMM43D.PreviewTool.Rendering
             return (right, Vector3.Cross(forward, right));
         }
 
-        // ローカルの +Z が渡した向きを指すようにする回転。
         private static Matrix4x4 Aim(in Vector3 direction)
         {
             if (direction.LengthSquared() < 1e-8f)
@@ -157,7 +154,7 @@ namespace YMM43D.PreviewTool.Rendering
 
             var length = MathF.Max(marker.Reach, 0.01f);
             var spread = Math.Clamp(marker.Spread, SceneLight.MinSpread, SceneLight.MaxSpread);
-            var radius = length * MathF.Tan(Rotation3D.ToRadians(spread));
+            var radius = length * MathF.Tan(float.DegreesToRadians(spread));
 
             return Matrix4x4.CreateScale(radius, radius, length)
                 * Aim(marker.Direction)

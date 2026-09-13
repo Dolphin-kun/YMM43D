@@ -3,17 +3,11 @@ using System.Reflection;
 using Vortice.Direct3D11;
 using YMM43D.Commons;
 using YMM43D.Graphics;
+using YMM43D.Graphics.Materials;
 using YukkuriMovieMaker.Commons;
 
 namespace YMM43D.Plugin
 {
-    // 板をどう動かすかだけが違う変形エフェクトの、共通の土台。
-    //
-    // 派生側が用意するのは4つだけ。
-    //   ShaderName    どの hlsl を使うか
-    //   GetGrid       板を何マスに割るか
-    //   GetConstants  シェーダーへ渡す値（b1）
-    //   GetExtent     動いた先がどこまで届くか
     public abstract class Deform3DProcessorBase<TConstants>
         : VideoEffect3DProcessorBase where TConstants : unmanaged
     {
@@ -38,8 +32,6 @@ namespace YMM43D.Plugin
 
         protected abstract DeformExtent GetExtent(in FrameContext time);
 
-        // 板の奥行きは、画像の大きさに合わせて拡大する。そうしないと、
-        // 同じ「曲げ 90 度」でも、大きい画像ほど平べったく見えてしまう。
         private float DepthScale => TryGetSize(out var size, out _)
             ? WorldScale.ToWorld(size.X)
             : 1f;
@@ -97,7 +89,7 @@ namespace YMM43D.Plugin
                 this.device = device;
 
                 Pipeline = new RenderPipeline<TransformConstants>(
-                    device, DeformVertex.InputElements, new DeformMaterial(device, assembly, shader));
+                    device, DeformVertex.InputElements, new ShaderMaterial(device, assembly, shader));
             }
 
             public DeformMesh GetMesh(in DeformGrid grid)
@@ -119,7 +111,5 @@ namespace YMM43D.Plugin
         }
     }
 
-    // 変形したあと、板が元の四角からどれだけはみ出すか。
-    // Margin は板の幅を 1 とした横縦のはみ出し、Depth は同じ物差しでの奥行き。
     public readonly record struct DeformExtent(float Margin, float Depth);
 }

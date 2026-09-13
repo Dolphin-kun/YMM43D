@@ -34,10 +34,6 @@ PS_IN VSMain(VS_IN input)
 
 float4 Shade(float4 color, PS_IN input)
 {
-    // 透けている画素を捨てる。捨てないと板の四角いままに深度が書かれ、
-    // 文字のまわりの何も無いところが後ろの物を隠してしまう。
-    // AlphaCutoff は深度だけを書くときに上げる（画素の色は同じでも、
-    // 隠すかどうかは輪郭で決めたいため）。既定の 0 では誰も捨てない。
     clip(color.a - AlphaCutoff);
 
     color.rgb = ApplyLight(color.rgb, input.Nrm, input.World);

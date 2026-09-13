@@ -19,7 +19,6 @@ namespace YMM43D.Player
         private readonly ID2D1CommandList?[] commandLists = new ID2D1CommandList?[CommandListRetention];
         private int commandListIndex;
 
-        // 1コマにアイテムの数だけ通るので、置き場所を覚えておく入れ物は使い回す。
         private readonly ID3D11RenderTargetView?[] previousTargets = new ID3D11RenderTargetView?[1];
         private Viewport[] previousViewports = new Viewport[8];
 
@@ -75,7 +74,7 @@ namespace YMM43D.Player
                 try
                 {
                     var lit = SceneShadows.Build(
-                        lease.Device, context, lighting ?? SceneLighting.Default, shadowCasters);
+                        lease.Device, context, lighting ?? SceneLighting.Default, shadowCasters, this);
 
                     context.OMSetRenderTargets(surface.RenderTargetView, surface.DepthStencilView);
                     context.ClearRenderTargetView(surface.RenderTargetView, new Color4(0, 0, 0, 0));

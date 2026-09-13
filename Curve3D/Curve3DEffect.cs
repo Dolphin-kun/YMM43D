@@ -87,18 +87,16 @@ namespace Curve3D
 
         protected override CurveConstants GetConstants(in FrameContext time) => new()
         {
-            BendRadians = Rotation3D.ToRadians(effect.BendAngle.GetFloat(time)),
-            TwistRadians = Rotation3D.ToRadians(effect.TwistAngle.GetFloat(time)),
-            AxisRadians = Rotation3D.ToRadians(effect.AxisAngle.GetFloat(time)),
+            BendRadians = float.DegreesToRadians(effect.BendAngle.GetFloat(time)),
+            TwistRadians = float.DegreesToRadians(effect.TwistAngle.GetFloat(time)),
+            AxisRadians = float.DegreesToRadians(effect.AxisAngle.GetFloat(time)),
             Anchor = effect.Anchor.GetFloat(time) / 100f - 0.5f,
         };
 
         protected override DeformExtent GetExtent(in FrameContext time)
         {
-            var bend = MathF.Abs(Rotation3D.ToRadians(effect.BendAngle.GetFloat(time)));
+            var bend = MathF.Abs(float.DegreesToRadians(effect.BendAngle.GetFloat(time)));
 
-            // 円弧に置き換えたときの半径。曲げが浅いと跳ね上がるので、
-            // 平らなままの大きさで頭を打たせる。
             var reach = bend > 1e-4f ? MathF.Min(2f / bend, 1.5f) : 0.75f;
 
             return new DeformExtent(reach, reach);

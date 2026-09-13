@@ -72,7 +72,6 @@ namespace YMM43D.Plugin
             DrawCount = indices.Length;
         }
 
-        // つながった1枚の板。頂点を共有するので、曲げても継ぎ目が出ない。
         private static (DeformVertex[] Vertices, uint[] Indices) BuildSheet(in DeformGrid grid)
         {
             var across = grid.X + 1;
@@ -106,7 +105,6 @@ namespace YMM43D.Plugin
             return (vertices, indices);
         }
 
-        // 1マスずつ切り離した板。破片ごとに別々へ動かせる。
         private static (DeformVertex[] Vertices, uint[] Indices) BuildPieces(in DeformGrid grid)
         {
             var quads = grid.X * grid.Y;
@@ -148,7 +146,6 @@ namespace YMM43D.Plugin
             return new DeformVertex(ToPlane(uv), uv, piece);
         }
 
-        // 画像の位置（0〜1、下向き）を板の上の位置（-0.5〜0.5、上向き）に直す。
         private static Vector3 ToPlane(in Vector2 uv) => new(uv.X - 0.5f, 0.5f - uv.Y, 0f);
 
         private static int AddQuad(uint[] indices, int at, uint topLeft, uint topRight, uint bottomLeft, uint bottomRight)

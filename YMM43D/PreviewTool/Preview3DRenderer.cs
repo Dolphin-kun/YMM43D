@@ -16,6 +16,8 @@ namespace YMM43D.PreviewTool
 
         private const byte PickAlphaThreshold = 8;
 
+        private static readonly GizmoHandle[] MoveHandles = [GizmoHandle.MoveX, GizmoHandle.MoveY, GizmoHandle.MoveZ];
+
         private readonly GridRenderer grid = new();
         private readonly CameraGizmoRenderer cameraGizmo = new();
         private readonly MarkerRenderer markers = new();
@@ -44,6 +46,7 @@ namespace YMM43D.PreviewTool
         private ID3D11Texture2D? pickSurface;
         private ID3D11RenderTargetView? pickView;
         private ID3D11Texture2D? pickStaging;
+        private nint pickDeviceKey;
 
         public I3DProvider DefaultProvider => flatItemProvider;
 
@@ -102,8 +105,6 @@ namespace YMM43D.PreviewTool
             var projection = SceneProjection.GetProjectionMatrix(
                 (float)width / Math.Max(1, height), scene.ScreenHeight, pixelsPerTangent);
 
-            // 影を落とすのは、この場に置かれている 3D のものすべて。
-            // 置き場所は、いま描くのに使う値をそのまま渡す。
             var casters = new SceneDepthCollector.Occluder[scene.Items.Count];
             for (var i = 0; i < scene.Items.Count; i++)
             {
@@ -111,7 +112,7 @@ namespace YMM43D.PreviewTool
                     scene.Items[i].Provider, drawContexts[i].World, drawContexts[i].Time);
             }
 
-            var lit = SceneShadows.Build(device, context, scene.Lighting, casters);
+            var lit = SceneShadows.Build(device, context, scene.Lighting, casters, this);
 
             var render = new Render3DContext(
                 device, context, viewPose.ViewMatrix, projection, lit).BindLights();
@@ -321,7 +322,7 @@ namespace YMM43D.PreviewTool
             var found = GizmoHandle.None;
             var nearest = TransformGizmo.GrabThreshold;
 
-            foreach (var handle in new[] { GizmoHandle.MoveX, GizmoHandle.MoveY, GizmoHandle.MoveZ })
+            foreach (var handle in MoveHandles)
             {
                 if (ToScreen(gizmo.AxisEnd(handle)) is not { } end)
                     continue;
@@ -492,8 +493,10 @@ namespace YMM43D.PreviewTool
 
         private void EnsurePickSurface(ID3D11Device device)
         {
-            if (pickSurface is not null)
+            if (pickSurface is not null && pickDeviceKey == device.NativePointer)
                 return;
+
+            ReleasePickSurface();
 
             var description = new Texture2DDescription
             {
@@ -515,9 +518,10 @@ namespace YMM43D.PreviewTool
                 BindFlags = BindFlags.None,
                 CPUAccessFlags = CpuAccessFlags.Read,
             });
+            pickDeviceKey = device.NativePointer;
         }
 
-        public void Dispose()
+        private void ReleasePickSurface()
         {
             pickView?.Dispose();
             pickView = null;
@@ -525,6 +529,12 @@ namespace YMM43D.PreviewTool
             pickStaging = null;
             pickSurface?.Dispose();
             pickSurface = null;
+            pickDeviceKey = nint.Zero;
+        }
+
+        public void Dispose()
+        {
+            ReleasePickSurface();
 
             grid.Dispose();
             cameraGizmo.Dispose();

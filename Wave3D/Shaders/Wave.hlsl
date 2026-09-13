@@ -15,7 +15,6 @@ cbuffer WaveConstants : register(b1)
 
 float3 Deform(float3 local, float3 piece)
 {
-    // 波の進む向きに沿った距離。波紋のときは中心からの距離。
     float travelled = Ripple
         ? length(local.xy)
         : local.x * cos(AxisRadians) + local.y * sin(AxisRadians);

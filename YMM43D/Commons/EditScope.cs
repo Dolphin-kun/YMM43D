@@ -1,3 +1,4 @@
+using System.Numerics;
 using YukkuriMovieMaker.Commons;
 
 namespace YMM43D.Commons
@@ -14,6 +15,15 @@ namespace YMM43D.Commons
                 animation.NudgeAt(delta, Frame);
             else
                 animation.Nudge(delta);
+        }
+
+        public void NudgePosition(Animation x, Animation y, Animation z, in Vector3 worldShift)
+        {
+            var pixels = WorldScale.ToPixelOffset(worldShift);
+
+            Nudge(x, pixels.X);
+            Nudge(y, pixels.Y);
+            Nudge(z, pixels.Z);
         }
     }
 }

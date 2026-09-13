@@ -16,7 +16,7 @@ namespace YMM43D.PreviewTool
 
         private readonly I3DProvider fallbackProvider = fallbackProvider;
 
-        private (int Width, int Height, int Fps, int Frame, int Length) lastSignature;
+        private (Guid Timeline, int Width, int Height, int Fps, int Frame, int Length) lastSignature;
 
         public TimelineSourceDescription? SourceDescription { get; private set; }
 
@@ -25,7 +25,7 @@ namespace YMM43D.PreviewTool
         public void UpdateSource(Timeline timeline, TimelineToolInfo toolInfo)
         {
             var info = timeline.VideoInfo;
-            var signature = (info.Width, info.Height, info.FPS, timeline.CurrentFrame, timeline.Length);
+            var signature = (timeline.ID, info.Width, info.Height, info.FPS, timeline.CurrentFrame, timeline.Length);
 
             if (SourceDescription is not null && signature == lastSignature)
                 return;
@@ -53,13 +53,13 @@ namespace YMM43D.PreviewTool
                 .OfType<IVideoItem>()
                 .Where(item => !IsComposite(item))
                 .Where(item => LayerVisibility.IsShown(timeline, item))
-                .Where(item => frame >= item.Frame && frame < item.Frame + item.Length)
+                .Where(item => FrameContext.IsAlive(item, frame))
                 .OrderBy(item => item.Layer);
 
             foreach (var item in visible)
             {
                 foreach (var (provider, effects) in FindProviders(item))
-                    updated.Add(new PreviewItem(provider, effects, item, item.Frame, item.Length));
+                    updated.Add(new PreviewItem(provider, effects, item));
             }
 
             Items = updated;

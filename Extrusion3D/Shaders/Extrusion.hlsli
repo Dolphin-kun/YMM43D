@@ -4,7 +4,6 @@
 #include "../../YMM43D/Shaders/Lighting.hlsli"
 #include "../../YMM43D/Shaders/Texture.hlsli"
 
-// このエフェクトだけの値。場（b0）には触らない。
 cbuffer ExtrusionConstants : register(b1)
 {
     float4 SideColor;

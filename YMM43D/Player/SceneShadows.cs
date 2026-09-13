@@ -14,34 +14,26 @@ namespace YMM43D.Player
 
         private static readonly DeviceResourceCache<ShadowCache> caches = new(_ => new ShadowCache());
 
-        // 光源から場をもう一度描いて、いちばん手前にある物までの距離を板に残す。
-        // 影を落とす光には板の番号と行列を持たせて返す。
         public static SceneLighting Build(
             ID3D11Device device,
             ID3D11DeviceContext context,
             SceneLighting lighting,
-            IReadOnlyList<SceneDepthCollector.Occluder> casters)
+            IReadOnlyList<SceneDepthCollector.Occluder> casters,
+            object requester)
         {
-            if (casters.Count == 0)
+            if (casters.Count == 0 || !WantsShadow(lighting.Lights))
                 return lighting;
 
             var lights = lighting.Lights;
-
-            if (!lights.Any(light => light.Shadow.IsWanted && light.CanCastShadow))
-                return lighting;
-
             var maps = ShadowMapArray.For(device);
             var cache = caches.Get(device);
 
-            // 場も光も動いていなければ、さっき描いた板をそのまま使う。
-            // 1コマの中では、どのアイテムを描くときも同じ板でよい。
-            if (cache.Matches(lighting, casters) && cache.Result is { } reused)
+            if (cache.TryReuse(lighting, casters, requester) is { } reused)
             {
                 maps.Bind(context);
                 return reused;
             }
 
-            // 描く先の板を、同時に読んでいる状態にしない。
             ShadowMapArray.Unbind(context);
 
             var bounds = Cover(casters);
@@ -86,19 +78,40 @@ namespace YMM43D.Player
 
             var built = new SceneLighting(placed, lighting.Ambient, lighting.Fog);
 
-            cache.Remember(lighting, casters, built);
+            cache.Remember(lighting, casters, built, requester);
 
             return built;
         }
 
+        private static bool WantsShadow(IReadOnlyList<SceneLight> lights)
+        {
+            foreach (var light in lights)
+            {
+                if (light.Shadow.IsWanted && light.CanCastShadow)
+                    return true;
+            }
+
+            return false;
+        }
+
         private sealed class ShadowCache : IDisposable
         {
+            private readonly HashSet<object> served = new(ReferenceEqualityComparer.Instance);
+
             private SceneLighting? source;
             private SceneDepthCollector.Occluder[] casters = [];
+            private SceneLighting? result;
 
-            public SceneLighting? Result { get; private set; }
+            public SceneLighting? TryReuse(
+                SceneLighting lighting, IReadOnlyList<SceneDepthCollector.Occluder> current, object requester)
+            {
+                if (result is null || !Matches(lighting, current) || !served.Add(requester))
+                    return null;
 
-            public bool Matches(SceneLighting lighting, IReadOnlyList<SceneDepthCollector.Occluder> current)
+                return result;
+            }
+
+            private bool Matches(SceneLighting lighting, IReadOnlyList<SceneDepthCollector.Occluder> current)
             {
                 if (source is null || !source.NearlyEquals(lighting) || casters.Length != current.Count)
                     return false;
@@ -119,18 +132,22 @@ namespace YMM43D.Player
             public void Remember(
                 SceneLighting lighting,
                 IReadOnlyList<SceneDepthCollector.Occluder> current,
-                SceneLighting built)
+                SceneLighting built,
+                object requester)
             {
                 source = lighting;
                 casters = [.. current];
-                Result = built;
+                result = built;
+                served.Clear();
+                served.Add(requester);
             }
 
             public void Dispose()
             {
                 source = null;
                 casters = [];
-                Result = null;
+                result = null;
+                served.Clear();
             }
         }
 
@@ -168,7 +185,6 @@ namespace YMM43D.Player
             }
         }
 
-        // 影を落とすものすべてを包む箱。平行光の写す範囲を決めるのに使う。
         public static WorldBounds Cover(IReadOnlyList<SceneDepthCollector.Occluder> casters)
         {
             var min = new Vector3(float.MaxValue);
@@ -204,7 +220,6 @@ namespace YMM43D.Player
             };
         }
 
-        // 平行光には置き場所が無いので、場を包む球をちょうど収める箱で写す。
         private static bool TryLookAlong(
             in SceneLight light, in WorldBounds cover, out Matrix4x4 view, out Matrix4x4 projection)
         {
@@ -233,7 +248,6 @@ namespace YMM43D.Player
             return true;
         }
 
-        // スポットは円錐そのものが写す範囲になる。ふちが切れないよう少しだけ広く取る。
         private static bool TryLookThroughCone(
             in SceneLight light, out Matrix4x4 view, out Matrix4x4 projection)
         {
@@ -251,7 +265,7 @@ namespace YMM43D.Player
             var near = MathF.Max(reach * 0.01f, 0.01f);
 
             var angle = Math.Clamp(
-                Rotation3D.ToRadians(light.OuterAngle * 2f) * ConeMargin, 0.05f, 3f);
+                float.DegreesToRadians(light.OuterAngle * 2f) * ConeMargin, 0.05f, 3f);
 
             view = Matrix4x4.CreateLookAt(light.Vector, light.Vector + axis * reach, Upward(axis));
             projection = Matrix4x4.CreatePerspectiveFieldOfView(angle, 1f, near, reach);

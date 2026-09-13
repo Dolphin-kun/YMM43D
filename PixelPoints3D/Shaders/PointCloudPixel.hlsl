@@ -3,12 +3,6 @@
 Texture2D    txDiffuse : register(t0);
 SamplerState samLinear : register(s0);
 
-// 形の縁がどれだけこの画素を覆っているかを返す。描画先はマルチサンプル
-// ではないので、これを掛けないと粒や線の縁が階段状になる。
-//
-// 1画素より細い線は、太さを保ったままギザギザに描かれるのではなく、
-// 薄くなって消えていく。面は edge が動かないので常に 1 が返り、
-// 隣り合う三角形の継ぎ目に隙間ができない。
 float Coverage(float2 edge)
 {
     if (PointIsRound > 0.5)
@@ -25,7 +19,6 @@ float Coverage(float2 edge)
 
 float4 main(PS_INPUT input) : SV_Target
 {
-    // 捨てたあとの画素は隣との差が定まらないので、割合は捨てる前に求める。
     float coverage = Coverage(input.Edge);
 
     float4 source = Unpremultiply(txDiffuse.SampleLevel(samLinear, input.TexCoord, 0));
@@ -36,8 +29,6 @@ float4 main(PS_INPUT input) : SV_Target
     float scatter = lerp(1.0, input.Random.x, OpacityRandomness);
     float alpha = Color.a * Opacity * ExtraOpacity * scatter * coverage;
 
-    // 透けている画素も、捨てなければ深度は書いてしまう。円い粒では
-    // 四角い板の隅がそのまま残り、後ろの粒を隠して黒く抜けて見える。
     if (alpha < 1.0 / 255.0)
         discard;
 

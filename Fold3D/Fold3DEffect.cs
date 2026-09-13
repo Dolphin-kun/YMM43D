@@ -74,8 +74,6 @@ namespace Fold3D
 
         protected override bool IsUnlit => effect.IsUnlit;
 
-        // 折り目の位置に頂点が来ないと角が丸まる。斜めにも折れるので、
-        // 縦横どちらにも段の数ぶんの細かさを持たせる。
         protected override DeformGrid GetGrid(in FrameContext time)
         {
             var along = effect.Count * SegmentsPerFold;
@@ -85,15 +83,14 @@ namespace Fold3D
 
         protected override FoldConstants GetConstants(in FrameContext time) => new()
         {
-            HalfAngle = Rotation3D.ToRadians(effect.Angle.GetFloat(time)) / 2f,
+            HalfAngle = float.DegreesToRadians(effect.Angle.GetFloat(time)) / 2f,
             Count = effect.Count,
-            AxisRadians = Rotation3D.ToRadians(effect.AxisAngle.GetFloat(time)),
+            AxisRadians = float.DegreesToRadians(effect.AxisAngle.GetFloat(time)),
         };
 
         protected override DeformExtent GetExtent(in FrameContext time)
         {
-            // 畳むほど横は縮み、奥行きは 1段ぶんまでしか出ない。
-            var rise = MathF.Sin(Rotation3D.ToRadians(effect.Angle.GetFloat(time)) / 2f)
+            var rise = MathF.Sin(float.DegreesToRadians(effect.Angle.GetFloat(time)) / 2f)
                      / MathF.Max(effect.Count, 1);
 
             return new DeformExtent(0f, rise);

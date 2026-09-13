@@ -103,6 +103,7 @@ YMM43D.dll は、YMM4 のプラグインから 3D 描画を行うための土台
 |---|---|
 | `WorldScale.PixelsPerUnit` | 100。ワールド 1 単位 = 100 ピクセル |
 | `WorldScale.ToWorld(px)` / `ToPixels(unit)` | 換算 |
+| `WorldScale.ToWorldPosition(x, y, z)` / `ToPixelOffset(shift)` | YMM4 の座標（px、Y は下向き）とワールド座標（Y は上向き）の位置・差分を、Y の向きも含めて換算 |
 | `SceneProjection.GetPixelsPerTangent(camera, screenHeight)` | 視線からの傾き 1 あたりのピクセル数。自動なら `PixelsPerUnit × DefaultFocalDistance` |
 | `SceneProjection.GetTangentProjection()` | 除算後の x・y が傾きそのものになる射影。2D 側の変換を後から掛けるための土台 |
 
@@ -455,6 +456,8 @@ VertexShaderBytecode = ShaderLibrary.Compile(assembly, "My.hlsl", "VSMain", "vs_
 var psBytes = ShaderLibrary.Compile(assembly, "My.hlsl", "PSMain", "ps_5_0");
 ```
 
+同じアセンブリ・ファイル・入口・プロファイルの組は一度だけコンパイルされ、2回目からは覚えている結果が返ります。アイテムを増やしてもコンパイルの時間は増えません。入口を1つのファイルに `VSMain` / `PSMain` で置くなら、自分で呼ばずに `ShaderMaterial` を使うのがいちばん簡単です。頂点とピクセルを別のファイルに分けたときは、ファイル名と入口を個別に渡すコンストラクタを使ってください。
+
 `#include "X.hlsli"` は、まず渡したアセンブリの `Shaders` から、無ければ YMM43D 本体から探します。**別のプラグインからも本体の部品を取り込めます。** 同じ名前は一度しか取り込まないので、取り込み順を気にする必要はありません。同じ名前のファイルを自分側に置けば、本体のものを差し替えられます。
 
 > **他のプロジェクトの hlsli を取り込むときは、書き込む道もファイルの場所に合わせてください。** 探すのはファイル名だけなので、実行時は `#include "Lighting.hlsli"` でも通ります。しかし Visual Studio のエディタはファイルの場所をたどるため、それだと見つけられず、その中の関数が軒並み「宣言されていません」と赤くなります。
@@ -590,7 +593,7 @@ var pipeline = pipelines.Get(render.Device);
 | `WorldScale` | static class | ピクセルとワールド単位の換算（1 単位 = 100px） |
 | `WorldBounds` | struct | 描くものがワールド空間で占める範囲。出力画像の大きさを決めるのに使う |
 | `Rotation3D` | static class | 度からの回転行列の生成と、角度の折り返し |
-| `FrameContext` | struct | フレーム位置・長さ・FPS の組 |
+| `FrameContext` | struct | フレーム位置・長さ・FPS の組。`ForItem` でタイムライン上の位置からアイテムの頭から数えた時刻を作り、`IsAlive` でその位置にアイテムがいるかを調べる |
 | `AnimationExtensions` | static class | `Animation` を `FrameContext` で評価する。差分で動かす `Nudge` / `NudgeAt` も持つ |
 | `EditScope` | struct | ドラッグの結果をアニメーションのどこに書き込むか（全体か、中間点か） |
 
@@ -738,14 +741,10 @@ public SceneMarker GetMarker(in FrameContext itemTime)
     => SceneMarker.ForPointLight(GetPosition(itemTime), WorldScale.ToWorld(Reach.GetFloat(itemTime)));
 
 public void MoveMarker(in Vector3 shift, in FrameContext itemTime, in EditScope scope)
-{
-    scope.Nudge(X, WorldScale.ToPixels(shift.X));
-    scope.Nudge(Y, -WorldScale.ToPixels(shift.Y));
-    scope.Nudge(Z, WorldScale.ToPixels(shift.Z));
-}
+    => scope.NudgePosition(X, Y, Z, shift);
 ```
 
-`shift` はワールド単位の差分で、視線に垂直な面の上を動いた分です。`scope` をそのまま `Nudge` に渡せば、「ドラッグで中間点を打つ」の設定に従います。
+`shift` はワールド単位の差分で、視線に垂直な面の上を動いた分です。`scope.NudgePosition` はピクセルへの換算と Y の向きの反転まで済ませて、「ドラッグで中間点を打つ」の設定に従って書き込みます。1つの値だけを動かすときは `scope.Nudge` を使ってください。
 
 | 作り方 | 見た目 | 掴んだとき |
 |---|---|---|
@@ -772,7 +771,7 @@ public void MoveMarker(in Vector3 shift, in FrameContext itemTime, in EditScope 
 | `TransformConstants` | struct | 変換行列・不透明度・光・霧を持つ標準定数バッファ |
 | `ShaderLibrary` | static class | 埋め込んだ hlsl の読み出しと `#include` の展開 |
 | `ShaderCompiler` | static class | HLSL の実行時コンパイル |
-| `ShaderMaterial` | class | 自分のアセンブリに埋め込んだ hlsl（`VSMain` / `PSMain`）から作るマテリアル |
+| `ShaderMaterial` | class | 自分のアセンブリに埋め込んだ hlsl から作るマテリアル。1つのファイルの `VSMain` / `PSMain` からでも、別々のファイルと入口からでも作れる |
 | `DeviceResourceCache<T>` | class | デバイスごとの資源を保持する |
 | `GraphicsDevicePool` | static class | 3D 描画用の独立デバイスを貸し出す |
 | `D3D11Buffers` | static class | 頂点・インデックス・定数バッファの生成 |

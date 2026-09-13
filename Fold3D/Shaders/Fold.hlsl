@@ -18,20 +18,18 @@ float2 Turn(float2 v, float angle)
 
 float3 Deform(float3 local, float3 piece)
 {
-    // 軸の角度ぶん回してから、いつも横向きに折る。終わったら戻す。
     float3 p = float3(Turn(local.xy, -AxisRadians), local.z);
 
     float count = max(FoldCount, 1.0);
 
-    float span = 1.0 / count;                 // 折る前の、1段の長さ
-    float run = span * cos(HalfAngle);        // 畳んだあとに横へ進む量
-    float rise = span * sin(HalfAngle);       // 1段で前後する量
+    float span = 1.0 / count;
+    float run = span * cos(HalfAngle);
+    float rise = span * sin(HalfAngle);
 
     float along = (p.x + 0.5) * count;
     float index = floor(min(along, count - 1e-4));
     float within = along - index;
 
-    // 段ごとに、手前へ倒れるか奥へ倒れるかが入れ替わる。
     bool up = fmod(index, 2.0) < 1.0;
     float direction = up ? 1.0 : -1.0;
 

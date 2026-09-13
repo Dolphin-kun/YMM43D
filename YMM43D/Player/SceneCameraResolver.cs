@@ -33,16 +33,13 @@ namespace YMM43D.Player
                 if (candidate is not ISceneCamera camera || !LayerVisibility.IsShown(timeline, candidate))
                     continue;
 
-                if (frame < candidate.Frame || frame >= candidate.Frame + candidate.Length)
+                if (!FrameContext.IsAlive(candidate, frame))
                     continue;
 
                 if (found is { } current && candidate.Layer <= current.Item.Layer)
                     continue;
 
-                var itemTime = new FrameContext(
-                    frame - candidate.Frame, Math.Max(1, candidate.Length), fps);
-
-                found = new ActiveCamera(candidate, camera, itemTime);
+                found = new ActiveCamera(candidate, camera, FrameContext.ForItem(candidate, frame, fps));
             }
 
             return found;

@@ -137,7 +137,6 @@ namespace Shatter3D
     internal sealed class Shatter3DProcessor(Shatter3DEffect effect, IGraphicsDevicesAndContext devices)
         : Deform3DProcessorBase<ShatterConstants>(effect, devices)
     {
-        // 100% のときの目安。板の幅を 1 として、1秒でどれだけ動くか。
         private const float FlyPerSecond = 1.2f;
         private const float FallPerSecond = 1.6f;
         private const float SpinPerSecond = 6f;
@@ -149,7 +148,6 @@ namespace Shatter3D
 
         protected override bool IsUnlit => effect.IsUnlit;
 
-        // 破片の大きさ(px)から、板を何マスに割るかを決める。
         protected override DeformGrid GetGrid(in FrameContext time)
         {
             if (!TryGetSize(out var size, out _) || size.X <= 0f || size.Y <= 0f)
@@ -192,7 +190,6 @@ namespace Shatter3D
             return new DeformExtent(reach, MathF.Min(flown, 16f));
         }
 
-        // アイテムの頭から数えた秒数を、開始時間と再生速度で読み替える。
         private float ElapsedSeconds(in FrameContext time)
         {
             var seconds = (float)time.Frame / Math.Max(time.Fps, 1);
@@ -205,7 +202,6 @@ namespace Shatter3D
             if (!TryGetSize(out var size, out _) || size.X <= 0f || size.Y <= 0f)
                 return Vector3.Zero;
 
-            // 板の横は幅で、縦は高さで -0.5〜0.5 に収まっている。奥行きは横に合わせる。
             return new Vector3(
                 effect.X.GetFloat(time) / size.X,
                 -effect.Y.GetFloat(time) / size.Y,

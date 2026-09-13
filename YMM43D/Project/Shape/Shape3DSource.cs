@@ -7,7 +7,6 @@ using YMM43D.Graphics.Meshes;
 using YMM43D.Plugin;
 using YMM43D.Commons;
 using YukkuriMovieMaker.Commons;
-using Color4 = Vortice.Mathematics.Color4;
 
 namespace YMM43D.Project.Shape
 {
@@ -79,11 +78,8 @@ namespace YMM43D.Project.Shape
                 return mesh = new SurfaceMesh(
                     device,
                     Solids.Get(shape.Kind, shape.Segments, shape.Thickness),
-                    [.. colors.Select(ToColor4)]);
+                    [.. colors.Select(color => color.ToColor4())]);
             }
-
-            private static Color4 ToColor4(Color color)
-                => new(color.R / 255f, color.G / 255f, color.B / 255f, color.A / 255f);
 
             public void Dispose()
             {

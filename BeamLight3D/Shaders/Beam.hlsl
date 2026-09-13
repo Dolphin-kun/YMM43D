@@ -2,10 +2,8 @@
 
 cbuffer BeamConstants : register(b1)
 {
-    // rgb: 光の色 / a: 濃さ
     float4 BeamColor;
 
-    // x: 先へ行くほど弱まる度合いの指数
     float4 BeamShape;
 };
 
@@ -33,8 +31,6 @@ PS_IN VSMain(VS_IN input)
     return output;
 }
 
-// 円錐の殻を内側から外側まで重ねて描き、足し合わせて筋にする。
-// 1枚ぶんの濃さは頂点が持っているので、ここでは長さ方向の弱まりだけを掛ける。
 float4 PSMain(PS_IN input) : SV_TARGET
 {
     float axial = saturate(input.Local.z);
@@ -42,6 +38,5 @@ float4 PSMain(PS_IN input) : SV_TARGET
 
     float intensity = saturate(input.Weight * along * BeamColor.a * Opacity);
 
-    // 乗算済みアルファで返す。呼び出し側が足し込む合成にしている。
     return float4(BeamColor.rgb * intensity, intensity);
 }

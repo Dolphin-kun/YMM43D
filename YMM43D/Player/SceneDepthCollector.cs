@@ -22,8 +22,6 @@ namespace YMM43D.Player
                 => new(null, default, Matrix4x4.Identity, ScreenPlacement.None, [], []);
         }
 
-        // 穴を開ける相手と、影を落とすものを1度の巡回でまとめて集める。
-        // 前者は自分を除いた並び順の合うものだけ、後者は場にいる全部。
         public static SceneView Collect(
             TimelineItemSourceDescription description,
             I3DProvider? self)
@@ -49,12 +47,12 @@ namespace YMM43D.Player
             {
                 if (item is not IVideoItem video
                     || !LayerVisibility.IsShown(timeline, video)
-                    || !ItemPlacement.IsAliveAt(video, frame))
+                    || !FrameContext.IsAlive(video, frame))
                 {
                     continue;
                 }
 
-                var itemTime = new FrameContext(frame - video.Frame, video.Length, fps);
+                var itemTime = FrameContext.ForItem(video, frame, fps);
 
                 if (owner is null && video.Layer == description.Layer)
                 {
@@ -177,7 +175,6 @@ namespace YMM43D.Player
                 return;
             }
 
-            // 立体にするエフェクトのうち、いちばん後ろにあるものだけが場に置かれる。
             if (last >= 0 && effects[last] is I3DProvider placed && !into.Contains(placed))
                 into.Add(placed);
         }

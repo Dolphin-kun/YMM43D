@@ -3,8 +3,6 @@
 
 #include "Light.hlsli"
 
-// 3D の場そのもの。b0 はいつもこれが入っている。
-// プラグインが足したい値は、この後ろに割り込ませず b1 に置く。
 cbuffer SceneConstants : register(b0)
 {
     matrix WorldViewProjection;

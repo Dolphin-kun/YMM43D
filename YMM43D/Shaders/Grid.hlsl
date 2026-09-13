@@ -15,7 +15,6 @@ PS_IN VSMain(VS_IN input)
     return output;
 }
 
-// 1単位ごとの格子線を、線幅 width で描いたときの濃さを返す
 float GridLine(float position, float width)
 {
     float distanceToLine = abs(frac(position - 0.5) - 0.5);
@@ -29,7 +28,6 @@ float4 PSMain(PS_IN input) : SV_TARGET
     float alpha = GridLine(pos.x, 0.03) + GridLine(pos.z, 0.03);
     float4 color = float4(0.2, 0.2, 0.2, 1.0);
 
-    // 原点を通る2本は座標軸として色を変え、常に不透明にする
     bool onXAxis = abs(pos.z) < 0.05;
     bool onZAxis = abs(pos.x) < 0.05;
     if (onXAxis)      color = float4(0.8, 0.1, 0.1, 1.0);
@@ -38,7 +36,6 @@ float4 PSMain(PS_IN input) : SV_TARGET
 
     if (alpha <= 0.0) discard;
 
-    // 遠くほど薄くして、地平線付近のちらつきを抑える
     float distance = length(pos.xz - CameraPosition.xz);
     float fade = 1.0 - smoothstep(10.0, 100.0, distance);
 

@@ -11,7 +11,6 @@
 		<AssemblyVersion>1.0.0.0</AssemblyVersion>
 		<FileVersion>1.0.0.0</FileVersion>
 
-		<!--Pdb内にソースコードのフルパスを含めない-->
 		<RepoRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\'))</RepoRoot>
 		<PathMap>$(RepoRoot)=.</PathMap>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -55,8 +54,6 @@
 		</Reference>
 	</ItemGroup>
 
-	<!--ビルド後にYMM4のプラグインフォルダにdllをコピーする-->
-	<!--YMM4が起動中はdllを掴まれていてコピーできない。ビルド自体は成功させ、警告に留める。-->
 	<Target Name="PostBuild" AfterTargets="PostBuildEvent">
 		<Exec Command="mkdir &quot;$(YMM4DirPath)user\plugin\$(ProjectName)&quot; &gt; NUL 2&gt;&amp;1&#xD;&#xA;copy &quot;$(TargetPath)&quot; &quot;$(YMM4DirPath)user\plugin\$(ProjectName)\&quot;" ContinueOnError="WarnAndContinue" />
 	</Target>

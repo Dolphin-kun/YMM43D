@@ -12,19 +12,14 @@ namespace YMM43D.Player
         {
             var zoom = Matrix4x4.CreateScale(item.Zoom.GetFloat(time) / 100f);
 
-            var rotation = Matrix4x4.CreateRotationZ(-Rotation3D.ToRadians(item.Rotation.GetFloat(time)));
+            var rotation = Matrix4x4.CreateRotationZ(-float.DegreesToRadians(item.Rotation.GetFloat(time)));
 
-            var translation = Matrix4x4.CreateTranslation(
-                WorldScale.ToWorld(item.X.GetFloat(time)),
-                -WorldScale.ToWorld(item.Y.GetFloat(time)),
-                WorldScale.ToWorld(item.Z.GetFloat(time)));
+            var translation = Matrix4x4.CreateTranslation(WorldScale.ToWorldPosition(
+                item.X.GetFloat(time), item.Y.GetFloat(time), item.Z.GetFloat(time)));
 
             return zoom * rotation * translation;
         }
 
-        // YMM4 はアイテムの位置・拡大率・回転を DrawDescription に載せてから
-        // エフェクトを通す。登場退場もそこへ足し込まれるので、置き場所は
-        // アイテムの値ではなく、通し終えた DrawDescription から作る。
         public static Matrix4x4 GetWorldMatrix(DrawDescription draw)
         {
             var scale = new Vector3(
@@ -36,14 +31,11 @@ namespace YMM43D.Player
                 -(float)draw.Rotation.X, -(float)draw.Rotation.Y, -(float)draw.Rotation.Z);
 
             var translation = Matrix4x4.CreateTranslation(
-                WorldScale.ToWorld((float)draw.Draw.X),
-                -WorldScale.ToWorld((float)draw.Draw.Y),
-                WorldScale.ToWorld((float)draw.Draw.Z));
+                WorldScale.ToWorldPosition(draw.Draw.X, draw.Draw.Y, draw.Draw.Z));
 
             return Matrix4x4.CreateScale(scale) * rotation * translation;
         }
 
-        // エフェクトを通す前の DrawDescription。YMM4 が組み立てるものに合わせる。
         public static DrawDescription ToDrawDescription(IVideoItem item, in FrameContext time)
         {
             var zoom = item.Zoom.GetFloat(time) / 100f;
@@ -91,8 +83,5 @@ namespace YMM43D.Player
 
             return opacity;
         }
-
-        public static bool IsAliveAt(IVideoItem item, int frame)
-            => frame >= item.Frame && frame < item.Frame + item.Length;
     }
 }

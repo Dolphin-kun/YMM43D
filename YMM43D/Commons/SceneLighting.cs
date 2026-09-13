@@ -49,7 +49,7 @@ namespace YMM43D.Commons
             _ => 0f,
         };
 
-        private static float Cosine(float degrees) => MathF.Cos(Rotation3D.ToRadians(degrees));
+        private static float Cosine(float degrees) => MathF.Cos(float.DegreesToRadians(degrees));
     }
 
     public enum LightKind
@@ -64,8 +64,6 @@ namespace YMM43D.Commons
         Spot,
     }
 
-    // 影の板の何枚目を使うか。Slice が -1 の間は影を落とさない。
-    // 板は光源ごとに、描く直前に割り当てられる。
     public readonly record struct ShadowPlacement(
         float Strength,
         int Slice = -1,
@@ -105,8 +103,8 @@ namespace YMM43D.Commons
 
         public static Vector3 ToDirection(float yaw, float pitch)
         {
-            var y = Rotation3D.ToRadians(yaw);
-            var p = Rotation3D.ToRadians(Math.Clamp(pitch, -90f, 90f));
+            var y = float.DegreesToRadians(yaw);
+            var p = float.DegreesToRadians(Math.Clamp(pitch, -90f, 90f));
 
             var flat = MathF.Cos(p);
 
@@ -121,8 +119,8 @@ namespace YMM43D.Commons
                 return (0f, direction.Y >= 0f ? 90f : -90f);
 
             return (
-                Rotation3D.ToDegrees(MathF.Atan2(-direction.X, direction.Z)),
-                Rotation3D.ToDegrees(MathF.Atan2(direction.Y, flat.Length())));
+                float.RadiansToDegrees(MathF.Atan2(-direction.X, direction.Z)),
+                float.RadiansToDegrees(MathF.Atan2(direction.Y, flat.Length())));
         }
 
         public static SceneLight Point(Vector3 position, Vector3 color, float reach)

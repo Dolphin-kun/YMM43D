@@ -28,7 +28,6 @@ namespace BeamLight3D
 
         public override void Draw(in Render3DContext render, DrawContext3D item)
         {
-            // 光の筋は物を隠さない。深度だけを書く番では何も描かない。
             if (item.DepthOnly)
                 return;
 
@@ -49,11 +48,10 @@ namespace BeamLight3D
 
         private BeamConstants Constants(in FrameContext itemTime) => new()
         {
-            Color = new Vector4(parameter.GetColor(), parameter.Density.GetFloat(itemTime) / 100f),
+            Color = new Vector4(parameter.BeamColor.ToVector3(), parameter.Density.GetFloat(itemTime) / 100f),
             Shape = new Vector4(ToExponent(parameter.Decay.GetFloat(itemTime)), 0f, 0f, 0f),
         };
 
-        // 50% でちょうど先へ向かってまっすぐ弱まる。
         private static float ToExponent(float percent)
             => MathF.Pow(2f, (Math.Clamp(percent, 0f, 100f) - 50f) / 25f);
 

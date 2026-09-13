@@ -38,7 +38,7 @@ namespace YMM43D.Commons
             var origin = Vector3.Transform(Origin, inverse);
             var direction = Vector3.TransformNormal(Direction, inverse);
 
-            var center = (bounds.Min + bounds.Max) / 2f;
+            var center = bounds.Center;
             var half = Vector3.Max((bounds.Max - bounds.Min) / 2f, new Vector3(minThickness / 2f));
 
             var enter = float.NegativeInfinity;
@@ -46,9 +46,9 @@ namespace YMM43D.Commons
 
             for (var axis = 0; axis < 3; axis++)
             {
-                var slope = Component(direction, axis);
-                var start = Component(origin, axis) - Component(center, axis);
-                var limit = Component(half, axis);
+                var slope = direction[axis];
+                var start = origin[axis] - center[axis];
+                var limit = half[axis];
 
                 if (MathF.Abs(slope) < 1e-9f)
                 {
@@ -102,8 +102,5 @@ namespace YMM43D.Commons
 
             return new Vector3(point.X, point.Y, point.Z) / point.W;
         }
-
-        private static float Component(in Vector3 value, int axis)
-            => axis switch { 0 => value.X, 1 => value.Y, _ => value.Z };
     }
 }

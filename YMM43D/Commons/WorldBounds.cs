@@ -62,7 +62,10 @@ namespace YMM43D.Commons
             var min = new Vector3(float.MaxValue);
             var max = new Vector3(float.MinValue);
 
-            foreach (var corner in GetCorners())
+            Span<Vector3> corners = stackalloc Vector3[CornerCount];
+            WriteCorners(corners);
+
+            foreach (var corner in corners)
             {
                 var moved = Vector3.Transform(corner, matrix);
                 min = Vector3.Min(min, moved);

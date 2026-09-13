@@ -10,15 +10,31 @@ namespace YMM43D.Graphics
     {
         private const string Folder = ".Shaders.";
 
-        private static readonly ConcurrentDictionary<(string Assembly, string Name), string> cache = new();
+        private static readonly ConcurrentDictionary<(string Assembly, string Name), string> sources = new();
+
+        private static readonly ConcurrentDictionary<(string Assembly, string Name, string EntryPoint, string Profile), Lazy<byte[]>> bytecodes = new();
 
         private static readonly Assembly Core = typeof(ShaderLibrary).Assembly;
 
         public static string Load(Assembly assembly, string name)
-            => cache.GetOrAdd((assembly.FullName ?? string.Empty, name), _ => Expand(assembly, name, []));
+            => sources.GetOrAdd((assembly.FullName ?? string.Empty, name), _ => Expand(assembly, name, []));
 
         public static byte[] Compile(Assembly assembly, string name, string entryPoint, string profile)
-            => ShaderCompiler.Compile(Load(assembly, name), entryPoint, profile, name);
+        {
+            var key = (assembly.FullName ?? string.Empty, name, entryPoint, profile);
+            var compiled = bytecodes.GetOrAdd(key, _ => new Lazy<byte[]>(
+                () => ShaderCompiler.Compile(Load(assembly, name), entryPoint, profile, name)));
+
+            try
+            {
+                return compiled.Value;
+            }
+            catch
+            {
+                bytecodes.TryRemove(new KeyValuePair<(string, string, string, string), Lazy<byte[]>>(key, compiled));
+                throw;
+            }
+        }
 
         private static string Expand(Assembly assembly, string path, HashSet<string> taken)
         {

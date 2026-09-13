@@ -47,7 +47,7 @@ namespace YMM43D.Commons
         {
             var zoom = float.IsFinite(Zoom) && Zoom > 0f ? Zoom : 1f;
 
-            var radians = Rotation3D.ToRadians(RotationDegrees);
+            var radians = float.DegreesToRadians(RotationDegrees);
 
             return Matrix3x2.CreateScale(1f / PerspectiveScale)
                  * Matrix3x2.CreateTranslation(-Offset)

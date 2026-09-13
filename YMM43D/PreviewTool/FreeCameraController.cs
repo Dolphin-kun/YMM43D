@@ -177,7 +177,7 @@ namespace YMM43D.PreviewTool
 
         public CameraMove Focus(in WorldBounds bounds, in CameraState basis)
         {
-            var center = (bounds.Min + bounds.Max) / 2f;
+            var center = bounds.Center;
 
             var radius = MathF.Max(Vector3.Distance(bounds.Min, bounds.Max) / 2f, 0.05f);
 

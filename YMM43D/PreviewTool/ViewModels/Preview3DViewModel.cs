@@ -337,7 +337,7 @@ namespace YMM43D.PreviewTool.ViewModels
 
             if (!HandleItemDrag(position, kind))
             {
-                var modifiers = D3D11Host.CurrentModifiers;
+                var modifiers = Keyboard.Modifiers;
 
                 ApplyCameraMove(basis =>
                     freeCamera.HandleMouse(position, kind, delta, modifiers, basis) ?? CameraMove.None);
@@ -354,7 +354,7 @@ namespace YMM43D.PreviewTool.ViewModels
             switch (kind)
             {
                 case D3D11Host.MouseEventKind.Down:
-                    if ((D3D11Host.CurrentModifiers & ModifierKeys.Alt) != 0)
+                    if ((Keyboard.Modifiers & ModifierKeys.Alt) != 0)
                         return false;
 
                     return TryGrab(position);

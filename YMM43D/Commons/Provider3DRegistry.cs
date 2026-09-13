@@ -21,8 +21,7 @@ namespace YMM43D.Commons
             if (suppressionDepth > 0)
                 return;
 
-            registry.Remove(parameter);
-            registry.Add(parameter, provider);
+            registry.AddOrUpdate(parameter, provider);
         }
 
         private sealed class Suppression : IDisposable

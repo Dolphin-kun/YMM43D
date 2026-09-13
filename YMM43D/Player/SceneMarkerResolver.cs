@@ -26,10 +26,10 @@ namespace YMM43D.Player
                 if (item is not ISceneMarkerSource source || !LayerVisibility.IsShown(timeline, item))
                     continue;
 
-                if (frame < item.Frame || frame >= item.Frame + item.Length)
+                if (!FrameContext.IsAlive(item, frame))
                     continue;
 
-                var itemTime = new FrameContext(frame - item.Frame, Math.Max(1, item.Length), fps);
+                var itemTime = FrameContext.ForItem(item, frame, fps);
 
                 found.Add(new PlacedMarker(item, source, itemTime, source.GetMarker(itemTime)));
             }

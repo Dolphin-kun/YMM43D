@@ -100,15 +100,14 @@ namespace Wave3D
         {
             Amplitude = ToPlaneUnits(effect.Height.GetFloat(time)),
             Wavelength = ToPlaneUnits(effect.Wavelength.GetFloat(time)),
-            PhaseRadians = Rotation3D.ToRadians(effect.Phase.GetFloat(time)),
-            AxisRadians = Rotation3D.ToRadians(effect.AxisAngle.GetFloat(time)),
+            PhaseRadians = float.DegreesToRadians(effect.Phase.GetFloat(time)),
+            AxisRadians = float.DegreesToRadians(effect.AxisAngle.GetFloat(time)),
             Ripple = effect.IsRipple ? 1 : 0,
         };
 
         protected override DeformExtent GetExtent(in FrameContext time)
             => new(0f, MathF.Min(ToPlaneUnits(effect.Height.GetFloat(time)), 4f));
 
-        // シェーダーは板の幅を 1 とした物差しで動くので、px をそこへ直す。
         private float ToPlaneUnits(float pixels)
             => TryGetSize(out var size, out _) && size.X > 0f ? pixels / size.X : 0f;
     }

@@ -1,5 +1,4 @@
 ﻿using System.Collections.Immutable;
-using System.Numerics;
 using Vortice.Direct2D1;
 using YMM43D.Player;
 using YMM43D.Commons;
@@ -19,11 +18,11 @@ namespace YMM43D.PreviewTool
         private readonly Dictionary<IVideoItem, ISource> sources = [];
         private readonly Dictionary<(IVideoItem Item, I3DProvider Provider), EffectChain> chains = [];
 
-        private readonly HashSet<IVideoItem> effectsUnsupported = [];
-
         private readonly Dictionary<IVideoItem, long> sourceRetryAt = [];
 
-        private const long SourceRetryDelayMs = 500;
+        private readonly Dictionary<IVideoItem, long> effectRetryAt = [];
+
+        private const long RetryDelayMs = 500;
 
         public ItemRenderResult Render(
             IVideoItem item,
@@ -74,7 +73,7 @@ namespace YMM43D.PreviewTool
             PreviewEnvironment environment,
             TimelineItemSourceDescription description)
         {
-            if (sourceRetryAt.TryGetValue(item, out var retryAt) && System.Environment.TickCount64 < retryAt)
+            if (IsWaiting(sourceRetryAt, item))
                 return null;
 
             try
@@ -106,7 +105,7 @@ namespace YMM43D.PreviewTool
             }
             catch
             {
-                sourceRetryAt[item] = System.Environment.TickCount64 + SourceRetryDelayMs;
+                sourceRetryAt[item] = System.Environment.TickCount64 + RetryDelayMs;
             }
 
             return null;
@@ -121,7 +120,7 @@ namespace YMM43D.PreviewTool
             ID2D1Image sourceImage,
             DrawDescription seed)
         {
-            if (effectsUnsupported.Contains(item))
+            if (IsWaiting(effectRetryAt, item))
                 return new ItemRenderResult(sourceImage, seed);
 
             var key = (item, provider);
@@ -136,15 +135,20 @@ namespace YMM43D.PreviewTool
                         chain = chains[key] = new EffectChain(effects, environment.Devices);
                 }
 
-                return chain.Apply(sourceImage, description, seed);
+                var applied = chain.Apply(sourceImage, description, seed);
+                effectRetryAt.Remove(item);
+                return applied;
             }
             catch
             {
                 ReleaseChain(key);
-                effectsUnsupported.Add(item);
+                effectRetryAt[item] = System.Environment.TickCount64 + RetryDelayMs;
                 return new ItemRenderResult(sourceImage, seed);
             }
         }
+
+        private static bool IsWaiting(Dictionary<IVideoItem, long> retryAt, IVideoItem item)
+            => retryAt.TryGetValue(item, out var at) && System.Environment.TickCount64 < at;
 
         public void RetainOnly(IReadOnlySet<IVideoItem> aliveItems)
         {
@@ -165,10 +169,14 @@ namespace YMM43D.PreviewTool
             foreach (var key in chains.Keys.Where(k => !aliveItems.Contains(k.Item)).ToArray())
                 ReleaseChain(key);
 
-            effectsUnsupported.RemoveWhere(item => !aliveItems.Contains(item));
+            Prune(sourceRetryAt, aliveItems);
+            Prune(effectRetryAt, aliveItems);
+        }
 
-            foreach (var item in sourceRetryAt.Keys.Where(k => !aliveItems.Contains(k)).ToArray())
-                sourceRetryAt.Remove(item);
+        private static void Prune(Dictionary<IVideoItem, long> retryAt, IReadOnlySet<IVideoItem> aliveItems)
+        {
+            foreach (var item in retryAt.Keys.Where(k => !aliveItems.Contains(k)).ToArray())
+                retryAt.Remove(item);
         }
 
         private void ReleaseChain((IVideoItem Item, I3DProvider Provider) key)
@@ -189,7 +197,7 @@ namespace YMM43D.PreviewTool
             foreach (var chain in chains.Values)
                 chain.Dispose();
             chains.Clear();
-            effectsUnsupported.Clear();
+            effectRetryAt.Clear();
             sourceRetryAt.Clear();
         }
 
@@ -208,8 +216,18 @@ namespace YMM43D.PreviewTool
             }
 
             public bool Matches(ImmutableList<IVideoEffect> current)
-                => effects.Count == current.Count
-                && !effects.Where((effect, i) => !ReferenceEquals(effect, current[i])).Any();
+            {
+                if (effects.Count != current.Count)
+                    return false;
+
+                for (var i = 0; i < effects.Count; i++)
+                {
+                    if (!ReferenceEquals(effects[i], current[i]))
+                        return false;
+                }
+
+                return true;
+            }
 
             public ItemRenderResult Apply(
                 ID2D1Image input, TimelineItemSourceDescription description, DrawDescription seed)

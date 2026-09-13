@@ -9,17 +9,12 @@
              Background="Transparent"
              Focusable="True"
              PreviewKeyDown="UserControl_PreviewKeyDown">
-    <!--
-        3D表示は HwndHost（子ウィンドウ）なので、WPF の要素を重ねても必ず下に隠れ、
-        その範囲のクリックも子ウィンドウが持っていく。操作は重ねずに行を分ける。
-    -->
     <Grid x:Name="RootGrid">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <!-- 背景は塗らずに、置かれている場所の色をそのまま使う -->
         <Menu Grid.Row="0" Background="Transparent" Margin="0" Padding="0">
             <MenuItem Header="追加">
                 <MenuItem Header="3Dカメラ"
@@ -30,7 +25,7 @@
                 <MenuItem Header="3D光源"
                           Command="{Binding AddLightCommand}"
                           IsEnabled="{Binding CanAddItem}"
-                          ToolTip="いまの再生位置に「3D光源」アイテムを置きます。置いた分だけ足し合わさります（4灯まで）。1つも置かなければ、決まった光が当たります。"/>
+                          ToolTip="いまの再生位置に「3D光源」アイテムを置きます。置いた分だけ足し合わさります。1つも置かなければ、決まった光が当たります。"/>
 
                 <MenuItem Header="3D環境"
                           Command="{Binding AddEnvironmentCommand}"
@@ -99,7 +94,6 @@
             </MenuItem>
         </Menu>
 
-        <!-- 3D表示 -->
         <ContentControl Grid.Row="1" Content="{Binding D3DHost}"/>
     </Grid>
 </UserControl>

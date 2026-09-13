@@ -37,9 +37,6 @@ namespace BeamLight3D
         }
     }
 
-    // 先端が原点、+Z へ長さ 1、根元の半径 1 の円錐。
-    // 太さの違う殻を内側から外側まで重ねてあり、足し込んで描くと
-    // 通り抜けた殻の枚数がそのまま濃さになって、筋が中心ほど濃くなる。
     public sealed class BeamMesh : IMesh
     {
         private readonly DisposeCollector disposer = new();
@@ -55,8 +52,6 @@ namespace BeamLight3D
         public InputElementDescription[] InputElements => BeamVertex.InputElements;
 
         public PrimitiveTopology Topology => PrimitiveTopology.TriangleList;
-
-        public Format IndexFormat => Format.R32_UInt;
 
         public BeamShape Shape { get; }
 
@@ -84,7 +79,6 @@ namespace BeamLight3D
                 var inner = (float)(k - 1) / shape.Shells;
                 var outer = (float)k / shape.Shells;
 
-                // 表と裏の 2 回通るので、1 枚あたりは半分にしておく。
                 var weight = (Profile(inner, exponent) - Profile(outer, exponent)) / 2f;
 
                 for (var i = 0; i < shape.Rings; i++)
@@ -98,7 +92,6 @@ namespace BeamLight3D
             return vertices;
         }
 
-        // 中心から見た濃さの形。中心で 1、ふちで 0 になる。
         private static float Profile(float radius, float exponent)
             => MathF.Pow(MathF.Max(1f - radius * radius, 0f), exponent);
 

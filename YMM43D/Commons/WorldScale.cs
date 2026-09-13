@@ -10,6 +10,12 @@ namespace YMM43D.Commons
 
         public static float ToPixels(float units) => units * PixelsPerUnit;
 
+        public static Vector3 ToWorldPosition(float x, float y, float z)
+            => new(ToWorld(x), -ToWorld(y), ToWorld(z));
+
+        public static Vector3 ToPixelOffset(in Vector3 shift)
+            => new(ToPixels(shift.X), -ToPixels(shift.Y), ToPixels(shift.Z));
+
         public static Matrix4x4 CreateSizeMatrix(Vector2 sizeInPixels, Vector2 centerInPixels)
             => CreateSizeMatrix(sizeInPixels, centerInPixels, Matrix4x4.Identity);
 

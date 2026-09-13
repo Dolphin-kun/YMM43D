@@ -143,7 +143,6 @@ namespace BeamLight3D
         internal float GetSpread(in FrameContext itemTime)
             => Math.Clamp(Spread.GetFloat(itemTime), SceneLight.MinSpread, SceneLight.MaxSpread);
 
-        // 円錐は +Z 向きに作ってあるので、まず真下へ倒してから回す。
         internal Matrix4x4 GetOrientation(in FrameContext itemTime)
             => Matrix4x4.CreateRotationX(MathF.PI / 2f)
              * Rotation3D.ForObject(
@@ -154,26 +153,22 @@ namespace BeamLight3D
         internal Matrix4x4 GetLocalMatrix(in FrameContext itemTime)
         {
             var length = GetLength(itemTime);
-            var radius = length * MathF.Tan(Rotation3D.ToRadians(GetSpread(itemTime)));
+            var radius = length * MathF.Tan(float.DegreesToRadians(GetSpread(itemTime)));
 
             return Matrix4x4.CreateScale(radius, radius, length) * GetOrientation(itemTime);
         }
-
-        internal Vector3 GetColor()
-            => new(BeamColor.R / 255f, BeamColor.G / 255f, BeamColor.B / 255f);
 
         public SceneLight GetLight(in FrameContext itemTime, in Matrix4x4 placement)
         {
             var aimed = GetOrientation(itemTime) * placement;
             var axis = Vector3.TransformNormal(Vector3.UnitZ, aimed);
 
-            // アイテムの拡大率のぶん、描かれる円錐も伸びる。届く距離もそろえる。
             var stretch = axis.Length();
 
             var light = SceneLight.Spot(
                 Vector3.Transform(Vector3.Zero, aimed),
                 axis,
-                GetColor() * (Brightness.GetFloat(itemTime) / 100f),
+                BeamColor.ToVector3() * (Brightness.GetFloat(itemTime) / 100f),
                 GetLength(itemTime) * (float.IsFinite(stretch) && stretch > 0f ? stretch : 1f),
                 GetSpread(itemTime),
                 EdgeBlur / 100f);

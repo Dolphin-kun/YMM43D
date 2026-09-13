@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using Vortice.D3DCompiler;
 
 namespace YMM43D.Graphics
@@ -7,17 +7,15 @@ namespace YMM43D.Graphics
     {
         public static byte[] Compile(string source, string entryPoint, string profile, string sourceName = "")
         {
-            var sourceBytes = Encoding.UTF8.GetBytes(source);
-            var result = Compiler.Compile(sourceBytes, entryPoint, sourceName, profile, out var blob, out var errorBlob);
+            var result = Compiler.Compile(
+                Encoding.UTF8.GetBytes(source), entryPoint, sourceName, profile, out var blob, out var errorBlob);
+
             try
             {
                 if (result.Failure)
                 {
-                    var error = errorBlob is not null
-                        ? Encoding.UTF8.GetString(errorBlob.AsBytes())
-                        : "(エラー情報なし)";
                     throw new InvalidOperationException(
-                        $"シェーダーのコンパイルに失敗しました [{profile} {entryPoint}]: {error}");
+                        $"シェーダーのコンパイルに失敗しました [{profile} {entryPoint}]: {errorBlob?.AsString() ?? "(エラー情報なし)"}");
                 }
 
                 return blob!.AsBytes();

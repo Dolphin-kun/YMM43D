@@ -83,7 +83,7 @@ namespace PixelPoints3D
         private static PointCloudConstants WithColor(
             in PointCloudConstants constants, Color color, PointColorSource source) => constants with
             {
-                Color = new Vector4(color.R, color.G, color.B, color.A) / 255f,
+                Color = color.ToVector4(),
                 UseSourceColor = source == PointColorSource.Image ? 1f : 0f,
             };
 
@@ -162,10 +162,10 @@ namespace PixelPoints3D
                    effect.RotationX.GetFloat(time),
                    effect.RotationY.GetFloat(time),
                    effect.RotationZ.GetFloat(time))
-             * Matrix4x4.CreateTranslation(
-                   WorldScale.ToWorld(effect.PositionX.GetFloat(time) + centerPixels.X),
-                   -WorldScale.ToWorld(effect.PositionY.GetFloat(time) + centerPixels.Y),
-                   WorldScale.ToWorld(effect.PositionZ.GetFloat(time)));
+             * Matrix4x4.CreateTranslation(WorldScale.ToWorldPosition(
+                   effect.PositionX.GetFloat(time) + centerPixels.X,
+                   effect.PositionY.GetFloat(time) + centerPixels.Y,
+                   effect.PositionZ.GetFloat(time)));
 
         protected override WorldBounds GetLocalBounds(in FrameContext itemTime)
         {

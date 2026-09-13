@@ -5,8 +5,6 @@ using YukkuriMovieMaker.Project.Items;
 
 namespace YMM43D.Player
 {
-    // 1コマの間、グループ制御の顔ぶれも置き場所も変わらない。
-    // アイテムごとに数え直さずに済むよう、一度だけ数えて持ち回る。
     public readonly struct GroupLookup
     {
         private readonly Placed[]? groups;
@@ -29,8 +27,7 @@ namespace YMM43D.Player
                 if (item is not GroupItem group || !Applies(timeline, group, frame))
                     continue;
 
-                var groupTime = new FrameContext(
-                    frame - group.Frame, Math.Max(1, group.Length), fps);
+                var groupTime = FrameContext.ForItem(group, frame, fps);
 
                 (found ??= []).Add(new Placed(group, ItemPlacement.GetWorldMatrix(group, groupTime)));
             }
@@ -38,7 +35,6 @@ namespace YMM43D.Player
             return found is null ? default : new GroupLookup([.. found]);
         }
 
-        // レイヤー範囲をたどって、掛かっているグループを内側から外側の順に重ねる。
         public Matrix4x4 GetTransform(IItem item)
         {
             if (groups is null || groups.Length == 0)
@@ -75,7 +71,6 @@ namespace YMM43D.Player
                 if (item.Layer <= group.Layer || item.Layer > group.Layer + group.GroupRange)
                     continue;
 
-                // 「同一グループのみ」なら、同じグループ番号のアイテムだけを動かす。
                 if (group.IsGroupOnly && group.Group != item.Group)
                     continue;
 
@@ -91,12 +86,10 @@ namespace YMM43D.Player
             if (!LayerVisibility.IsShown(timeline, group) || group.GroupRange <= 0)
                 return false;
 
-            // 「画像を合成」を入れたグループは、YMM4 が中身を1枚の絵にまとめてから
-            // 動かす。そのときアイテム1つ1つは動かされないので、ここでも動かさない。
             if (group.IsComposite)
                 return false;
 
-            return frame >= group.Frame && frame < group.Frame + group.Length;
+            return FrameContext.IsAlive(group, frame);
         }
     }
 

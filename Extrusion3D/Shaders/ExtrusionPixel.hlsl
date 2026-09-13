@@ -15,7 +15,6 @@ struct PS_OUTPUT
     float  Depth : SV_Depth;
 };
 
-// ローカル座標をテクスチャ座標に変換する。Y は画像側が下向きなので反転する。
 float2 LocalToUV(float3 pos)
 {
     return float2(pos.x + 0.5, -pos.y + 0.5);
@@ -40,7 +39,6 @@ PS_OUTPUT main(PS_INPUT input)
     float3 rayOrigin = CameraLocalPos;
     float3 rayDir = normalize(input.LocalPos - CameraLocalPos);
 
-    // ボックスとの交差区間を求める（スラブ法）
     float3 invDir = 1.0 / rayDir;
     float3 t0 = (float3(-0.5, -0.5, 0.0) - rayOrigin) * invDir;
     float3 t1 = (float3( 0.5,  0.5, 1.0) - rayOrigin) * invDir;
@@ -51,7 +49,6 @@ PS_OUTPUT main(PS_INPUT input)
     float tFar  = min(min(tMax.x, tMax.y), tMax.z);
     if (tNear > tFar || tFar < 0.0) discard;
 
-    // 一定間隔で進めると縞模様が出るため、開始位置をピクセルごとにずらす
     float noise = frac(sin(dot(input.Position.xy, float2(12.9898, 78.233))) * 43758.5453);
     float stepSize = (tFar - tNear) / StepCount;
     float t = max(tNear, 0.0) + stepSize * noise;
@@ -65,7 +62,6 @@ PS_OUTPUT main(PS_INPUT input)
         float3 pos = rayOrigin + rayDir * t;
         if (SampleAlpha(LocalToUV(pos)) > AlphaThreshold)
         {
-            // 粗く見つけた交点を二分探索で詰める
             float low = max(tNear, t - stepSize);
             float high = t;
             for (int j = 0; j < RefineCount; j++)
@@ -86,7 +82,6 @@ PS_OUTPUT main(PS_INPUT input)
 
     if (hitT < 0.0) discard;
 
-    // 交点の実際の位置で深度を書き、他の3D物体と正しく前後判定させる
     float4 clipPos = mul(float4(hitPos, 1.0), WorldViewProjection);
     output.Depth = clipPos.z / clipPos.w;
 
@@ -105,7 +100,6 @@ PS_OUTPUT main(PS_INPUT input)
         return output;
     }
 
-    // 側面。画像のアルファ勾配から、輪郭がどちらを向いているかを出す
     float eps = 0.01;
     float right = SampleAlpha(hitUV + float2(eps, 0));
     float left  = SampleAlpha(hitUV - float2(eps, 0));

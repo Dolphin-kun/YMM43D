@@ -28,13 +28,10 @@ namespace YMM43D.Graphics.Meshes
 
                 for (var i = 1; i + 1 < indices.Length; i++)
                 {
-                    var corners = new[] { indices[0], indices[i], indices[i + 1] };
+                    ReadOnlySpan<int> corners = [indices[0], indices[i], indices[i + 1]];
 
-                    var a = geometry.Vertices[corners[0]];
-                    var b = geometry.Vertices[corners[1]];
-                    var c = geometry.Vertices[corners[2]];
-
-                    var flat = -Vertex.GetNormal(a, b, c);
+                    var flat = -Vertex.GetNormal(
+                        geometry.Vertices[corners[0]], geometry.Vertices[corners[1]], geometry.Vertices[corners[2]]);
 
                     foreach (var corner in corners)
                     {

@@ -13,6 +13,28 @@ namespace YMM43D.PreviewTool.Views
 {
     public partial class D3D11Host : HwndHost
     {
+        private const string WindowClassName = "YMM43D_PreviewHost_Independent";
+
+        private const int ClassStyleDoubleClicks = 0x0008;
+        private const int WindowStyleChild = 0x40000000;
+        private const int WindowStyleVisible = 0x10000000;
+        private const int StandardArrowCursor = 32512;
+        private const int BlackBrush = 4;
+
+        private const int WmKeyDown = 0x0100;
+        private const int WmSysKeyDown = 0x0104;
+        private const int WmMouseMove = 0x0200;
+        private const int WmLeftButtonDown = 0x0201;
+        private const int WmLeftButtonUp = 0x0202;
+        private const int WmRightButtonDown = 0x0204;
+        private const int WmRightButtonUp = 0x0205;
+        private const int WmMiddleButtonDown = 0x0207;
+        private const int WmMiddleButtonUp = 0x0208;
+        private const int WmMouseWheel = 0x020A;
+
+        private static bool isClassRegistered;
+        private static WndProcDelegate? defWndProc;
+
         private DisposeCollector? swapChainDisposer;
         private DeviceLease? lease;
         private ID3D11Device? device;
@@ -26,31 +48,8 @@ namespace YMM43D.PreviewTool.Views
         public event Action<Point, MouseEventKind, int>? MouseAction;
 
         public Func<Key, ModifierKeys, bool>? KeyHandler { get; set; }
+
         public enum MouseEventKind { Down, Move, Up, Wheel, RightDown, RightUp, MiddleDown, MiddleUp }
-
-        public static ModifierKeys CurrentModifiers
-        {
-            get
-            {
-                var modifiers = ModifierKeys.None;
-
-                if (IsDown(VirtualKeyControl)) modifiers |= ModifierKeys.Control;
-                if (IsDown(VirtualKeyShift)) modifiers |= ModifierKeys.Shift;
-                if (IsDown(VirtualKeyAlt)) modifiers |= ModifierKeys.Alt;
-
-                return modifiers;
-            }
-        }
-
-        private const int VirtualKeyShift = 0x10;
-        private const int VirtualKeyControl = 0x11;
-        private const int VirtualKeyAlt = 0x12;
-
-        private static bool IsDown(int virtualKey) => (GetKeyState(virtualKey) & 0x8000) != 0;
-
-        private const string WindowClassName = "YMM43D_PreviewHost_Independent";
-        private static bool isClassRegistered;
-        private static WndProcDelegate? defWndProc;
 
         public D3D11Host()
         {
@@ -73,7 +72,8 @@ namespace YMM43D.PreviewTool.Views
 
         public void RenderFrame()
         {
-            if (device == null || deviceContext == null || swapChain == null) return;
+            if (device is null || deviceContext is null || swapChain is null)
+                return;
 
             lock (D2DGate.Sync)
             lock (device)
@@ -98,35 +98,42 @@ namespace YMM43D.PreviewTool.Views
             {
                 defWndProc = DefWindowProc;
                 var classNamePtr = Marshal.StringToHGlobalUni(WindowClassName);
+
                 try
                 {
                     var wndClass = new WNDCLASSEX
                     {
                         cbSize = Marshal.SizeOf<WNDCLASSEX>(),
-                        style = 0x0008,
+                        style = ClassStyleDoubleClicks,
                         lpfnWndProc = Marshal.GetFunctionPointerForDelegate(defWndProc),
                         hInstance = nint.Zero,
-                        hCursor = LoadCursor(nint.Zero, (nint)32512),
-                        hbrBackground = GetStockObject(4),
-                        lpszClassName = classNamePtr
+                        hCursor = LoadCursor(nint.Zero, StandardArrowCursor),
+                        hbrBackground = GetStockObject(BlackBrush),
+                        lpszClassName = classNamePtr,
                     };
+
                     RegisterClassEx(ref wndClass);
                 }
                 finally
                 {
                     Marshal.FreeHGlobal(classNamePtr);
                 }
+
                 isClassRegistered = true;
             }
 
-            int w = Math.Max(1, (int)ActualWidth);
-            int h = Math.Max(1, (int)ActualHeight);
+            var width = Math.Max(1, (int)ActualWidth);
+            var height = Math.Max(1, (int)ActualHeight);
 
             var classPtr = Marshal.StringToHGlobalUni(WindowClassName);
-            var windowPtr = Marshal.StringToHGlobalUni("");
+            var windowPtr = Marshal.StringToHGlobalUni(string.Empty);
+
             try
             {
-                var hwnd = CreateWindowEx(0, classPtr, windowPtr, 0x40000000 | 0x10000000, 0, 0, w, h, hwndParent.Handle, nint.Zero, nint.Zero, nint.Zero);
+                var hwnd = CreateWindowEx(
+                    0, classPtr, windowPtr, WindowStyleChild | WindowStyleVisible,
+                    0, 0, width, height, hwndParent.Handle, nint.Zero, nint.Zero, nint.Zero);
+
                 return new HandleRef(this, hwnd);
             }
             finally
@@ -140,16 +147,12 @@ namespace YMM43D.PreviewTool.Views
         {
             DestroyWindow(hwnd.Handle);
             DisposeAll();
-            deviceContext = null;
-            device = null;
         }
 
         protected override void Dispose(bool disposing)
         {
             if (disposing)
-            {
                 DisposeAll();
-            }
 
             base.Dispose(disposing);
         }
@@ -157,10 +160,10 @@ namespace YMM43D.PreviewTool.Views
         private void DisposeAll()
         {
             CleanupSwapChain();
-            ReleaseIndependentDeviceIfHeld();
+            ReleaseDevice();
         }
 
-        private void ReleaseIndependentDeviceIfHeld()
+        private void ReleaseDevice()
         {
             if (lease is not { } held)
                 return;
@@ -173,45 +176,49 @@ namespace YMM43D.PreviewTool.Views
 
         private void CreateSwapChain()
         {
-            if (device == null || Handle == nint.Zero) return;
-            if (ActualWidth <= 0 || ActualHeight <= 0) return;
+            if (device is null || Handle == nint.Zero || ActualWidth <= 0 || ActualHeight <= 0)
+                return;
 
             CleanupSwapChain();
+
+            var width = (int)ActualWidth;
+            var height = (int)ActualHeight;
 
             try
             {
                 swapChainDisposer = new DisposeCollector();
+
                 using var factory = DXGI.CreateDXGIFactory1<IDXGIFactory1>();
-                var desc = new SwapChainDescription
+
+                swapChain = factory.CreateSwapChain(device, new SwapChainDescription
                 {
                     BufferCount = 1,
-                    BufferDescription = new ModeDescription((int)ActualWidth, (int)ActualHeight, new Rational(60, 1), Format.R8G8B8A8_UNorm),
+                    BufferDescription = new ModeDescription(width, height, new Rational(60, 1), Format.R8G8B8A8_UNorm),
                     BufferUsage = Usage.RenderTargetOutput,
                     OutputWindow = Handle,
                     SampleDescription = new SampleDescription(1, 0),
                     Windowed = true,
-                    SwapEffect = SwapEffect.Discard
-                };
-                swapChain = factory.CreateSwapChain(device, desc);
+                    SwapEffect = SwapEffect.Discard,
+                });
                 swapChainDisposer.Collect(swapChain);
 
                 using var backBuffer = swapChain.GetBuffer<ID3D11Texture2D>(0);
                 RenderTargetView = device.CreateRenderTargetView(backBuffer);
                 swapChainDisposer.Collect(RenderTargetView);
 
-                var dsDesc = new Texture2DDescription
+                var depthBuffer = device.CreateTexture2D(new Texture2DDescription
                 {
-                    Width = (int)ActualWidth,
-                    Height = (int)ActualHeight,
+                    Width = width,
+                    Height = height,
                     MipLevels = 1,
                     ArraySize = 1,
                     Format = Format.D24_UNorm_S8_UInt,
                     SampleDescription = new SampleDescription(1, 0),
                     Usage = ResourceUsage.Default,
-                    BindFlags = BindFlags.DepthStencil
-                };
-                var depthBuffer = device.CreateTexture2D(dsDesc);
+                    BindFlags = BindFlags.DepthStencil,
+                });
                 swapChainDisposer.Collect(depthBuffer);
+
                 DepthStencilView = device.CreateDepthStencilView(depthBuffer);
                 swapChainDisposer.Collect(DepthStencilView);
             }
@@ -232,67 +239,55 @@ namespace YMM43D.PreviewTool.Views
         }
 
         private static Point GetPoint(nint lParam)
-        {
-            int x = (short)((int)lParam & 0xFFFF);
-            int y = (short)((int)lParam >> 16);
-            return new Point(x, y);
-        }
+            => new((short)((int)lParam & 0xFFFF), (short)((int)lParam >> 16));
 
-        protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo) { base.OnRenderSizeChanged(sizeInfo); CreateSwapChain(); }
+        protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
+        {
+            base.OnRenderSizeChanged(sizeInfo);
+            CreateSwapChain();
+        }
 
         protected override nint WndProc(nint hwnd, int msg, nint wParam, nint lParam, ref bool handled)
         {
             switch (msg)
             {
-                case 0x0201:
-                    SetFocus(hwnd);
-                    this.Focus();
-                    SetCapture(hwnd);
-                    MouseAction?.Invoke(GetPoint(lParam), MouseEventKind.Down, 0);
-                    handled = true;
+                case WmLeftButtonDown:
+                    handled = Press(hwnd, lParam, MouseEventKind.Down);
                     break;
-                case 0x0202:
-                    ReleaseCapture();
-                    MouseAction?.Invoke(GetPoint(lParam), MouseEventKind.Up, 0);
-                    handled = true;
+
+                case WmRightButtonDown:
+                    handled = Press(hwnd, lParam, MouseEventKind.RightDown);
                     break;
-                case 0x0204:
-                    SetFocus(hwnd);
-                    this.Focus();
-                    SetCapture(hwnd);
-                    MouseAction?.Invoke(GetPoint(lParam), MouseEventKind.RightDown, 0);
-                    handled = true;
+
+                case WmMiddleButtonDown:
+                    handled = Press(hwnd, lParam, MouseEventKind.MiddleDown);
                     break;
-                case 0x0205:
-                    ReleaseCapture();
-                    MouseAction?.Invoke(GetPoint(lParam), MouseEventKind.RightUp, 0);
-                    handled = true;
+
+                case WmLeftButtonUp:
+                    handled = Release(lParam, MouseEventKind.Up);
                     break;
-                case 0x0207:
-                    SetFocus(hwnd);
-                    this.Focus();
-                    SetCapture(hwnd);
-                    MouseAction?.Invoke(GetPoint(lParam), MouseEventKind.MiddleDown, 0);
-                    handled = true;
+
+                case WmRightButtonUp:
+                    handled = Release(lParam, MouseEventKind.RightUp);
                     break;
-                case 0x0208:
-                    ReleaseCapture();
-                    MouseAction?.Invoke(GetPoint(lParam), MouseEventKind.MiddleUp, 0);
-                    handled = true;
+
+                case WmMiddleButtonUp:
+                    handled = Release(lParam, MouseEventKind.MiddleUp);
                     break;
-                case 0x0200:
+
+                case WmMouseMove:
                     MouseAction?.Invoke(GetPoint(lParam), MouseEventKind.Move, 0);
                     handled = true;
                     break;
-                case 0x020A:
-                    short delta = (short)((long)wParam >> 16);
-                    MouseAction?.Invoke(new Point(0, 0), MouseEventKind.Wheel, delta);
+
+                case WmMouseWheel:
+                    MouseAction?.Invoke(new Point(0, 0), MouseEventKind.Wheel, (short)((long)wParam >> 16));
                     handled = true;
                     break;
 
-                case 0x0100:
-                case 0x0104:
-                    if (KeyHandler?.Invoke(KeyInterop.KeyFromVirtualKey((int)wParam), CurrentModifiers) == true)
+                case WmKeyDown:
+                case WmSysKeyDown:
+                    if (KeyHandler?.Invoke(KeyInterop.KeyFromVirtualKey((int)wParam), Keyboard.Modifiers) == true)
                     {
                         handled = true;
                         return nint.Zero;
@@ -300,18 +295,43 @@ namespace YMM43D.PreviewTool.Views
 
                     break;
             }
+
             return base.WndProc(hwnd, msg, wParam, lParam, ref handled);
         }
 
-        #region Win32 API
+        private bool Press(nint hwnd, nint lParam, MouseEventKind kind)
+        {
+            SetFocus(hwnd);
+            Focus();
+            SetCapture(hwnd);
+            MouseAction?.Invoke(GetPoint(lParam), kind, 0);
+            return true;
+        }
+
+        private bool Release(nint lParam, MouseEventKind kind)
+        {
+            ReleaseCapture();
+            MouseAction?.Invoke(GetPoint(lParam), kind, 0);
+            return true;
+        }
+
         private delegate nint WndProcDelegate(nint hWnd, int msg, nint wParam, nint lParam);
 
         [StructLayout(LayoutKind.Sequential)]
         private struct WNDCLASSEX
         {
-            public int cbSize; public int style; public nint lpfnWndProc; public int cbClsExtra; public int cbWndExtra;
-            public nint hInstance; public nint hIcon; public nint hCursor; public nint hbrBackground;
-            public nint lpszMenuName; public nint lpszClassName; public nint hIconSm;
+            public int cbSize;
+            public int style;
+            public nint lpfnWndProc;
+            public int cbClsExtra;
+            public int cbWndExtra;
+            public nint hInstance;
+            public nint hIcon;
+            public nint hCursor;
+            public nint hbrBackground;
+            public nint lpszMenuName;
+            public nint lpszClassName;
+            public nint hIconSm;
         }
 
         [LibraryImport("user32.dll", EntryPoint = "RegisterClassExW", SetLastError = true)]
@@ -342,9 +362,5 @@ namespace YMM43D.PreviewTool.Views
 
         [LibraryImport("user32.dll", SetLastError = true)]
         private static partial nint SetFocus(nint hWnd);
-
-        [LibraryImport("user32.dll")]
-        private static partial short GetKeyState(int nVirtKey);
-        #endregion
     }
 }

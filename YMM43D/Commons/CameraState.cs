@@ -18,12 +18,12 @@ namespace YMM43D.Commons
 
         public Matrix4x4 Rotation => Rotation3D.ForCamera(Yaw, Pitch, Roll);
 
-        public Vector3 Forward => Vector3.Transform(new Vector3(0f, 0f, -1f), Rotation);
+        public Vector3 Forward => Vector3.Transform(-Vector3.UnitZ, Rotation);
 
         public CameraPose GetPose()
         {
             var rotation = Rotation;
-            var forward = Vector3.Transform(new Vector3(0f, 0f, -1f), rotation);
+            var forward = Vector3.Transform(-Vector3.UnitZ, rotation);
             var up = Vector3.Transform(Vector3.UnitY, rotation);
 
             return new CameraPose(Position, Position + forward, up, rotation);

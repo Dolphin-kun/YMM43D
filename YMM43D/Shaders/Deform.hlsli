@@ -9,11 +9,9 @@ SamplerState samLinear : register(s0);
 
 struct VS_IN
 {
-    // 平らな板の上の位置。x と y は -0.5〜0.5、z は 0。
     float3 Position : POSITION;
     float2 TexCoord : TEXCOORD;
 
-    // 破片の中心。つながった板では Position と同じ値が入る。
     float3 Piece    : PIECE;
 };
 
@@ -26,16 +24,9 @@ struct PS_IN
     float  Fade     : TEXCOORD2;
 };
 
-// ここから下の2つは、エフェクトごとに用意する。
-//
-// Deform は、平らな板の1点が動いた先を返す。
-// DeformFade は、その点をどれだけ残すかを返す（1 でそのまま、0 で消える）。
 float3 Deform(float3 local, float3 piece);
 float  DeformFade(float3 local, float3 piece);
 
-// 法線は、少しずらした2点を同じように動かして、その差から出す。
-// こうすると、どんな変形でも同じ手順で陰影がつき、
-// エフェクト側は「点がどこへ行くか」だけ考えればよくなる。
 static const float NormalStep = 1.0 / 512.0;
 
 PS_IN VSMain(VS_IN input)
@@ -67,8 +58,6 @@ float4 PSMain(PS_IN input) : SV_TARGET
     return color;
 }
 
-// 破片ごとのばらつき。同じ破片なら毎回同じ値になるので、
-// 再生し直しても飛び方が変わらない。
 float3 PieceNoise(float3 piece, float seed)
 {
     float3 p = piece * 127.1 + seed;

@@ -73,7 +73,7 @@ namespace YMM43D.Project.Items
         public override TimeSpan ContentLength => TimeSpan.Zero;
 
         public Vector3 GetAmbient(in FrameContext itemTime)
-            => ToLinear(AmbientColor) * (AmbientBrightness.GetFloat(itemTime) / 100f);
+            => AmbientColor.ToVector3() * (AmbientBrightness.GetFloat(itemTime) / 100f);
 
         public SceneFog GetFog(in FrameContext itemTime)
         {
@@ -84,14 +84,11 @@ namespace YMM43D.Project.Items
             var end = WorldScale.ToWorld(FogEnd.GetFloat(itemTime));
 
             return new SceneFog(
-                ToLinear(FogColor),
+                FogColor.ToVector3(),
                 FogDensity.GetFloat(itemTime) / 100f,
                 start,
                 MathF.Max(end, start + 1e-3f));
         }
-
-        private static Vector3 ToLinear(Color color)
-            => new(color.R / 255f, color.G / 255f, color.B / 255f);
 
         protected override IEnumerable<IAnimatable> GetAnimatables()
             => [AmbientBrightness, FogDensity, FogStart, FogEnd];

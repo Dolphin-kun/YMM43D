@@ -5,8 +5,6 @@ using YukkuriMovieMaker.Commons;
 
 namespace YMM43D.Graphics
 {
-    // 光源から見た「いちばん手前にある物までの距離」を、光源ごとに1枚ずつ持つ板。
-    // 影を落とせる光の数を絞っているのは、1灯ごとに場をもう一度描くため。
     public sealed class ShadowMapArray : IDisposable
     {
         public const int Slot = 2;
@@ -64,7 +62,6 @@ namespace YMM43D.Graphics
                 },
             }));
 
-            // 板の外は「遮る物なし」として明るいままにしたいので、ふちの値は 1。
             Sampler = Collect(device.CreateSamplerState(new SamplerDescription
             {
                 Filter = Filter.ComparisonMinMagLinearMipPoint,

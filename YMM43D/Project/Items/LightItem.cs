@@ -20,7 +20,7 @@ namespace YMM43D.Project.Items
         private const int FirstOrder = 100;
 
         [Display(GroupName = Lamp, Name = "種類",
-            Description = "平行光は向きだけ、点光源は置いた場所から周りを照らします", Order = FirstOrder)]
+            Description = "平行光は向きだけ、点光源は置いた場所から周り、スポットライトは円錐の中を照らします", Order = FirstOrder)]
         [EnumComboBox]
         public LightKind Kind
         {
@@ -142,7 +142,7 @@ namespace YMM43D.Project.Items
 
         public SceneLight GetLight(in FrameContext itemTime)
         {
-            var color = ToLinear(LightColor) * (Brightness.GetFloat(itemTime) / 100f);
+            var color = LightColor.ToVector3() * (Brightness.GetFloat(itemTime) / 100f);
 
             if (Kind == LightKind.Spot)
             {
@@ -187,9 +187,7 @@ namespace YMM43D.Project.Items
         {
             if (Kind is LightKind.Point or LightKind.Spot)
             {
-                scope.Nudge(X, WorldScale.ToPixels(shift.X));
-                scope.Nudge(Y, -WorldScale.ToPixels(shift.Y));
-                scope.Nudge(Z, WorldScale.ToPixels(shift.Z));
+                scope.NudgePosition(X, Y, Z, shift);
                 return;
             }
 
@@ -208,16 +206,10 @@ namespace YMM43D.Project.Items
         }
 
         private Vector3 GetPosition(in FrameContext itemTime)
-            => new(
-                WorldScale.ToWorld(X.GetFloat(itemTime)),
-                -WorldScale.ToWorld(Y.GetFloat(itemTime)),
-                WorldScale.ToWorld(Z.GetFloat(itemTime)));
+            => WorldScale.ToWorldPosition(X.GetFloat(itemTime), Y.GetFloat(itemTime), Z.GetFloat(itemTime));
 
         private Vector3 GetShines(in FrameContext itemTime)
             => -SceneLight.ToDirection(Yaw.GetFloat(itemTime), Pitch.GetFloat(itemTime));
-
-        private static Vector3 ToLinear(Color color)
-            => new(color.R / 255f, color.G / 255f, color.B / 255f);
 
         protected override IEnumerable<IAnimatable> GetAnimatables()
             => [Yaw, Pitch, X, Y, Z, Reach, Spread, EdgeBlur, Brightness, ShadowStrength];

@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using Vortice.Direct3D11;
 
 namespace YMM43D.Graphics
@@ -10,7 +9,8 @@ namespace YMM43D.Graphics
 
     public sealed class DeviceResourceCache<T> : IDeviceResourceCache, IDisposable where T : IDisposable
     {
-        private readonly ConcurrentDictionary<nint, T> cache = new();
+        private readonly Lock gate = new();
+        private readonly Dictionary<nint, T> cache = [];
         private readonly Func<ID3D11Device, T> factory;
 
         public DeviceResourceCache(Func<ID3D11Device, T> factory)
@@ -21,16 +21,27 @@ namespace YMM43D.Graphics
 
         public T Get(ID3D11Device device)
         {
-            return cache.GetOrAdd(device.NativePointer, _ => factory(device));
+            lock (gate)
+            {
+                if (cache.TryGetValue(device.NativePointer, out var found))
+                    return found;
+
+                return cache[device.NativePointer] = factory(device);
+            }
         }
 
         public void Clear()
         {
-            foreach (var key in cache.Keys)
+            T[] values;
+
+            lock (gate)
             {
-                if (cache.TryRemove(key, out var value))
-                    value.Dispose();
+                values = [.. cache.Values];
+                cache.Clear();
             }
+
+            foreach (var value in values)
+                value.Dispose();
         }
 
         public void Dispose()

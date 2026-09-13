@@ -41,7 +41,6 @@ namespace YMM43D.Commons
 
             var worldView = world * view;
 
-            // 1コマにアイテムの数だけ通るので、置き場所は積まずに borrow で済ませる。
             Span<Vector3> corners = stackalloc Vector3[WorldBounds.CornerCount];
             bounds.WriteCorners(corners);
 

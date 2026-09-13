@@ -4,10 +4,12 @@ using YukkuriMovieMaker.Commons;
 
 namespace YMM43D.Graphics.Materials
 {
-    // hlsl はプラグイン側のアセンブリに埋まっているので、そちらを渡してもらう。
-    // その中の #include は、見つからなければ YMM43D から拾われる。
     public class ShaderMaterial : IMaterial
     {
+        private const string VertexProfile = "vs_5_0";
+
+        private const string PixelProfile = "ps_5_0";
+
         private readonly DisposeCollector disposer = new();
 
         public ID3D11VertexShader VertexShader { get; }
@@ -17,13 +19,24 @@ namespace YMM43D.Graphics.Materials
         public byte[] VertexShaderBytecode { get; }
 
         public ShaderMaterial(ID3D11Device device, Assembly assembly, string shader)
+            : this(device, assembly, shader, "VSMain", shader, "PSMain")
         {
-            VertexShaderBytecode = ShaderLibrary.Compile(assembly, shader, "VSMain", "vs_5_0");
+        }
+
+        public ShaderMaterial(
+            ID3D11Device device,
+            Assembly assembly,
+            string vertexShader,
+            string vertexEntryPoint,
+            string pixelShader,
+            string pixelEntryPoint)
+        {
+            VertexShaderBytecode = ShaderLibrary.Compile(assembly, vertexShader, vertexEntryPoint, VertexProfile);
             VertexShader = device.CreateVertexShader(VertexShaderBytecode);
             disposer.Collect(VertexShader);
 
             PixelShader = device.CreatePixelShader(
-                ShaderLibrary.Compile(assembly, shader, "PSMain", "ps_5_0"));
+                ShaderLibrary.Compile(assembly, pixelShader, pixelEntryPoint, PixelProfile));
             disposer.Collect(PixelShader);
         }
 

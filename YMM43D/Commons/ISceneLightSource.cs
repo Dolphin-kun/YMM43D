@@ -7,8 +7,6 @@ namespace YMM43D.Commons
         SceneLight GetLight(in FrameContext itemTime);
     }
 
-    // 自分では位置を持たず、アイテムの置き場所に従って光るもの。
-    // 3D図形のように、YMM4 側の座標で動かされるものはこちらを実装する。
     public interface IPlacedSceneLightSource
     {
         bool IsLightEnabled { get; }

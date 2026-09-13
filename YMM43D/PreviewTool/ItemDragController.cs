@@ -203,17 +203,13 @@ namespace YMM43D.PreviewTool
 
             lastAngle = angle;
 
-            scope.Nudge(item.Rotation, -delta * 180f / MathF.PI);
+            scope.Nudge(item.Rotation, -float.RadiansToDegrees(delta));
 
             return true;
         }
 
         private void Shift(IVideoItem item, in Vector3 shift)
-        {
-            scope.Nudge(item.X, WorldScale.ToPixels(shift.X));
-            scope.Nudge(item.Y, -WorldScale.ToPixels(shift.Y));
-            scope.Nudge(item.Z, WorldScale.ToPixels(shift.Z));
-        }
+            => scope.NudgePosition(item.X, item.Y, item.Z, shift);
 
         private static float? GetAngle(in PickRay ray, in Vector3 origin)
         {

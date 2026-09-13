@@ -213,6 +213,7 @@ namespace YMM43D.Project.Shape
             public int Segments { get; set; }
             public int Thickness { get; set; }
             public CubeFill Fill { get; set; }
+            public bool IsUnlit { get; set; }
             public Color Color { get; set; }
             public ImmutableList<Color> FaceColors { get; set; } = [];
             public ImmutableList<Color> StoredFaceColors { get; set; } = [];
@@ -227,6 +228,7 @@ namespace YMM43D.Project.Shape
                 Segments = parameter.Segments;
                 Thickness = parameter.Thickness;
                 Fill = parameter.Fill;
+                IsUnlit = parameter.IsUnlit;
                 Color = parameter.Color;
                 FaceColors = [.. parameter.FaceColors.Select(f => f.Color)];
                 StoredFaceColors = parameter.StoredFaceColors;
@@ -242,6 +244,7 @@ namespace YMM43D.Project.Shape
                 parameter.Segments = Segments;
                 parameter.Thickness = Thickness;
                 parameter.Fill = Fill;
+                parameter.IsUnlit = IsUnlit;
                 parameter.Color = Color;
                 parameter.FaceColors = [.. FaceColors.Select(c => new FaceColor { Color = c })];
                 parameter.StoredFaceColors = StoredFaceColors;

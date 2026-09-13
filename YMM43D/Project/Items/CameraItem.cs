@@ -173,10 +173,7 @@ namespace YMM43D.Project.Items
         }
 
         private static Vector3 ToWorld(Animation x, Animation y, Animation z, in FrameContext itemTime)
-            => new(
-                WorldScale.ToWorld(x.GetFloat(itemTime)),
-                -WorldScale.ToWorld(y.GetFloat(itemTime)),
-                WorldScale.ToWorld(z.GetFloat(itemTime)));
+            => WorldScale.ToWorldPosition(x.GetFloat(itemTime), y.GetFloat(itemTime), z.GetFloat(itemTime));
 
         private static (float Yaw, float Pitch) GetAngles(in Vector3 from, in Vector3 to)
         {
@@ -187,8 +184,8 @@ namespace YMM43D.Project.Items
 
             direction = Vector3.Normalize(direction);
 
-            var pitch = Rotation3D.ToDegrees(MathF.Asin(Math.Clamp(direction.Y, -1f, 1f)));
-            var yaw = Rotation3D.ToDegrees(MathF.Atan2(-direction.X, -direction.Z));
+            var pitch = float.RadiansToDegrees(MathF.Asin(Math.Clamp(direction.Y, -1f, 1f)));
+            var yaw = float.RadiansToDegrees(MathF.Atan2(-direction.X, -direction.Z));
 
             return (yaw, Math.Clamp(pitch, -CameraState.MaxPitch, CameraState.MaxPitch));
         }
@@ -209,9 +206,7 @@ namespace YMM43D.Project.Items
                 return;
             }
 
-            scope.Nudge(X, WorldScale.ToPixels(move.Shift.X));
-            scope.Nudge(Y, -WorldScale.ToPixels(move.Shift.Y));
-            scope.Nudge(Z, WorldScale.ToPixels(move.Shift.Z));
+            scope.NudgePosition(X, Y, Z, move.Shift);
 
             if (AimMode == CameraAim.Target)
                 return;
@@ -237,9 +232,7 @@ namespace YMM43D.Project.Items
             var across = move.Shift - forward * along;
 
             scope.Nudge(Distance, -WorldScale.ToPixels(along));
-            scope.Nudge(TargetX, WorldScale.ToPixels(across.X));
-            scope.Nudge(TargetY, -WorldScale.ToPixels(across.Y));
-            scope.Nudge(TargetZ, WorldScale.ToPixels(across.Z));
+            scope.NudgePosition(TargetX, TargetY, TargetZ, across);
         }
 
         protected override IEnumerable<IAnimatable> GetAnimatables()
