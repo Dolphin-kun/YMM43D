@@ -1,18 +1,30 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Numerics;
+using System.Text;
+using System.Text.Unicode;
 
 namespace YMM43D.Graphics.Models
 {
     public static class ObjModelLoader
     {
-        private readonly record struct Material(Vector4 Color, string? Texture);
+        private static readonly string[] ImageExtensions = [".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".gif"];
+
+        private static readonly Lazy<Encoding> ShiftJis = new(() =>
+        {
+            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+            return Encoding.GetEncoding(932);
+        });
+
+        private readonly record struct Material(Vector4 Color, string? Texture, string Directory);
 
         private readonly record struct Corner(int Position, int TexCoord, int Normal);
 
         public static ModelData Load(string path)
         {
-            var directory = Path.GetDirectoryName(Path.GetFullPath(path)) ?? string.Empty;
+            var fullPath = Path.GetFullPath(path);
+            var directory = Path.GetDirectoryName(fullPath) ?? string.Empty;
 
             var positions = new List<Vector3>();
             var colors = new List<Vector4>();
@@ -20,6 +32,8 @@ namespace YMM43D.Graphics.Models
             var normals = new List<Vector3>();
             var materials = new Dictionary<string, Material>(StringComparer.Ordinal);
             var images = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            var hasLibrary = false;
+            var triedSibling = false;
 
             var builder = new ModelBuilder();
             var shared = new Dictionary<Corner, uint>();
@@ -27,7 +41,7 @@ namespace YMM43D.Graphics.Models
 
             builder.BeginPart(Vector4.One, -1, ModelData.NoMaterial, ModelData.NoMaterial);
 
-            foreach (var raw in File.ReadLines(path))
+            foreach (var raw in ReadLines(fullPath))
             {
                 var line = raw.Trim();
 
@@ -54,16 +68,31 @@ namespace YMM43D.Graphics.Models
                         break;
 
                     case "mtllib":
-                        foreach (var library in Rest(line))
-                            ReadMaterials(Path.Combine(directory, library), materials);
+                        foreach (var library in Libraries(line, parts, directory))
+                        {
+                            ReadMaterials(library, materials);
+                            hasLibrary = true;
+                        }
                         break;
 
                     case "usemtl":
-                        var name = line[parts[0].Length..].Trim();
-                        var material = materials.TryGetValue(name, out var found) ? found : new Material(Vector4.One, null);
+                        if (!hasLibrary && !triedSibling)
+                        {
+                            triedSibling = true;
+
+                            var sibling = Path.ChangeExtension(fullPath, ".mtl");
+
+                            if (File.Exists(sibling))
+                                ReadMaterials(sibling, materials);
+                        }
+
+                        var name = RestOf(line);
+                        var material = materials.TryGetValue(name, out var found)
+                            ? found
+                            : new Material(Vector4.One, null, directory);
 
                         builder.BeginPart(
-                            material.Color, ImageOf(material.Texture, directory, images, builder), name, name);
+                            material.Color, ImageOf(material, directory, images, builder), name, name);
                         shared.Clear();
                         break;
 
@@ -79,6 +108,29 @@ namespace YMM43D.Graphics.Models
             }
 
             return builder.Build();
+        }
+
+        internal static IEnumerable<string> ReadLines(string path)
+        {
+            var bytes = File.ReadAllBytes(path);
+            using var reader = new StreamReader(new MemoryStream(bytes, writable: false), DetectEncoding(bytes), true);
+
+            while (reader.ReadLine() is { } line)
+                yield return line;
+        }
+
+        internal static Encoding DetectEncoding(ReadOnlySpan<byte> bytes)
+        {
+            if (bytes is [0xEF, 0xBB, 0xBF, ..])
+                return Encoding.UTF8;
+
+            if (bytes is [0xFF, 0xFE, ..])
+                return Encoding.Unicode;
+
+            if (bytes is [0xFE, 0xFF, ..])
+                return Encoding.BigEndianUnicode;
+
+            return Utf8.IsValid(bytes) ? Encoding.UTF8 : ShiftJis.Value;
         }
 
         private static void AddFace(
@@ -160,10 +212,24 @@ namespace YMM43D.Graphics.Models
             return index;
         }
 
+        private static IEnumerable<string> Libraries(string line, string[] parts, string directory)
+        {
+            if (FindFile(RestOf(line), [directory]) is { } whole)
+            {
+                yield return whole;
+                yield break;
+            }
+
+            for (var i = 1; i < parts.Length; i++)
+            {
+                if (FindFile(parts[i], [directory]) is { } library)
+                    yield return library;
+            }
+        }
+
         private static void ReadMaterials(string path, Dictionary<string, Material> materials)
         {
-            if (!File.Exists(path))
-                return;
+            var directory = Path.GetDirectoryName(path) ?? string.Empty;
 
             string? name = null;
             var color = Vector4.One;
@@ -172,10 +238,10 @@ namespace YMM43D.Graphics.Models
             void Flush()
             {
                 if (name is not null)
-                    materials[name] = new Material(color, texture);
+                    materials[name] = new Material(color, texture, directory);
             }
 
-            foreach (var raw in File.ReadLines(path))
+            foreach (var raw in ReadLines(path))
             {
                 var line = raw.Trim();
 
@@ -184,16 +250,16 @@ namespace YMM43D.Graphics.Models
 
                 var parts = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
 
-                switch (parts[0])
+                switch (parts[0].ToLowerInvariant())
                 {
                     case "newmtl":
                         Flush();
-                        name = line[parts[0].Length..].Trim();
+                        name = RestOf(line);
                         color = Vector4.One;
                         texture = null;
                         break;
 
-                    case "Kd":
+                    case "kd":
                         color = new Vector4(Number(parts, 1), Number(parts, 2), Number(parts, 3), color.W);
                         break;
 
@@ -201,12 +267,12 @@ namespace YMM43D.Graphics.Models
                         color.W = Number(parts, 1);
                         break;
 
-                    case "Tr":
+                    case "tr":
                         color.W = 1f - Number(parts, 1);
                         break;
 
-                    case "map_Kd":
-                        texture = parts.Length > 1 ? parts[^1] : null;
+                    case "map_kd":
+                        texture = TextureReference(line) ?? texture;
                         break;
                 }
             }
@@ -214,35 +280,149 @@ namespace YMM43D.Graphics.Models
             Flush();
         }
 
-        private static int ImageOf(
-            string? texture, string directory, Dictionary<string, int> images, ModelBuilder builder)
+        internal static string? TextureReference(string line)
         {
-            if (texture is null)
+            var tokens = new List<(int Start, string Text)>();
+
+            for (var i = 0; i < line.Length;)
+            {
+                if (char.IsWhiteSpace(line[i]))
+                {
+                    i++;
+                    continue;
+                }
+
+                var start = i;
+
+                while (i < line.Length && !char.IsWhiteSpace(line[i]))
+                    i++;
+
+                tokens.Add((start, line[start..i]));
+            }
+
+            var index = 1;
+
+            while (index < tokens.Count && tokens[index].Text is ['-', _, ..] option && !IsNumber(option))
+            {
+                index++;
+
+                while (index < tokens.Count && (IsNumber(tokens[index].Text) || tokens[index].Text is "on" or "off"))
+                    index++;
+            }
+
+            if (index >= tokens.Count)
+                return null;
+
+            var reference = line[tokens[index].Start..].Trim().Trim('"');
+
+            return reference.Length > 0 ? reference : null;
+        }
+
+        private static int ImageOf(
+            Material material, string modelDirectory, Dictionary<string, int> images, ModelBuilder builder)
+        {
+            if (material.Texture is not { } texture)
                 return -1;
 
-            var path = Path.Combine(directory, texture.Replace('\\', Path.DirectorySeparatorChar));
+            var key = $"{material.Directory}|{texture}";
 
-            if (images.TryGetValue(path, out var index))
+            if (images.TryGetValue(key, out var index))
                 return index;
+
+            index = -1;
+
+            foreach (var candidate in Alternatives(texture))
+            {
+                if (FindFile(candidate, [material.Directory, modelDirectory]) is not { } path)
+                    continue;
+
+                try
+                {
+                    index = builder.AddImage(ModelImageDecoder.DecodeFile(path));
+                    break;
+                }
+                catch (Exception error)
+                {
+                    Trace.TraceWarning($"[YMM43D] 3Dモデルの画像 {path} を読み込めませんでした。{error.Message}");
+                }
+            }
+
+            if (index < 0)
+                Trace.TraceWarning($"[YMM43D] 3Dモデルの画像 {texture} が見つかりません。");
+
+            return images[key] = index;
+        }
+
+        private static IEnumerable<string> Alternatives(string texture)
+        {
+            yield return texture;
+
+            var extension = Path.GetExtension(texture);
+
+            foreach (var other in ImageExtensions)
+            {
+                if (!other.Equals(extension, StringComparison.OrdinalIgnoreCase))
+                    yield return texture[..^extension.Length] + other;
+            }
+        }
+
+        internal static string? FindFile(string reference, string[] directories)
+        {
+            var cleaned = reference.Trim().Trim('"')
+                .Replace('\\', Path.DirectorySeparatorChar)
+                .Replace('/', Path.DirectorySeparatorChar);
+
+            if (cleaned.Length == 0)
+                return null;
 
             try
             {
-                index = File.Exists(path) ? builder.AddImage(ModelImageDecoder.DecodeFile(path)) : -1;
+                foreach (var directory in directories)
+                {
+                    var direct = Path.Combine(directory, cleaned);
+
+                    if (File.Exists(direct))
+                        return Path.GetFullPath(direct);
+                }
+
+                var name = Path.GetFileName(cleaned);
+
+                if (name.Length == 0 || name.IndexOfAny(['*', '?']) >= 0)
+                    return null;
+
+                var options = new EnumerationOptions
+                {
+                    RecurseSubdirectories = true,
+                    MaxRecursionDepth = 2,
+                    IgnoreInaccessible = true,
+                    MatchCasing = MatchCasing.CaseInsensitive,
+                };
+
+                foreach (var directory in directories.Distinct(StringComparer.OrdinalIgnoreCase))
+                {
+                    if (Directory.Exists(directory)
+                        && Directory.EnumerateFiles(directory, name, options).FirstOrDefault() is { } nearby)
+                    {
+                        return nearby;
+                    }
+                }
             }
             catch (Exception)
             {
-                index = -1;
             }
 
-            return images[path] = index;
+            return null;
         }
 
-        private static IEnumerable<string> Rest(string line)
+        private static string RestOf(string line)
         {
             var space = line.IndexOfAny([' ', '\t']);
 
-            return space < 0 ? [] : [line[space..].Trim()];
+            return space < 0 ? string.Empty : line[space..].Trim();
         }
+
+        private static bool IsNumber(string text)
+            => float.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out _);
 
         private static float Number(string[] parts, int index)
             => index < parts.Length && float.TryParse(parts[index], NumberStyles.Float, CultureInfo.InvariantCulture, out var value)
