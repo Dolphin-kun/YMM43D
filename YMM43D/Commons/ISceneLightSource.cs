@@ -19,5 +19,7 @@ namespace YMM43D.Commons
         Vector3 GetAmbient(in FrameContext itemTime);
 
         SceneFog GetFog(in FrameContext itemTime);
+
+        int ShadowResolution => Graphics.ShadowMapArray.DefaultSize;
     }
 }

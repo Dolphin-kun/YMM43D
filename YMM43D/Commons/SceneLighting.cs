@@ -41,7 +41,7 @@ namespace YMM43D.Commons
                 Cosine(light.InnerAngle),
                 light.Shadow.Slice,
                 light.Shadow.Strength,
-                light.Shadow.Texel),
+                light.Shadow.Radius),
             Shadow = Matrix4x4.Transpose(light.Shadow.Matrix),
         };
 
@@ -69,15 +69,25 @@ namespace YMM43D.Commons
 
     public readonly record struct ShadowPlacement(
         float Strength,
+        float Softness = 0f,
         int Slice = -1,
-        float Texel = 0f,
+        float Radius = 0f,
         Matrix4x4 Matrix = default)
     {
+        public const float SharpTexels = 1.5f;
+
+        public const float SoftTexels = 12f;
+
         public static ShadowPlacement None => default;
 
         public bool IsWanted => Strength > 0f;
 
         public bool IsPlaced => Slice >= 0;
+
+        public int SliceCount(LightKind kind) => kind == LightKind.Point ? 6 : 1;
+
+        public float RadiusFor(int resolution)
+            => (SharpTexels + (SoftTexels - SharpTexels) * Softness) / Math.Max(resolution, 1);
     }
 
     public readonly record struct SceneLight(
@@ -90,13 +100,13 @@ namespace YMM43D.Commons
         float OuterAngle = 0f,
         ShadowPlacement Shadow = default)
     {
-        public bool CanCastShadow => Kind is LightKind.Directional or LightKind.Spot;
+        public bool CanCastShadow => Kind is LightKind.Directional or LightKind.Spot or LightKind.Point;
 
-        public SceneLight WithShadow(float strength)
-            => this with { Shadow = new ShadowPlacement(Math.Clamp(strength, 0f, 1f)) };
+        public SceneLight WithShadow(float strength, float softness = 0f)
+            => this with { Shadow = new ShadowPlacement(Math.Clamp(strength, 0f, 1f), Math.Clamp(softness, 0f, 1f)) };
 
-        public SceneLight PlacedAt(int slice, float texel, in Matrix4x4 matrix)
-            => this with { Shadow = Shadow with { Slice = slice, Texel = texel, Matrix = matrix } };
+        public SceneLight PlacedAt(int slice, float radius, in Matrix4x4 matrix)
+            => this with { Shadow = Shadow with { Slice = slice, Radius = radius, Matrix = matrix } };
 
         public static SceneLight Directional(Vector3 direction, Vector3 color)
             => new(LightKind.Directional, Normalize(direction), color, 0f);
@@ -159,7 +169,11 @@ namespace YMM43D.Commons
         public bool IsEnabled => Density > 0f && End > Start;
     }
 
-    public sealed class SceneLighting(IReadOnlyList<SceneLight> lights, Vector3 ambient, SceneFog fog)
+    public sealed class SceneLighting(
+        IReadOnlyList<SceneLight> lights,
+        Vector3 ambient,
+        SceneFog fog,
+        int shadowResolution = ShadowMapArray.DefaultSize)
     {
         public const float DefaultYaw = 20f;
 
@@ -180,6 +194,8 @@ namespace YMM43D.Commons
 
         public SceneFog Fog { get; } = fog;
 
+        public int ShadowResolution { get; } = ShadowMapArray.ClampSize(shadowResolution);
+
         public IReadOnlyList<LightConstants> LightBuffer
             => lightBuffer ??= [.. Lights.Select(SceneConstants.ToConstants)];
         private LightConstants[]? lightBuffer;
@@ -189,8 +205,13 @@ namespace YMM43D.Commons
             if (ReferenceEquals(this, other))
                 return true;
 
-            if (Lights.Count != other.Lights.Count || Ambient != other.Ambient || Fog != other.Fog)
+            if (Lights.Count != other.Lights.Count
+                || Ambient != other.Ambient
+                || Fog != other.Fog
+                || ShadowResolution != other.ShadowResolution)
+            {
                 return false;
+            }
 
             for (var i = 0; i < Lights.Count; i++)
             {

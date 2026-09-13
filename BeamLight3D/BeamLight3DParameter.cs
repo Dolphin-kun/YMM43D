@@ -129,6 +129,12 @@ namespace BeamLight3D
         [ShowPropertyEditorWhen(nameof(IsShadowed), true)]
         public Animation ShadowStrength { get; } = new(80, 0, 100);
 
+        [Display(GroupName = Lamp, Name = "影のぼかし",
+            Description = "0 でくっきり、大きいほど影のふちがやわらかくなります", Order = 500)]
+        [AnimationSlider("F0", "%", 0, 100)]
+        [ShowPropertyEditorWhen(nameof(IsShadowed), true)]
+        public Animation ShadowSoftness { get; } = new(20, 0, 100);
+
         public BeamLight3DParameter(SharedDataStore? sharedData) : base(sharedData)
         {
         }
@@ -174,7 +180,7 @@ namespace BeamLight3D
                 EdgeBlur / 100f);
 
             return CastsShadow
-                ? light.WithShadow(ShadowStrength.GetFloat(itemTime) / 100f)
+                ? light.WithShadow(ShadowStrength.GetFloat(itemTime) / 100f, ShadowSoftness.GetFloat(itemTime) / 100f)
                 : light;
         }
 
@@ -183,7 +189,7 @@ namespace BeamLight3D
 
         protected override IEnumerable<IAnimatable> GetAnimatables()
             => [Length, Spread, Density, Decay, RotationX, RotationY, RotationZ,
-                Brightness, ShadowStrength, CameraSyncAnimation];
+                Brightness, ShadowStrength, ShadowSoftness, CameraSyncAnimation];
 
         public override IEnumerable<string> CreateMaskExoFilter(
             int keyFrameIndex, ExoOutputDescription desc, ShapeMaskExoOutputDescription shapeMaskDesc) => [];
@@ -208,6 +214,7 @@ namespace BeamLight3D
             public Animation RotationZ { get; } = new(0, -100000, 100000);
             public Animation Brightness { get; } = new(80, 0, 10000);
             public Animation ShadowStrength { get; } = new(80, 0, 100);
+            public Animation ShadowSoftness { get; } = new(20, 0, 100);
             public int EdgeBlur { get; set; }
             public int Detail { get; set; }
             public Color BeamColor { get; set; }
@@ -225,6 +232,7 @@ namespace BeamLight3D
                 RotationZ.CopyFrom(parameter.RotationZ);
                 Brightness.CopyFrom(parameter.Brightness);
                 ShadowStrength.CopyFrom(parameter.ShadowStrength);
+                ShadowSoftness.CopyFrom(parameter.ShadowSoftness);
                 EdgeBlur = parameter.EdgeBlur;
                 Detail = parameter.Detail;
                 BeamColor = parameter.BeamColor;
@@ -243,6 +251,7 @@ namespace BeamLight3D
                 parameter.RotationZ.CopyFrom(RotationZ);
                 parameter.Brightness.CopyFrom(Brightness);
                 parameter.ShadowStrength.CopyFrom(ShadowStrength);
+                parameter.ShadowSoftness.CopyFrom(ShadowSoftness);
                 parameter.EdgeBlur = EdgeBlur;
                 parameter.Detail = Detail;
                 parameter.BeamColor = BeamColor;

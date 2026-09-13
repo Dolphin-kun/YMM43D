@@ -24,6 +24,9 @@ float LightFalloff(Light light, float3 world, out float3 toLight)
 
 float3 ApplyLight(float3 color, float3 normal, float3 world)
 {
+    float3 worldDx = ddx(world);
+    float3 worldDy = ddy(world);
+
     if (Unlit > 0.5 || dot(normal, normal) < 1e-8)
         return color;
 
@@ -55,7 +58,7 @@ float3 ApplyLight(float3 color, float3 normal, float3 world)
         if (lambert <= 0.0 || fade <= 0.0)
             continue;
 
-        float3 received = light.Color.rgb * fade * ShadowAt(light, world, n, lambert);
+        float3 received = light.Color.rgb * fade * ShadowAt(light, world, worldDx, worldDy, n, lambert);
 
         sum += received * lambert;
 

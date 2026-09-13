@@ -103,9 +103,8 @@ namespace YMM43D.Project.Items
         public Animation Brightness { get; } = new(SceneLighting.DefaultBrightness * 100, 0, 10000);
 
         [Display(GroupName = Shade, Name = "影を落とす",
-            Description = "光をさえぎった物の後ろを暗くします。点光源では使えません", Order = 100)]
+            Description = "光をさえぎった物の後ろを暗くします", Order = 100)]
         [ToggleSlider]
-        [ShowPropertyEditorWhen(nameof(IsAimed), true)]
         public bool CastsShadow
         {
             get => castsShadow;
@@ -119,13 +118,19 @@ namespace YMM43D.Project.Items
 
         [Browsable(false)]
         [EditorBrowsable(EditorBrowsableState.Never)]
-        public bool IsShadowed => CastsShadow && Kind != LightKind.Point;
+        public bool IsShadowed => CastsShadow;
 
         [Display(GroupName = Shade, Name = "影の濃さ",
             Description = "100 で光がまったく届かなくなります", Order = 200)]
         [AnimationSlider("F0", "%", 0, 100)]
         [ShowPropertyEditorWhen(nameof(IsShadowed), true)]
         public Animation ShadowStrength { get; } = new(80, 0, 100);
+
+        [Display(GroupName = Shade, Name = "影のぼかし",
+            Description = "0 でくっきり、大きいほど影のふちがやわらかくなります", Order = 300)]
+        [AnimationSlider("F0", "%", 0, 100)]
+        [ShowPropertyEditorWhen(nameof(IsShadowed), true)]
+        public Animation ShadowSoftness { get; } = new(20, 0, 100);
 
         public override string Label => "3D光源";
 
@@ -166,7 +171,9 @@ namespace YMM43D.Project.Items
         }
 
         private SceneLight WithShade(in SceneLight light, in FrameContext itemTime)
-            => CastsShadow ? light.WithShadow(ShadowStrength.GetFloat(itemTime) / 100f) : light;
+            => CastsShadow
+                ? light.WithShadow(ShadowStrength.GetFloat(itemTime) / 100f, ShadowSoftness.GetFloat(itemTime) / 100f)
+                : light;
 
         public SceneMarker GetMarker(in FrameContext itemTime) => Kind switch
         {
@@ -212,7 +219,7 @@ namespace YMM43D.Project.Items
             => -SceneLight.ToDirection(Yaw.GetFloat(itemTime), Pitch.GetFloat(itemTime));
 
         protected override IEnumerable<IAnimatable> GetAnimatables()
-            => [Yaw, Pitch, X, Y, Z, Reach, Spread, EdgeBlur, Brightness, ShadowStrength];
+            => [Yaw, Pitch, X, Y, Z, Reach, Spread, EdgeBlur, Brightness, ShadowStrength, ShadowSoftness];
 
         public override IAsyncEnumerable<ExoItem> GetExoItemsAsync(ExoOutputDescription outputDescription)
             => AsyncEnumerable.Empty<ExoItem>();

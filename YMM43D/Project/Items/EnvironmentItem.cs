@@ -10,11 +10,28 @@ using YukkuriMovieMaker.Project.Items;
 
 namespace YMM43D.Project.Items
 {
+    public enum ShadowQuality
+    {
+        [Display(Name = "粗い", Description = "512 × 512。軽いが、ふちがギザギザになりやすい")]
+        Low = 512,
+
+        [Display(Name = "普通", Description = "1024 × 1024")]
+        Normal = 1024,
+
+        [Display(Name = "細かい", Description = "2048 × 2048")]
+        High = 2048,
+
+        [Display(Name = "とても細かい", Description = "4096 × 4096。広い場面でもくっきりするが、メモリを多く使う")]
+        Highest = 4096,
+    }
+
     public sealed class EnvironmentItem : BaseItem, ISceneEnvironment
     {
         private const string Ambient = "環境光";
 
         private const string Fog = "霧";
+
+        private const string Shade = "影";
 
         private const int FirstOrder = 100;
 
@@ -58,6 +75,15 @@ namespace YMM43D.Project.Items
         [AnimationSlider("F1", "px", 100, 10000)]
         [ShowPropertyEditorWhen(nameof(IsFogEnabled), true)]
         public Animation FogEnd { get; } = new(4000, 1, 1000000);
+
+        [Display(GroupName = Shade, Name = "影の細かさ",
+            Description = "影の板の解像度。細かいほど影のふちがきれいになり、そのぶん GPU のメモリを使います",
+            Order = FirstOrder + 7)]
+        [EnumComboBox]
+        public ShadowQuality ShadowQuality { get => shadowQuality; set => Set(ref shadowQuality, value); }
+        private ShadowQuality shadowQuality = ShadowQuality.Normal;
+
+        int ISceneEnvironment.ShadowResolution => (int)ShadowQuality;
 
         public override string Label => "3D環境";
 

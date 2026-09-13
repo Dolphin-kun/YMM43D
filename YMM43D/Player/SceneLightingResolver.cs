@@ -63,7 +63,8 @@ namespace YMM43D.Player
 
             var time = FrameContext.ForItem(environmentItem, frame, fps);
 
-            return new SceneLighting(lights, environment.GetAmbient(time), environment.GetFog(time));
+            return new SceneLighting(
+                lights, environment.GetAmbient(time), environment.GetFog(time), environment.ShadowResolution);
         }
 
         private static IPlacedSceneLightSource? FindPlacedLight(IItem item) => item switch

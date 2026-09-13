@@ -12,6 +12,18 @@ namespace YMM43D.Player
 
         private const float ConeMargin = 1.1f;
 
+        public const float PointFaceScale = 1.05f;
+
+        private static readonly (Vector3 Forward, Vector3 Up)[] PointFaces =
+        [
+            (Vector3.UnitX, Vector3.UnitY),
+            (-Vector3.UnitX, Vector3.UnitY),
+            (Vector3.UnitY, Vector3.UnitZ),
+            (-Vector3.UnitY, Vector3.UnitZ),
+            (Vector3.UnitZ, Vector3.UnitY),
+            (-Vector3.UnitZ, Vector3.UnitY),
+        ];
+
         private static readonly DeviceResourceCache<ShadowCache> caches = new(_ => new ShadowCache());
 
         public static SceneLighting Build(
@@ -25,10 +37,10 @@ namespace YMM43D.Player
                 return lighting;
 
             var lights = lighting.Lights;
-            var maps = ShadowMapArray.For(device);
+            var maps = ShadowMapArray.For(device, lighting.ShadowResolution, CountSlices(lights));
             var cache = caches.Get(device);
 
-            if (cache.TryReuse(lighting, casters, requester) is { } reused)
+            if (cache.TryReuse(lighting, casters, maps, requester) is { } reused)
             {
                 maps.Bind(context);
                 return reused;
@@ -50,18 +62,49 @@ namespace YMM43D.Player
 
             try
             {
-                for (var i = 0; i < placed.Length && slice < ShadowMapArray.MaxSlices; i++)
+                for (var i = 0; i < placed.Length; i++)
                 {
-                    if (!placed[i].Shadow.IsWanted || !placed[i].CanCastShadow)
+                    var light = placed[i];
+
+                    if (!light.Shadow.IsWanted || !light.CanCastShadow)
                         continue;
 
-                    if (!TryLookFrom(placed[i], bounds, out var view, out var projection))
-                        continue;
+                    var needed = light.Shadow.SliceCount(light.Kind);
 
-                    Draw(device, context, maps.SliceAt(slice), casters, view, projection);
+                    if (slice + needed > maps.SliceCount)
+                        break;
 
-                    placed[i] = placed[i].PlacedAt(slice, ShadowMapArray.Texel, view * projection);
-                    slice++;
+                    var radius = light.Shadow.RadiusFor(maps.Size);
+
+                    if (light.Kind == LightKind.Point)
+                    {
+                        if (!TryLookAround(light, out var near))
+                            continue;
+
+                        for (var face = 0; face < PointFaces.Length; face++)
+                        {
+                            var (forward, up) = PointFaces[face];
+
+                            Draw(
+                                device, context, maps, slice + face, casters,
+                                Matrix4x4.CreateLookAt(light.Vector, light.Vector + forward, up),
+                                Matrix4x4.CreatePerspectiveFieldOfView(
+                                    2f * MathF.Atan(PointFaceScale), 1f, near, light.Reach));
+                        }
+
+                        placed[i] = light.PlacedAt(slice, radius, Matrix4x4.Identity);
+                    }
+                    else
+                    {
+                        if (!TryLookFrom(light, bounds, out var view, out var projection))
+                            continue;
+
+                        Draw(device, context, maps, slice, casters, view, projection);
+
+                        placed[i] = light.PlacedAt(slice, radius, view * projection);
+                    }
+
+                    slice += needed;
                 }
             }
             finally
@@ -76,11 +119,33 @@ namespace YMM43D.Player
 
             maps.Bind(context);
 
-            var built = new SceneLighting(placed, lighting.Ambient, lighting.Fog);
+            var built = new SceneLighting(placed, lighting.Ambient, lighting.Fog, lighting.ShadowResolution);
 
-            cache.Remember(lighting, casters, built, requester);
+            cache.Remember(lighting, casters, maps, built, requester);
 
             return built;
+        }
+
+        public static float PointNear(float reach) => MathF.Max(reach * 0.01f, 0.01f);
+
+        private static bool TryLookAround(in SceneLight light, out float near)
+        {
+            near = PointNear(light.Reach);
+
+            return IsFinite(light.Vector) && float.IsFinite(light.Reach) && light.Reach > near * 1.01f;
+        }
+
+        private static int CountSlices(IReadOnlyList<SceneLight> lights)
+        {
+            var count = 0;
+
+            foreach (var light in lights)
+            {
+                if (light.Shadow.IsWanted && light.CanCastShadow)
+                    count += light.Shadow.SliceCount(light.Kind);
+            }
+
+            return Math.Min(count, ShadowMapArray.MaxSlices);
         }
 
         private static bool WantsShadow(IReadOnlyList<SceneLight> lights)
@@ -100,13 +165,22 @@ namespace YMM43D.Player
 
             private SceneLighting? source;
             private SceneDepthCollector.Occluder[] casters = [];
+            private ShadowMapArray? drawnInto;
             private SceneLighting? result;
 
             public SceneLighting? TryReuse(
-                SceneLighting lighting, IReadOnlyList<SceneDepthCollector.Occluder> current, object requester)
+                SceneLighting lighting,
+                IReadOnlyList<SceneDepthCollector.Occluder> current,
+                ShadowMapArray maps,
+                object requester)
             {
-                if (result is null || !Matches(lighting, current) || !served.Add(requester))
+                if (result is null
+                    || !ReferenceEquals(drawnInto, maps)
+                    || !Matches(lighting, current)
+                    || !served.Add(requester))
+                {
                     return null;
+                }
 
                 return result;
             }
@@ -132,11 +206,13 @@ namespace YMM43D.Player
             public void Remember(
                 SceneLighting lighting,
                 IReadOnlyList<SceneDepthCollector.Occluder> current,
+                ShadowMapArray maps,
                 SceneLighting built,
                 object requester)
             {
                 source = lighting;
                 casters = [.. current];
+                drawnInto = maps;
                 result = built;
                 served.Clear();
                 served.Add(requester);
@@ -146,6 +222,7 @@ namespace YMM43D.Player
             {
                 source = null;
                 casters = [];
+                drawnInto = null;
                 result = null;
                 served.Clear();
             }
@@ -154,14 +231,17 @@ namespace YMM43D.Player
         private static void Draw(
             ID3D11Device device,
             ID3D11DeviceContext context,
-            ID3D11DepthStencilView target,
+            ShadowMapArray maps,
+            int slice,
             IReadOnlyList<SceneDepthCollector.Occluder> casters,
             in Matrix4x4 view,
             in Matrix4x4 projection)
         {
+            var target = maps.SliceAt(slice);
+
             context.OMSetRenderTargets([], target);
             context.ClearDepthStencilView(target, DepthStencilClearFlags.Depth, 1f, 0);
-            context.RSSetViewport(new Viewport(0, 0, ShadowMapArray.Size, ShadowMapArray.Size));
+            context.RSSetViewport(new Viewport(0, 0, maps.Size, maps.Size));
 
             var render = new Render3DContext(device, context, view, projection);
 
