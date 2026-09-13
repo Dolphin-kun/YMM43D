@@ -83,7 +83,7 @@ namespace YMM43D.Player
 
                     context.RSSetViewport(new Viewport(0, 0, width, height));
 
-                    draw(new Render3DContext(lease.Device, context, view, projection, lit).BindLights());
+                    draw(new Render3DContext(lease.Device, context, view, projection, lit) { Scene = shadowCasters }.BindLights());
 
                     context.Flush();
                 }

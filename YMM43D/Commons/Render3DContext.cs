@@ -1,6 +1,7 @@
 using System.Numerics;
 using Vortice.Direct3D11;
 using YMM43D.Graphics;
+using YMM43D.Player;
 
 namespace YMM43D.Commons
 {
@@ -11,6 +12,12 @@ namespace YMM43D.Commons
         Matrix4x4 Projection,
         SceneLighting? Lighting = null)
     {
+        public IReadOnlyList<SceneDepthCollector.Occluder> Scene { get; init; } = [];
+
+        public bool IsCapturingScene { get; init; }
+
+        public bool IsShadowPass => Lighting is null;
+
         public Matrix4x4 ViewProjection => View * Projection;
 
         public Render3DContext BindLights()

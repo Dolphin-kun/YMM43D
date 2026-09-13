@@ -131,7 +131,7 @@ namespace YMM43D.PreviewTool
             var lit = SceneShadows.Build(device, context, scene.Lighting, casters, this);
 
             var render = new Render3DContext(
-                device, context, viewPose.ViewMatrix, projection, lit).BindLights();
+                device, context, viewPose.ViewMatrix, projection, lit) { Scene = casters }.BindLights();
 
             var sceneCameraPose = scene.SceneCameraPose;
             var screenTangent = scene.GetScreenTangent(pixelsPerTangent);

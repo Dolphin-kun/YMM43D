@@ -2,7 +2,7 @@
   <Project Path="BeamLight3D/BeamLight3D.csproj" />
   <Project Path="Curve3D/Curve3D.csproj" />
   <Project Path="Fold3D/Fold3D.csproj" />
-  <Project Path="LiquidGlass/LiquidGlass.csproj" />
+  <Project Path="LiquidGlass3D/LiquidGlass3D.csproj" />
   <Project Path="Noise3D/Noise3D.csproj" />
   <Project Path="Shatter3D/Shatter3D.csproj" />
   <Project Path="Wave3D/Wave3D.csproj" />
