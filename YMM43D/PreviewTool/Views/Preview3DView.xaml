@@ -9,8 +9,12 @@
              Background="Transparent"
              Focusable="True"
              PreviewKeyDown="UserControl_PreviewKeyDown">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="VisibleWhenTrue"/>
+    </UserControl.Resources>
     <Grid x:Name="RootGrid">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
@@ -119,6 +123,34 @@
             </MenuItem>
         </Menu>
 
-        <ContentControl Grid.Row="1" Content="{Binding D3DHost}"/>
+        <Border Grid.Row="1"
+                DataContext="{Binding Update}"
+                Visibility="{Binding ShowsNotice, Converter={StaticResource VisibleWhenTrue}}"
+                Background="#33FF9800"
+                BorderBrush="#FF9800"
+                BorderThickness="0,1"
+                Padding="8,4">
+            <DockPanel LastChildFill="True">
+                <Button DockPanel.Dock="Right"
+                        Command="{Binding DismissCommand}"
+                        Content="×"
+                        Padding="6,0"
+                        Margin="6,0,0,0"
+                        ToolTip="今回は表示しない"/>
+                <Button DockPanel.Dock="Right"
+                        Command="{Binding OpenDownloadPageCommand}"
+                        Content="ダウンロードページを開く"
+                        Padding="8,1"
+                        Margin="8,0,0,0"/>
+                <TextBlock VerticalAlignment="Center" TextWrapping="Wrap">
+                    <Run Text="YMM43D の新しいバージョン"/>
+                    <Run Text="{Binding LatestVersion, Mode=OneWay}" FontWeight="SemiBold"/>
+                    <Run Text="が公開されています（今は"/>
+                    <Run Text="{Binding CurrentVersion, Mode=OneWay}"/><Run Text="）"/>
+                </TextBlock>
+            </DockPanel>
+        </Border>
+
+        <ContentControl Grid.Row="2" Content="{Binding D3DHost}"/>
     </Grid>
 </UserControl>

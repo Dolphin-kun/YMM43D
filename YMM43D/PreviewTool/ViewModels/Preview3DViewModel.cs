@@ -117,6 +117,8 @@ namespace YMM43D.PreviewTool.ViewModels
             OnPropertyChanged(nameof(SnapsEvery100));
         }
 
+        public UpdateChecker Update => UpdateChecker.Instance;
+
         public bool CanAddItem => timeline is not null;
 
         public bool HasSelectedItem => timeline?.SelectedItems is { IsEmpty: false };
@@ -137,6 +139,7 @@ namespace YMM43D.PreviewTool.ViewModels
         {
             disposer.Collect(renderer);
             sceneBuilder = new PreviewSceneBuilder(renderer.DefaultProvider);
+            UpdateChecker.Instance.EnsureChecked();
 
             ResetToSceneCameraCommand = new ActionCommand(_ => true, _ => ResetToSceneCamera());
             AddCameraCommand = new ActionCommand(_ => CanAddItem, _ => AddItem(() => new CameraItem()));

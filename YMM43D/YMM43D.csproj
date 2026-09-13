@@ -54,6 +54,20 @@
 		</Reference>
 	</ItemGroup>
 
+	<Target Name="GenerateBuildInfo" BeforeTargets="CoreCompile">
+		<PropertyGroup>
+			<BuildInfoFile>$(IntermediateOutputPath)BuildInfo.g.cs</BuildInfoFile>
+		</PropertyGroup>
+		<WriteLinesToFile File="$(BuildInfoFile)"
+						  Lines="namespace YMM43D.Commons { internal static class BuildInfo { public const string Version = &quot;$(Version)&quot;%3B } }"
+						  Overwrite="true"
+						  WriteOnlyWhenDifferent="true" />
+		<ItemGroup>
+			<Compile Include="$(BuildInfoFile)" />
+			<FileWrites Include="$(BuildInfoFile)" />
+		</ItemGroup>
+	</Target>
+
 	<Target Name="PostBuild" AfterTargets="PostBuildEvent">
 		<Exec Command="mkdir &quot;$(YMM4DirPath)user\plugin\$(ProjectName)&quot; &gt; NUL 2&gt;&amp;1&#xD;&#xA;copy &quot;$(TargetPath)&quot; &quot;$(YMM4DirPath)user\plugin\$(ProjectName)\&quot;" ContinueOnError="WarnAndContinue" />
 	</Target>
