@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using System.Runtime.InteropServices;
 using Vortice.Direct3D11;
 using Vortice.DXGI;
@@ -174,6 +174,12 @@ namespace LiquidGlass3D
                     {
                         if (ReferenceEquals(occluder.Provider, self))
                             continue;
+
+                        if (occluder.Provider is I3DBounds bounded
+                            && render.IsOutside(bounded.GetLocalBounds(occluder.Time), occluder.World))
+                        {
+                            continue;
+                        }
 
                         try
                         {

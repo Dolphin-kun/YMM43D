@@ -24,6 +24,14 @@ namespace YMM43D.PreviewTool.ViewModels
 
         private const double ClickSlop = 4;
 
+        // 何かが変わった直後は、YMM4 側の描き直しが追いつくまで少しのあいだ描き続ける。
+        private const long SettleMs = 500;
+
+        private const long SettleIntervalMs = 33;
+
+        // 何も起きていないときの見回りの間隔。取りこぼした変化もこの間隔で拾う。
+        private const long IdleIntervalMs = 1000;
+
         private readonly DisposeCollector disposer = new();
         private readonly Preview3DRenderer renderer = new();
         private readonly FreeCameraController freeCamera = new();
@@ -49,6 +57,12 @@ namespace YMM43D.PreviewTool.ViewModels
         private float snapStep = SnapGrid.DefaultStep;
         private bool hadSelectedItem;
         private bool isDisposed;
+
+        private bool renderRequested = true;
+        private long settleUntil;
+        private long lastRenderAt;
+        private long lastRevision = -1;
+        private Size lastHostSize;
 
         public D3D11Host? D3DHost
         {
@@ -139,6 +153,7 @@ namespace YMM43D.PreviewTool.ViewModels
         {
             disposer.Collect(renderer);
             sceneBuilder = new PreviewSceneBuilder(renderer.DefaultProvider);
+            PropertyChanged += (_, _) => RequestRender();
             UpdateChecker.Instance.EnsureChecked();
 
             ResetToSceneCameraCommand = new ActionCommand(_ => true, _ => ResetToSceneCamera());
@@ -193,7 +208,23 @@ namespace YMM43D.PreviewTool.ViewModels
             }
 
             timeline.PropertyChanged += OnTimelinePropertyChanged;
-            disposer.CollectAction(timeline, () => timeline.PropertyChanged -= OnTimelinePropertyChanged);
+            timeline.UndoRedoCommandCreated += OnTimelineEdited;
+            disposer.CollectAction(timeline, () =>
+            {
+                timeline.PropertyChanged -= OnTimelinePropertyChanged;
+                timeline.UndoRedoCommandCreated -= OnTimelineEdited;
+            });
+
+            if (info.UndoRedoManager is { } manager)
+            {
+                manager.Undoed += OnHistoryApplied;
+                manager.Redoed += OnHistoryApplied;
+                disposer.CollectAction(manager, () =>
+                {
+                    manager.Undoed -= OnHistoryApplied;
+                    manager.Redoed -= OnHistoryApplied;
+                });
+            }
 
             var host = new D3D11Host();
             D3DHost = host;
@@ -214,11 +245,12 @@ namespace YMM43D.PreviewTool.ViewModels
             CompositionTarget.Rendering += OnCompositionRendering;
             disposer.CollectAction(this, () => CompositionTarget.Rendering -= OnCompositionRendering);
 
-            UpdatePreviewItems();
+            RequestRender();
         }
 
         public void ResetToSceneCamera()
         {
+            RequestRender();
             freeCamera.Reset();
             freeCamera.EnsureInitialized(ResolveCamera());
         }
@@ -267,6 +299,8 @@ namespace YMM43D.PreviewTool.ViewModels
             var move = make(basis);
             if (move.IsZero)
                 return;
+
+            RequestRender();
 
             if (active is not { } target)
             {
@@ -317,28 +351,65 @@ namespace YMM43D.PreviewTool.ViewModels
         private CameraState ResolveCamera()
             => timeline is null ? CameraState.Default : SceneCameraResolver.Resolve(timeline);
 
-        private void OnTimelinePropertyChanged(object? sender, PropertyChangedEventArgs e)
-        {
-            if (e.PropertyName == nameof(Timeline.CurrentFrame))
-                UpdateSourceDescription();
+        private void OnTimelinePropertyChanged(object? sender, PropertyChangedEventArgs e) => RequestRender();
 
-            UpdatePreviewItems();
+        private void OnTimelineEdited(object? sender, EventArgs e) => RequestRender();
+
+        private void OnHistoryApplied(object? sender, EventArgs e) => RequestRender();
+
+        private void RequestRender()
+        {
+            renderRequested = true;
+            settleUntil = Environment.TickCount64 + SettleMs;
+        }
+
+        private bool ShouldRender(D3D11Host host)
+        {
+            var revision = SceneRevision.Current;
+
+            if (revision != lastRevision)
+            {
+                lastRevision = revision;
+                RequestRender();
+            }
+
+            var size = new Size(host.ActualWidth, host.ActualHeight);
+
+            if (size != lastHostSize)
+            {
+                lastHostSize = size;
+                RequestRender();
+            }
+
+            if (renderRequested)
+                return true;
+
+            var now = Environment.TickCount64;
+            var interval = now < settleUntil ? SettleIntervalMs : IdleIntervalMs;
+
+            return now - lastRenderAt >= interval;
         }
 
         private void OnCompositionRendering(object? sender, EventArgs e)
         {
-            if (d3dHost is null || timeline is null)
+            if (d3dHost is null || timeline is null || !ShouldRender(d3dHost))
                 return;
 
-            if (drivesSceneCamera && SceneCameraResolver.Find(timeline) is not null)
-                freeCamera.Invalidate();
+            renderRequested = false;
+            lastRenderAt = Environment.TickCount64;
 
-            refresher?.RefreshIfCameraChanged(timeline);
+            using (SceneRevision.Mute())
+            {
+                if (drivesSceneCamera && SceneCameraResolver.Find(timeline) is not null)
+                    freeCamera.Invalidate();
 
-            SyncSelectionState();
-            UpdateSourceDescription();
-            UpdatePreviewItems();
-            d3dHost.RenderFrame();
+                refresher?.RefreshIfCameraChanged(timeline);
+
+                SyncSelectionState();
+                UpdateSourceDescription();
+                UpdatePreviewItems();
+                d3dHost.RenderFrame();
+            }
         }
 
         private void OnPreparing(ID3D11Device device)
@@ -396,7 +467,19 @@ namespace YMM43D.PreviewTool.ViewModels
             var boundary = kind is not D3D11Host.MouseEventKind.Move;
 
             if (boundary)
+            {
+                RequestRender();
                 SeparateHistory();
+            }
+
+            if (kind == D3D11Host.MouseEventKind.Down
+                && !itemDrag.IsDragging
+                && renderer.PickAxisIndicator(ToVector(position)) is { } direction)
+            {
+                ViewFrom(direction);
+                SeparateHistory();
+                return;
+            }
 
             if (!HandleItemDrag(position, kind) && !HoldsToggleClick(position, kind))
             {
@@ -584,6 +667,8 @@ namespace YMM43D.PreviewTool.ViewModels
 
         public bool HandleKey(Key key, ModifierKeys modifiers)
         {
+            RequestRender();
+
             var control = (modifiers & ModifierKeys.Control) != 0;
             var shift = (modifiers & ModifierKeys.Shift) != 0;
 

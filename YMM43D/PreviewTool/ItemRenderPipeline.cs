@@ -1,4 +1,5 @@
 ﻿using System.Collections.Immutable;
+using System.Numerics;
 using Vortice.Direct2D1;
 using YMM43D.Player;
 using YMM43D.Commons;
@@ -14,9 +15,11 @@ namespace YMM43D.PreviewTool
 
     internal sealed class ItemRenderPipeline : IDisposable
     {
+        private readonly record struct SourcePart(ID2D1Image Image, Vector2 Offset);
+
         private readonly Lock gate = new();
         private readonly Dictionary<IVideoItem, ISource> sources = [];
-        private readonly Dictionary<(IVideoItem Item, I3DProvider Provider), EffectChain> chains = [];
+        private readonly Dictionary<(IVideoItem Item, I3DProvider Provider, int Part), EffectChain> chains = [];
 
         private readonly Dictionary<IVideoItem, long> sourceRetryAt = [];
 
@@ -24,28 +27,32 @@ namespace YMM43D.PreviewTool
 
         private const long RetryDelayMs = 500;
 
-        public ItemRenderResult Render(
+        // allParts が true のときは、文字ごとに分割したテキストのように
+        // ひとつのアイテムが返す複数の絵を、YMM4 と同じく一つずつ別の物として扱う。
+        public IReadOnlyList<ItemRenderResult> Render(
             IVideoItem item,
             in FrameContext time,
             PreviewEnvironment environment,
             bool needsImage,
+            bool allParts,
             I3DProvider provider,
             ImmutableList<IVideoEffect> effects,
             DrawDescription seed)
         {
             if (environment.Scene is null || environment.SourceDescription is null)
-                return new ItemRenderResult(null, seed);
+                return [new ItemRenderResult(null, seed)];
 
             if (!needsImage && effects.IsEmpty)
-                return new ItemRenderResult(null, seed);
+                return [new ItemRenderResult(null, seed)];
 
-            return RenderCore(item, time, environment, effects, provider, seed);
+            return RenderCore(item, time, environment, allParts, effects, provider, seed);
         }
 
-        private ItemRenderResult RenderCore(
+        private IReadOnlyList<ItemRenderResult> RenderCore(
             IVideoItem item,
             in FrameContext time,
             PreviewEnvironment environment,
+            bool allParts,
             ImmutableList<IVideoEffect> effects,
             I3DProvider provider,
             DrawDescription seed)
@@ -56,24 +63,43 @@ namespace YMM43D.PreviewTool
             var description = new TimelineItemSourceDescription(
                 sourceDescription, time.Frame, time.Length, item.Layer);
 
-            var image = RenderSource(item, scene, environment, description);
-            if (image is null)
-                return new ItemRenderResult(null, seed);
+            var parts = RenderSource(item, scene, environment, description);
 
-            if (effects.IsEmpty)
-                return new ItemRenderResult(image, seed);
+            if (parts.Count == 0)
+                return [new ItemRenderResult(null, seed)];
 
-            return ApplyEffects(item, provider, effects, environment, description, image, seed);
+            if (!allParts || parts.Count == 1)
+            {
+                return
+                [
+                    effects.IsEmpty
+                        ? new ItemRenderResult(parts[0].Image, seed)
+                        : ApplyEffects(item, provider, 0, 1, effects, environment, description, parts[0].Image, seed),
+                ];
+            }
+
+            var results = new ItemRenderResult[parts.Count];
+
+            for (var i = 0; i < parts.Count; i++)
+            {
+                var partSeed = seed with { Draw = seed.Draw + new Vector3(parts[i].Offset, 0f) };
+
+                results[i] = effects.IsEmpty
+                    ? new ItemRenderResult(parts[i].Image, partSeed)
+                    : ApplyEffects(item, provider, i, parts.Count, effects, environment, description, parts[i].Image, partSeed);
+            }
+
+            return results;
         }
 
-        private ID2D1Image? RenderSource(
+        private IReadOnlyList<SourcePart> RenderSource(
             IVideoItem item,
             Scene scene,
             PreviewEnvironment environment,
             TimelineItemSourceDescription description)
         {
             if (IsWaiting(sourceRetryAt, item))
-                return null;
+                return [];
 
             try
             {
@@ -86,33 +112,39 @@ namespace YMM43D.PreviewTool
                             source = item.CreateVideoSource(environment.Devices, scene);
 
                         if (source is null)
-                            return null;
+                            return [];
                         sources[item] = source;
                     }
                 }
 
                 source.Update(description);
 
+                var parts = new List<SourcePart>();
+
                 foreach (var output in source.Outputs ?? [])
                 {
                     if (output?.Output is { } image)
-                    {
-                        sourceRetryAt.Remove(item);
-                        return image;
-                    }
+                        parts.Add(new SourcePart(image, output.DrawingOffset));
                 }
+
+                if (parts.Count > 0)
+                    sourceRetryAt.Remove(item);
+
+                return parts;
             }
             catch
             {
                 sourceRetryAt[item] = System.Environment.TickCount64 + RetryDelayMs;
             }
 
-            return null;
+            return [];
         }
 
         private ItemRenderResult ApplyEffects(
             IVideoItem item,
             I3DProvider provider,
+            int part,
+            int partCount,
             ImmutableList<IVideoEffect> effects,
             PreviewEnvironment environment,
             TimelineItemSourceDescription description,
@@ -122,7 +154,7 @@ namespace YMM43D.PreviewTool
             if (IsWaiting(effectRetryAt, item))
                 return new ItemRenderResult(sourceImage, seed);
 
-            var key = (item, provider);
+            var key = (item, provider, part);
 
             try
             {
@@ -134,7 +166,7 @@ namespace YMM43D.PreviewTool
                         chain = chains[key] = new EffectChain(effects, environment.Devices);
                 }
 
-                var applied = chain.Apply(sourceImage, description, seed);
+                var applied = chain.Apply(sourceImage, description, seed, part, partCount);
                 effectRetryAt.Remove(item);
                 return applied;
             }
@@ -172,13 +204,19 @@ namespace YMM43D.PreviewTool
             Prune(effectRetryAt, aliveItems);
         }
 
+        public void RetainParts(IVideoItem item, I3DProvider provider, int partCount)
+        {
+            foreach (var key in chains.Keys.Where(k => k.Item == item && k.Provider == provider && k.Part >= partCount).ToArray())
+                ReleaseChain(key);
+        }
+
         private static void Prune(Dictionary<IVideoItem, long> retryAt, IReadOnlySet<IVideoItem> aliveItems)
         {
             foreach (var item in retryAt.Keys.Where(k => !aliveItems.Contains(k)).ToArray())
                 retryAt.Remove(item);
         }
 
-        private void ReleaseChain((IVideoItem Item, I3DProvider Provider) key)
+        private void ReleaseChain((IVideoItem Item, I3DProvider Provider, int Part) key)
         {
             if (chains.Remove(key, out var chain))
                 chain.Dispose();
@@ -229,7 +267,7 @@ namespace YMM43D.PreviewTool
             }
 
             public ItemRenderResult Apply(
-                ID2D1Image input, TimelineItemSourceDescription description, DrawDescription seed)
+                ID2D1Image input, TimelineItemSourceDescription description, DrawDescription seed, int part, int partCount)
             {
                 var draw = seed;
                 var image = input;
@@ -239,7 +277,7 @@ namespace YMM43D.PreviewTool
                     processor.SetInput(image);
 
                     draw = processor.Update(new EffectDescription(
-                        description, draw, inputIndex: 0, inputCount: 1, groupIndex: 0, groupCount: 1));
+                        description, draw, inputIndex: part, inputCount: partCount, groupIndex: 0, groupCount: 1));
 
                     image = processor.Output;
                 }

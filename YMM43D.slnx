@@ -4,6 +4,7 @@
   <Project Path="Fold3D/Fold3D.csproj" />
   <Project Path="LiquidGlass3D/LiquidGlass3D.csproj" />
   <Project Path="Noise3D/Noise3D.csproj" />
+  <Project Path="Outline3D/Outline3D.csproj" />
   <Project Path="RandomScatter3D/RandomScatter3D.csproj" />
   <Project Path="Shatter3D/Shatter3D.csproj" />
   <Project Path="Wave3D/Wave3D.csproj" />

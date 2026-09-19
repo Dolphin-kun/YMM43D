@@ -3,6 +3,7 @@ using Vortice.Direct3D11;
 using Vortice.Mathematics;
 using YMM43D.Commons;
 using YMM43D.Graphics;
+using YukkuriMovieMaker.Commons;
 
 namespace YMM43D.Player
 {
@@ -31,7 +32,8 @@ namespace YMM43D.Player
             ID3D11DeviceContext context,
             SceneLighting lighting,
             IReadOnlyList<SceneDepthCollector.Occluder> casters,
-            object requester)
+            object requester,
+            IGraphicsDevicesAndContext? sourceDevices = null)
         {
             if (casters.Count == 0 || !WantsShadow(lighting.Lights))
                 return lighting;
@@ -86,7 +88,7 @@ namespace YMM43D.Player
                             var (forward, up) = PointFaces[face];
 
                             Draw(
-                                device, context, maps, slice + face, casters,
+                                device, context, maps, slice + face, casters, sourceDevices,
                                 Matrix4x4.CreateLookAt(light.Vector, light.Vector + forward, up),
                                 Matrix4x4.CreatePerspectiveFieldOfView(
                                     2f * MathF.Atan(PointFaceScale), 1f, near, light.Reach));
@@ -99,7 +101,7 @@ namespace YMM43D.Player
                         if (!TryLookFrom(light, bounds, out var view, out var projection))
                             continue;
 
-                        Draw(device, context, maps, slice, casters, view, projection);
+                        Draw(device, context, maps, slice, casters, sourceDevices, view, projection);
 
                         placed[i] = light.PlacedAt(slice, radius, view * projection);
                     }
@@ -234,6 +236,7 @@ namespace YMM43D.Player
             ShadowMapArray maps,
             int slice,
             IReadOnlyList<SceneDepthCollector.Occluder> casters,
+            IGraphicsDevicesAndContext? sourceDevices,
             in Matrix4x4 view,
             in Matrix4x4 projection)
         {
@@ -243,7 +246,7 @@ namespace YMM43D.Player
             context.ClearDepthStencilView(target, DepthStencilClearFlags.Depth, 1f, 0);
             context.RSSetViewport(new Viewport(0, 0, maps.Size, maps.Size));
 
-            var render = new Render3DContext(device, context, view, projection);
+            var render = new Render3DContext(device, context, view, projection) { SourceDevices = sourceDevices };
 
             foreach (var caster in casters)
             {

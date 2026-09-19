@@ -25,7 +25,8 @@ namespace YMM43D.PreviewTool.Rendering
             if (item.Texture is null || item.DepthOnly)
                 return;
 
-            var constants = render.CreateConstants(item.World, item.Opacity);
+            // 板として描くのは YMM4 が 2D で描く絵（光は当たらない、または描いた時点で当たっている）なので、ここでは光を当てない。
+            var constants = render.CreateConstants(item.World, item.Opacity, unlit: true);
 
             var settings = item.ToDrawSettings(FaceCulling.None) with { SkipDepthWrite = true };
 

@@ -93,16 +93,19 @@ namespace YMM43D.PreviewTool
             var groups = GroupLookup.Build(
                 scene.Environment.Scene?.Timeline, scene.Time.Frame, scene.Time.Fps);
 
-            var drawContexts = new DrawContext3D[scene.Items.Count];
-            for (var i = 0; i < scene.Items.Count; i++)
+            var entries = new List<(PreviewItem Item, DrawContext3D Context)>(scene.Items.Count);
+
+            foreach (var previewItem in scene.Items)
             {
-                var previewItem = scene.Items[i];
-                drawContexts[i] = contextBuilder.Build(
+                var built = contextBuilder.Build(
                     previewItem.Item,
                     previewItem.GetItemTime(scene.Time),
                     scene.Environment,
                     previewItem.Provider,
                     groups);
+
+                foreach (var drawContext in built)
+                    entries.Add((previewItem, drawContext));
             }
 
             context.OMSetRenderTargets(renderTarget, depthStencil);
@@ -117,15 +120,15 @@ namespace YMM43D.PreviewTool
             var projection = SceneProjection.GetProjectionMatrix(
                 (float)width / Math.Max(1, height), scene.ScreenHeight, pixelsPerTangent);
 
-            var casters = new List<SceneDepthCollector.Occluder>(scene.Items.Count);
+            var casters = new List<SceneDepthCollector.Occluder>(entries.Count);
 
-            for (var i = 0; i < scene.Items.Count; i++)
+            foreach (var (previewItem, drawContext) in entries)
             {
-                if (ReferenceEquals(scene.Items[i].Provider, flatItemProvider))
+                if (ReferenceEquals(previewItem.Provider, flatItemProvider))
                     continue;
 
                 casters.Add(new SceneDepthCollector.Occluder(
-                    scene.Items[i].Provider, drawContexts[i].World, drawContexts[i].Time));
+                    previewItem.Provider, drawContext.World, drawContext.Time));
             }
 
             var lit = SceneShadows.Build(device, context, scene.Lighting, casters, this);
@@ -147,17 +150,17 @@ namespace YMM43D.PreviewTool
             pickMarkers = scene.Markers;
             markers.Draw(render, scene.Markers, scene.SelectedMarker);
 
-            for (var i = 0; i < scene.Items.Count; i++)
-                scene.Items[i].Provider.Draw(render, drawContexts[i]);
+            foreach (var (previewItem, drawContext) in entries)
+                previewItem.Provider.Draw(render, drawContext);
 
             pickTargets =
             [
-                .. scene.Items.Select((item, i) => new PickTarget(
-                    item.Item,
-                    drawContexts[i].World,
-                    GetLocalBounds(item, drawContexts[i].Time),
-                    item.Provider,
-                    drawContexts[i]))
+                .. entries.Select(entry => new PickTarget(
+                    entry.Item.Item,
+                    entry.Context.World,
+                    GetLocalBounds(entry.Item, entry.Context.Time),
+                    entry.Item.Provider,
+                    entry.Context))
             ];
 
             gizmoMarker = FindGizmoMarker(scene);
@@ -338,6 +341,8 @@ namespace YMM43D.PreviewTool
 
         public PickRay? CreateRay(Vector2 position)
             => PickRay.FromScreen(position, lastWidth, lastHeight, lastViewProjection);
+
+        public ViewDirection? PickAxisIndicator(Vector2 position) => axisIndicator.Pick(position);
 
         public TransformGizmo? Gizmo => lastGizmo;
 

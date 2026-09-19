@@ -26,7 +26,7 @@ namespace RandomScatter3D
 
         private I3DProvider? FindSolidSource(EffectDescription description)
             => SceneDepthCollector.FindOwner(description) is { } owner
-                ? SceneDepthCollector.FindSources(owner).FirstOrDefault(source => !ReferenceEquals(source, this))
+                ? SceneDepthCollector.FindSources(owner, Devices).FirstOrDefault(source => !ReferenceEquals(source, this))
                 : null;
 
         public override void Draw(in Render3DContext render, DrawContext3D item)

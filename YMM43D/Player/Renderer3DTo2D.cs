@@ -34,6 +34,7 @@ namespace YMM43D.Player
             Vector2 offset,
             SceneLighting? lighting,
             IReadOnlyList<SceneDepthCollector.Occluder> shadowCasters,
+            Color4 background,
             Action<Render3DContext> draw)
         {
             if (width <= 0 || height <= 0)
@@ -74,16 +75,16 @@ namespace YMM43D.Player
                 try
                 {
                     var lit = SceneShadows.Build(
-                        lease.Device, context, lighting ?? SceneLighting.Default, shadowCasters, this);
+                        lease.Device, context, lighting ?? SceneLighting.Default, shadowCasters, this, ymmDevices);
 
                     context.OMSetRenderTargets(surface.RenderTargetView, surface.DepthStencilView);
-                    context.ClearRenderTargetView(surface.RenderTargetView, new Color4(0, 0, 0, 0));
+                    context.ClearRenderTargetView(surface.RenderTargetView, background);
                     if (surface.DepthStencilView is not null)
                         context.ClearDepthStencilView(surface.DepthStencilView, DepthStencilClearFlags.Depth, 1f, 0);
 
                     context.RSSetViewport(new Viewport(0, 0, width, height));
 
-                    draw(new Render3DContext(lease.Device, context, view, projection, lit) { Scene = shadowCasters }.BindLights());
+                    draw(new Render3DContext(lease.Device, context, view, projection, lit) { Scene = shadowCasters, SourceDevices = ymmDevices }.BindLights());
 
                     context.Flush();
                 }

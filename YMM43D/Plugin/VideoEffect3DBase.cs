@@ -9,10 +9,20 @@ namespace YMM43D.Plugin
     public abstract class VideoEffect3DBase
         : VideoEffectBase, I3DVideoEffect, ICameraSync, I3DSizeProvider, I3DLocalTransform, I3DBounds, I3DInstances
     {
+        private static readonly object UnknownDevices = new();
+
         private readonly CameraSync cameraSync = new();
         private readonly Lock instanceGate = new();
-        private readonly HashSet<I3DProvider> attached = new(ReferenceEqualityComparer.Instance);
-        private I3DProvider?[] inputs = [];
+        private readonly Dictionary<I3DProvider, object> attached = new(ReferenceEqualityComparer.Instance);
+        private readonly Dictionary<object, Channel> channels = new(ReferenceEqualityComparer.Instance);
+        private readonly Dictionary<I3DProvider, (int Layer, int Input)> placedAt = new(ReferenceEqualityComparer.Instance);
+
+        private sealed class Channel
+        {
+            public I3DProvider? Latest { get; set; }
+
+            public I3DProvider?[] Inputs { get; set; } = [];
+        }
 
         protected VideoEffect3DBase()
         {
@@ -37,7 +47,12 @@ namespace YMM43D.Plugin
             Processor = processor;
 
             lock (instanceGate)
-                attached.Add(processor);
+            {
+                var key = SourceKey.Of(processor is VideoEffect3DProcessorBase based ? based.SourceDevices : null) ?? UnknownDevices;
+
+                attached[processor] = key;
+                ChannelFor(key).Latest = processor;
+            }
 
             return processor;
         }
@@ -49,34 +64,69 @@ namespace YMM43D.Plugin
 
             lock (instanceGate)
             {
-                attached.Remove(processor);
-
-                for (var i = 0; i < inputs.Length; i++)
+                if (attached.Remove(processor, out var key) && channels.TryGetValue(key, out var channel))
                 {
-                    if (ReferenceEquals(inputs[i], processor))
-                        inputs[i] = null;
+                    if (ReferenceEquals(channel.Latest, processor))
+                        channel.Latest = null;
+
+                    for (var i = 0; i < channel.Inputs.Length; i++)
+                    {
+                        if (ReferenceEquals(channel.Inputs[i], processor))
+                            channel.Inputs[i] = null;
+                    }
+
+                    if (channel.Latest is null && channel.Inputs.All(input => input is null))
+                        channels.Remove(key);
                 }
+
+                placedAt.Remove(processor);
             }
         }
 
-        internal void ReportInput(I3DProvider processor, int index, int count)
+        internal void ReportInput(I3DProvider processor, int layer, int index, int count)
         {
             lock (instanceGate)
             {
-                if (!attached.Contains(processor) || index < 0 || index >= count)
+                if (!attached.TryGetValue(processor, out var key) || index < 0 || index >= count)
                     return;
 
-                if (inputs.Length != count)
-                    inputs = new I3DProvider?[count];
+                Processor = processor;
+                placedAt[processor] = (layer, index);
 
-                inputs[index] = processor;
+                var channel = ChannelFor(key);
+                channel.Latest = processor;
+
+                if (channel.Inputs.Length != count)
+                    channel.Inputs = new I3DProvider?[count];
+
+                channel.Inputs[index] = processor;
             }
         }
 
-        public IReadOnlyList<I3DProvider> GetInstances()
+        public IReadOnlyList<I3DProvider> GetInstancesAt(int layer, IGraphicsDevicesAndContext? devices = null)
         {
             lock (instanceGate)
             {
+                var key = ResolveKey(devices);
+
+                return
+                [
+                    .. placedAt
+                        .Where(pair => pair.Value.Layer == layer && ReferenceEquals(attached[pair.Key], key))
+                        .OrderBy(pair => pair.Value.Input)
+                        .Select(pair => pair.Key),
+                ];
+            }
+        }
+
+        public IReadOnlyList<I3DProvider> GetInstances() => GetInstances(null);
+
+        public IReadOnlyList<I3DProvider> GetInstances(IGraphicsDevicesAndContext? devices)
+        {
+            lock (instanceGate)
+            {
+                var inputs = channels.TryGetValue(ResolveKey(devices), out var channel) ? channel.Inputs : [];
+
                 if (inputs.Length < 2)
                     return [this];
 
@@ -86,8 +136,50 @@ namespace YMM43D.Plugin
             }
         }
 
+        public I3DProvider? GetInstance(int inputIndex, IGraphicsDevicesAndContext? devices = null)
+        {
+            lock (instanceGate)
+            {
+                if (!channels.TryGetValue(ResolveKey(devices), out var channel))
+                    return Processor;
+
+                return inputIndex >= 0 && inputIndex < channel.Inputs.Length && channel.Inputs[inputIndex] is { } input
+                    ? input
+                    : channel.Latest ?? Processor;
+            }
+        }
+
+        private I3DProvider? ProcessorFor(IGraphicsDevicesAndContext? devices)
+        {
+            if (devices is null)
+                return Processor;
+
+            lock (instanceGate)
+            {
+                return SourceKey.Of(devices) is { } key && channels.TryGetValue(key, out var channel) && channel.Latest is { } latest
+                    ? latest
+                    : Processor;
+            }
+        }
+
+        private object ResolveKey(IGraphicsDevicesAndContext? devices)
+        {
+            if (SourceKey.Of(devices) is { } source && channels.ContainsKey(source))
+                return source;
+
+            return Processor is { } processor && attached.TryGetValue(processor, out var key) ? key : UnknownDevices;
+        }
+
+        private Channel ChannelFor(object key)
+        {
+            if (!channels.TryGetValue(key, out var channel))
+                channels[key] = channel = new Channel();
+
+            return channel;
+        }
+
         public virtual void Draw(in Render3DContext render, DrawContext3D item)
-            => Processor?.Draw(render, item);
+            => ProcessorFor(render.SourceDevices)?.Draw(render, item);
 
         public virtual WorldBounds GetLocalBounds(in FrameContext itemTime)
             => Processor is I3DBounds provider ? provider.GetLocalBounds(itemTime) : WorldBounds.Empty;

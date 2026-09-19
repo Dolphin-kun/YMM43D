@@ -28,6 +28,8 @@ namespace YMM43D.Plugin
 
         protected IGraphicsDevicesAndContext Devices { get; } = devices;
 
+        internal IGraphicsDevicesAndContext SourceDevices => Devices;
+
         protected ID2D1Image? Input { get; private set; }
 
         public EffectDescription? EffectDescription { get; private set; }
@@ -48,21 +50,32 @@ namespace YMM43D.Plugin
         public DrawDescription Update(EffectDescription effectDescription)
         {
             EffectDescription = effectDescription;
-            owner?.ReportInput(this, effectDescription.InputIndex, effectDescription.InputCount);
-            OnUpdating(effectDescription);
+            owner?.ReportInput(this, effectDescription.Layer, effectDescription.InputIndex, effectDescription.InputCount);
 
             BakeInput();
+            OnUpdating(effectDescription);
 
             var itemTime = FrameContext.FromItem(effectDescription);
 
-            var world = ScalesToInputSize && TryGetSize(out var size, out var offset)
-                ? WorldScale.CreateSizeMatrix(size, offset + size / 2f)
-                : Matrix4x4.Identity;
+            Matrix4x4 world;
 
-            ConsumeCamera(effectDescription.DrawDescription, ref world);
+            if (TryInheritTransform(out var inheritedLocal, out var inheritedPlacement))
+            {
+                world = inheritedLocal;
+                placement = inheritedPlacement;
+            }
+            else
+            {
+                world = ScalesToInputSize && TryGetSize(out var size, out var offset)
+                    ? WorldScale.CreateSizeMatrix(size, offset + size / 2f)
+                    : Matrix4x4.Identity;
+
+                ConsumeCamera(effectDescription.DrawDescription, ref world);
+
+                placement = ItemPlacement.GetWorldMatrix(effectDescription.DrawDescription);
+            }
 
             localMatrix = world;
-            placement = ItemPlacement.GetWorldMatrix(effectDescription.DrawDescription);
 
             output = renderer.Render(
                 Devices, effectDescription, GetLocalBounds(itemTime), world, Draw,
@@ -70,11 +83,20 @@ namespace YMM43D.Plugin
                 self: (I3DProvider?)owner ?? this,
                 placement: placement);
 
+            SceneRevision.Advance();
+
             return Neutralize(effectDescription.DrawDescription, imageReach);
         }
 
         protected virtual void OnUpdating(EffectDescription effectDescription)
         {
+        }
+
+        protected virtual bool TryInheritTransform(out Matrix4x4 local, out Matrix4x4 world)
+        {
+            local = Matrix4x4.Identity;
+            world = Matrix4x4.Identity;
+            return false;
         }
 
         private static DrawDescription Neutralize(DrawDescription draw, float imageReach) => draw with
@@ -142,7 +164,7 @@ namespace YMM43D.Plugin
             return placement.HasValue;
         }
 
-        public bool TryGetSize(out Vector2 size, out Vector2 offset)
+        public virtual bool TryGetSize(out Vector2 size, out Vector2 offset)
         {
             size = inputSize;
             offset = inputOffset;

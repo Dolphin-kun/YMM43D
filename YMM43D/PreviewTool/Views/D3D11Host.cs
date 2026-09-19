@@ -87,7 +87,7 @@ namespace YMM43D.PreviewTool.Views
                 try
                 {
                     Render?.Invoke(device, deviceContext, (int)ActualWidth, (int)ActualHeight);
-                    swapChain.Present(1, PresentFlags.None);
+                    swapChain.Present(0, PresentFlags.None);
                 }
                 catch (SharpGenException) when (DeviceHealth.IsLost(device, "3Dプレビュー", out _))
                 {

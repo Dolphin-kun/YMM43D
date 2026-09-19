@@ -27,7 +27,7 @@ namespace YMM43D.Plugin
         public sealed override IShapeSource CreateShapeSource(IGraphicsDevicesAndContext devices)
         {
             var source = Create3DSource(devices);
-            Provider3DRegistry.Register(this, source);
+            Provider3DRegistry.Register(this, source, devices);
             source.Disposed = () => Provider3DRegistry.Unregister(this, source);
             return source;
         }

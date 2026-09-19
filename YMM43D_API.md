@@ -48,6 +48,8 @@ YMM43D.dll は、YMM4 のプラグインから 3D 描画を行うための土台
 
 3Dプレビューはタイムライン上のアイテムしか辿れませんが、実際に描けるのはアイテムが生成したソースやプロセッサの側です。両者を `Provider3DRegistry` が結び付けます。基底クラスを使っていれば登録は自動で行われるため、通常このクラスを直接触る必要はありません。
 
+YMM4 は同じアイテムを、プレビューなど複数の描画系統で同時に描くことがあります。系統ごとにソースやプロセッサが作られるため、登録も `IGraphicsDevicesAndContext` ごとに分けて持ちます。別のアイテムを描くときは、`Render3DContext.SourceDevices` と同じ系統のものが使われます。
+
 ひとつのアイテムに対して、プレビューは次の順に描画元を探します。
 
 1. アイテム自身が `I3DProvider` を実装しているか
@@ -650,6 +652,7 @@ var pipeline = pipelines.Get(render.Device);
 | `Device` / `Context` | 描画に使う D3D11 デバイスとコンテキスト |
 | `View` / `Projection` | ビュー行列と射影行列 |
 | `ViewProjection` | 両者の積 |
+| `SourceDevices` | この描画を行っている YMM4 側の描画系統。ほかのアイテムを描くとき、同じ系統のプロセッサを選ぶのに使う。3Dプレビューでは null |
 | `GetWorldViewProjection(in Matrix4x4 world)` | ワールド行列を掛けた最終変換 |
 | `GetCameraPosition()` | ワールド空間でのカメラ位置。レイマーチングなどで使う |
 | `CreateConstants(world, opacity, unlit)` | シーンの光と霧を込みで `TransformConstants` を作る |

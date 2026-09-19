@@ -31,7 +31,25 @@ namespace YMM43D.PreviewTool.Rendering
 
         private const float Margin = 10f;
 
+        private const float PickSlop = 1.6f;
+
+        private const float MinPickRadius = 8f;
+
+        private static readonly (Vector3 Tip, ViewDirection Direction)[] Tips =
+        [
+            (Vector3.UnitX * PositiveArm, ViewDirection.Right),
+            (Vector3.UnitY * PositiveArm, ViewDirection.Top),
+            (Vector3.UnitZ * PositiveArm, ViewDirection.Front),
+            (-Vector3.UnitX * NegativeArm, ViewDirection.Left),
+            (-Vector3.UnitY * NegativeArm, ViewDirection.Bottom),
+            (-Vector3.UnitZ * NegativeArm, ViewDirection.Back),
+        ];
+
         private readonly DeviceResourceCache<IndicatorResources> resources;
+
+        private Matrix4x4? lastTransform;
+        private Vector2 lastOrigin;
+        private float lastSize;
 
         public AxisIndicatorRenderer()
         {
@@ -41,6 +59,8 @@ namespace YMM43D.PreviewTool.Rendering
 
         public void Draw(in Render3DContext render, in CameraPose pose, float width, float height)
         {
+            lastTransform = null;
+
             if (width <= 0f || height <= 0f)
                 return;
 
@@ -66,6 +86,36 @@ namespace YMM43D.PreviewTool.Rendering
                 shared.Pipeline.Draw(render.Context, TransformConstants.CreateUnlit(transform, 1f), settings, mesh);
 
             render.Context.RSSetViewport(new Viewport(0, 0, width, height));
+
+            lastTransform = transform;
+            lastOrigin = new Vector2(width - size - Margin, height - size - Margin);
+            lastSize = size;
+        }
+
+        public ViewDirection? Pick(Vector2 position)
+        {
+            if (lastTransform is not { } transform)
+                return null;
+
+            var radius = MathF.Max(CapRadius / ViewSize * lastSize * PickSlop, MinPickRadius);
+
+            ViewDirection? found = null;
+            var nearest = radius;
+
+            foreach (var (tip, direction) in Tips)
+            {
+                var clip = Vector4.Transform(new Vector4(tip, 1f), transform);
+                var spot = lastOrigin + new Vector2(clip.X + 1f, 1f - clip.Y) / 2f * lastSize;
+                var distance = Vector2.Distance(position, spot);
+
+                if (distance >= nearest)
+                    continue;
+
+                nearest = distance;
+                found = direction;
+            }
+
+            return found;
         }
 
         private static Vector3[] BuildAxis(Vector3 axis)

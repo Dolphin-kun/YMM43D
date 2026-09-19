@@ -39,6 +39,8 @@ namespace YMM43D.Plugin
                 out _,
                 self: this,
                 hostAppliesPlacement: true);
+
+            SceneRevision.Advance();
         }
 
         internal Action? Disposed { get; set; }

@@ -70,7 +70,7 @@ namespace YMM43D.PreviewTool
 
             foreach (var item in visible)
             {
-                foreach (var (provider, effects) in FindProviders(item, flattening))
+                foreach (var (provider, effects) in FindProviders(item, flattening, devices))
                     updated.Add(new PreviewItem(provider, effects, item));
             }
 
@@ -87,20 +87,32 @@ namespace YMM43D.PreviewTool
             _ => true,
         };
 
-        private IEnumerable<Placed> FindProviders(IVideoItem item, GroupFlattening flattening)
+        private IEnumerable<Placed> FindProviders(
+            IVideoItem item, GroupFlattening flattening, IGraphicsDevicesAndContext? devices)
         {
             var effects = item.VideoEffects ?? [];
 
             if (flattening.Flattens(item))
                 return [new Placed(fallbackProvider, [.. Flattened(effects), .. flattening.EffectsFor(item)])];
 
+            if (SceneDepthCollector.FindGroupSolids(item, flattening.Groups, devices) is { Count: > 0 } groupSolids)
+            {
+                ImmutableList<IVideoEffect> flat = [.. effects.Where(effect => effect.IsEnabled && effect is not I3DProvider)];
+
+                return groupSolids.Select(provider => new Placed(provider, flat));
+            }
+
+            // 板として描くアイテムには、YMM4 と同じくアイテムのエフェクトの後にグループ制御のエフェクトを掛ける。
+            // ここに来るのは、グループ制御が位置を変えず、3D エフェクトも付いていないときだけ。
+            ImmutableList<IVideoEffect> flatWithGroups = [.. Flattened(effects), .. flattening.EffectsFor(item)];
+
             if (!SceneDepthCollector.HasSolidEffect(item))
             {
-                var sources = SceneDepthCollector.FindSources(item).ToArray();
+                var sources = SceneDepthCollector.FindSources(item, devices).ToArray();
 
                 return sources.Length > 0
                     ? sources.Select(provider => new Placed(provider, []))
-                    : [new Placed(fallbackProvider, Flattened(effects))];
+                    : [new Placed(fallbackProvider, flatWithGroups)];
             }
 
             var solids = new List<Placed>();
@@ -113,12 +125,12 @@ namespace YMM43D.PreviewTool
                 {
                     var preceding = Preceding(effects, effect);
 
-                    foreach (var instance in SceneDepthCollector.Instances(provider))
+                    foreach (var instance in SceneDepthCollector.Instances(provider, devices))
                         solids.Add(new Placed(instance, preceding));
                 }
             }
 
-            return solids.Count > 0 ? solids : [new Placed(fallbackProvider, Flattened(effects))];
+            return solids.Count > 0 ? solids : [new Placed(fallbackProvider, flatWithGroups)];
         }
 
         private static ImmutableList<IVideoEffect> Preceding(

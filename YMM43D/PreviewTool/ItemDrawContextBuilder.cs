@@ -17,9 +17,11 @@ namespace YMM43D.PreviewTool
         private readonly record struct Prepared(
             DrawDescription Draw, ID3D11ShaderResourceView? ImageTexture, RawRectF? ImageBounds);
 
+        private readonly record struct PartKey(IVideoItem Item, I3DProvider Provider, int Part);
+
         private readonly ItemRenderPipeline pipeline = new();
         private readonly D2DTextureBridge textureBridge = new();
-        private readonly Dictionary<(IVideoItem Item, I3DProvider Provider), Prepared> prepared = [];
+        private readonly Dictionary<(IVideoItem Item, I3DProvider Provider), Prepared[]> prepared = [];
 
         public void Prepare(
             IVideoItem item,
@@ -30,26 +32,37 @@ namespace YMM43D.PreviewTool
         {
             var needsImage = provider.RequiresMappedTexture && GetProviderTexture(provider, environment) is null;
 
+            // アイテムの絵をそのまま板に貼るときだけ、文字ごとに分割したテキストなどを
+            // 一つずつ別の物として並べる。3D エフェクトのプロセッサは入力ごとに別に居るので、そちらに任せる。
             var rendered = pipeline.Render(
-                item, itemTime, environment, needsImage, provider, effects,
+                item, itemTime, environment, needsImage, allParts: needsImage, provider, effects,
                 ItemPlacement.ToDrawDescription(item, itemTime));
 
-            ID3D11ShaderResourceView? texture = null;
-            RawRectF? imageBounds = null;
+            pipeline.RetainParts(item, provider, rendered.Count);
 
-            if (needsImage && rendered.Image is { } image)
+            var parts = new Prepared[rendered.Count];
+
+            for (var i = 0; i < rendered.Count; i++)
             {
-                texture = textureBridge.GetTexture(
-                    environment.Device, environment.Devices, image, item, out var bounds);
+                ID3D11ShaderResourceView? texture = null;
+                RawRectF? imageBounds = null;
 
-                if (texture is not null)
-                    imageBounds = bounds;
+                if (needsImage && rendered[i].Image is { } image)
+                {
+                    texture = textureBridge.GetTexture(
+                        environment.Device, environment.Devices, image, new PartKey(item, provider, i), out var bounds);
+
+                    if (texture is not null)
+                        imageBounds = bounds;
+                }
+
+                parts[i] = new Prepared(rendered[i].Draw, texture, imageBounds);
             }
 
-            prepared[(item, provider)] = new Prepared(rendered.Draw, texture, imageBounds);
+            prepared[(item, provider)] = parts;
         }
 
-        public DrawContext3D Build(
+        public IReadOnlyList<DrawContext3D> Build(
             IVideoItem item,
             in FrameContext itemTime,
             PreviewEnvironment environment,
@@ -58,30 +71,38 @@ namespace YMM43D.PreviewTool
         {
             var providerTexture = GetProviderTexture(provider, environment);
 
-            var ready = prepared.TryGetValue((item, provider), out var found)
+            var parts = prepared.TryGetValue((item, provider), out var found) && found.Length > 0
                 ? found
-                : new Prepared(ItemPlacement.ToDrawDescription(item, itemTime), null, null);
+                : [new Prepared(ItemPlacement.ToDrawDescription(item, itemTime), null, null)];
 
-            var texture = providerTexture ?? (provider.RequiresMappedTexture ? ready.ImageTexture : null);
-            var imageBounds = providerTexture is null && texture is not null ? ready.ImageBounds : null;
+            var contexts = new DrawContext3D[parts.Length];
 
-            var world = provider is I3DPlacedInstance placed
-                && placed.TryGetPlacement(out var own)
-                && provider is I3DLocalTransform local
-                && local.TryGetLocalMatrix(out var localMatrix)
-                    ? localMatrix * own
-                    : ItemPlacement.WithCamera(BuildSizeMatrix(provider, imageBounds), ready.Draw.Camera)
-                      * ItemPlacement.GetWorldMatrix(ready.Draw);
-
-            return new DrawContext3D
+            for (var i = 0; i < parts.Length; i++)
             {
-                World = world * groups.GetTransform(item),
-                Opacity = Math.Clamp((float)ready.Draw.Opacity, 0f, 1f),
-                Blend = ToBlendMode(item.Blend),
-                IsAlwaysOnTop = item.IsAlwaysOnTop,
-                Time = itemTime,
-                Texture = texture,
-            };
+                var ready = parts[i];
+                var texture = providerTexture ?? (provider.RequiresMappedTexture ? ready.ImageTexture : null);
+                var imageBounds = providerTexture is null && texture is not null ? ready.ImageBounds : null;
+
+                var world = provider is I3DPlacedInstance placed
+                    && placed.TryGetPlacement(out var own)
+                    && provider is I3DLocalTransform local
+                    && local.TryGetLocalMatrix(out var localMatrix)
+                        ? localMatrix * own
+                        : ItemPlacement.WithCamera(BuildSizeMatrix(provider, imageBounds), ready.Draw.Camera)
+                          * ItemPlacement.GetWorldMatrix(ready.Draw);
+
+                contexts[i] = new DrawContext3D
+                {
+                    World = world * groups.GetTransform(item),
+                    Opacity = Math.Clamp((float)ready.Draw.Opacity, 0f, 1f),
+                    Blend = ToBlendMode(item.Blend),
+                    IsAlwaysOnTop = item.IsAlwaysOnTop,
+                    Time = itemTime,
+                    Texture = texture,
+                };
+            }
+
+            return contexts;
         }
 
         private static ID3D11ShaderResourceView? GetProviderTexture(I3DProvider provider, PreviewEnvironment environment)
@@ -101,7 +122,10 @@ namespace YMM43D.PreviewTool
 
             pipeline.RetainOnly(aliveItems);
 
-            textureBridge.RetainOnly(aliveItems.Cast<object>().ToHashSet());
+            textureBridge.RetainOnly(prepared
+                .SelectMany(pair => Enumerable.Range(0, pair.Value.Length)
+                    .Select(part => (object)new PartKey(pair.Key.Item, pair.Key.Provider, part)))
+                .ToHashSet());
         }
 
         public void Dispose()
