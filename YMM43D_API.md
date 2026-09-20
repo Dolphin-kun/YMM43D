@@ -587,6 +587,7 @@ var pipeline = pipelines.Get(render.Device);
 | `Render3DContext` | struct | 描画先のデバイス・コンテキストとカメラ行列 |
 | `DrawContext3D` | class | 1 つのアイテムを描画するための情報 |
 | `Provider3DRegistry` | static class | パラメータとプロバイダーの対応表 |
+| `GroupEffectSource` | static class | グループ制御に付けたエフェクトかどうかの判定と、中のアイテムが持つ 3D の中身の取得 |
 
 #### 座標と時間
 
