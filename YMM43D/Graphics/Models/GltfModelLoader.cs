@@ -68,15 +68,26 @@ namespace YMM43D.Graphics.Models
             private readonly Dictionary<int, byte[]> buffers = [];
             private readonly Dictionary<int, int> images = [];
 
+            private Matrix4x4 baseMatrix = Matrix4x4.Identity;
+
             public ModelData Read()
             {
                 RejectUnsupported();
 
+                baseMatrix = FacesAway() ? Matrix4x4.CreateRotationY(MathF.PI) : Matrix4x4.Identity;
+
                 foreach (var node in RootNodes())
-                    Visit(node, Matrix4x4.Identity, 0);
+                    Visit(node, baseMatrix, 0);
 
                 return builder.Build();
             }
+
+            // VRM 0.x の人は -Z を向いて作られているので、こちらを向くように半回転させる。
+            // VRM 1.0（VRMC_vrm）と、ふつうの glTF はそのまま。
+            private bool FacesAway()
+                => root.TryGetProperty("extensions", out var extensions)
+                && extensions.TryGetProperty("VRM", out _)
+                && !extensions.TryGetProperty("VRMC_vrm", out _);
 
             private void RejectUnsupported()
             {
@@ -130,7 +141,13 @@ namespace YMM43D.Graphics.Models
                 var world = LocalMatrix(node) * parent;
 
                 if (node.TryGetProperty("mesh", out var mesh))
-                    AddMesh(root.GetProperty("meshes")[mesh.GetInt32()], world);
+                {
+                    // 骨に付いたメッシュは、置き場所を骨が決めるので、ノードの変換は使わない（glTF の決まり）。
+                    // 骨を動かすまでは、頂点がそのまま基本の姿勢になる。
+                    var placed = node.TryGetProperty("skin", out _) ? baseMatrix : world;
+
+                    AddMesh(root.GetProperty("meshes")[mesh.GetInt32()], placed);
+                }
 
                 if (node.TryGetProperty("children", out var children))
                 {
