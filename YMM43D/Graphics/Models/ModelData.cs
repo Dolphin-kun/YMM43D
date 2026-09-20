@@ -9,12 +9,40 @@ namespace YMM43D.Graphics.Models
 
     public sealed record ModelImage(int Width, int Height, byte[] Pixels);
 
+    // 骨。親からの位置関係（Local）と、骨が動いていないときの頂点との関係（InverseBind）を持つ。
+    public readonly record struct ModelBone(string Name, int Parent, Matrix4x4 Local, Matrix4x4 InverseBind);
+
+    // 1 つの頂点が、どの骨にどれだけ引っぱられるか。
+    public readonly record struct ModelInfluence(ushort Bone0, ushort Bone1, ushort Bone2, ushort Bone3, Vector4 Weights)
+    {
+        public static ModelInfluence None => new(0, 0, 0, 0, Vector4.Zero);
+
+        public bool IsEmpty => Weights == Vector4.Zero;
+    }
+
     public sealed class ModelData(
-        Vertex[] vertices, uint[] indices, ModelPart[] parts, ModelImage[] images, string[] materials)
+        Vertex[] vertices,
+        uint[] indices,
+        ModelPart[] parts,
+        ModelImage[] images,
+        string[] materials,
+        ModelBone[]? bones = null,
+        ModelInfluence[]? influences = null,
+        Matrix4x4? root = null)
     {
         public const string NoMaterial = "（材質なし）";
 
         public string[] Materials { get; } = materials;
+
+        public ModelBone[] Bones { get; } = bones ?? [];
+
+        // 頂点と同じ並び。骨が無いモデルでは空。
+        public ModelInfluence[] Influences { get; } = influences ?? [];
+
+        // 骨で動かした結果に最後に掛ける、モデル全体の向き合わせ。
+        public Matrix4x4 Root { get; } = root ?? Matrix4x4.Identity;
+
+        public bool HasBones => Bones.Length > 0 && Influences.Length == vertices.Length;
 
         public Vertex[] Vertices { get; } = vertices;
 
@@ -24,9 +52,11 @@ namespace YMM43D.Graphics.Models
 
         public ModelImage[] Images { get; } = images;
 
-        public WorldBounds Bounds { get; } = Measure(vertices);
+        // 骨のあるモデルは、頂点が骨の座標系のままなので、向き合わせを掛けてから測る。
+        public WorldBounds Bounds { get; } = Measure(
+            vertices, influences is { Length: > 0 } ? root ?? Matrix4x4.Identity : Matrix4x4.Identity);
 
-        private static WorldBounds Measure(Vertex[] vertices)
+        private static WorldBounds Measure(Vertex[] vertices, in Matrix4x4 transform)
         {
             if (vertices.Length == 0)
                 return WorldBounds.Empty;
@@ -36,8 +66,10 @@ namespace YMM43D.Graphics.Models
 
             foreach (var vertex in vertices)
             {
-                min = Vector3.Min(min, vertex.Position);
-                max = Vector3.Max(max, vertex.Position);
+                var position = Vector3.Transform(vertex.Position, transform);
+
+                min = Vector3.Min(min, position);
+                max = Vector3.Max(max, position);
             }
 
             return new WorldBounds(min, max);
@@ -53,10 +85,16 @@ namespace YMM43D.Graphics.Models
         private readonly List<string> materials = [];
         private readonly Dictionary<string, int> materialKeys = new(StringComparer.Ordinal);
 
+        private readonly List<ModelInfluence> influences = [];
+
         private int partStart;
         private Vector4 partColor = Vector4.One;
         private int partImage = -1;
         private int partMaterial = -1;
+
+        public List<ModelBone> Bones { get; } = [];
+
+        public Matrix4x4 Root { get; set; } = Matrix4x4.Identity;
 
         public int VertexCount => vertices.Count;
 
@@ -80,8 +118,13 @@ namespace YMM43D.Graphics.Models
         }
 
         public uint AddVertex(Vector3 position, Vector3 normal, Vector2 texCoord, Vector4 color)
+            => AddVertex(position, normal, texCoord, color, ModelInfluence.None);
+
+        public uint AddVertex(
+            Vector3 position, Vector3 normal, Vector2 texCoord, Vector4 color, in ModelInfluence influence)
         {
             vertices.Add(new Vertex(position, new Color4(color), texCoord, normal));
+            influences.Add(influence);
             return (uint)(vertices.Count - 1);
         }
 
@@ -113,8 +156,17 @@ namespace YMM43D.Graphics.Models
                 .Select(part => part with { Material = Array.IndexOf(used, part.Material) })
                 .ToArray();
 
+            var skinned = Bones.Count > 0 && influences.Any(influence => !influence.IsEmpty);
+
             return new ModelData(
-                [.. vertices], [.. indices], renumbered, [.. images], [.. used.Select(index => materials[index])]);
+                [.. vertices],
+                [.. indices],
+                renumbered,
+                [.. images],
+                [.. used.Select(index => materials[index])],
+                skinned ? [.. Bones] : null,
+                skinned ? [.. influences] : null,
+                Root);
         }
 
         private void EndPart()

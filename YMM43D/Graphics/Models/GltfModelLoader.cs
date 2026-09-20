@@ -68,6 +68,10 @@ namespace YMM43D.Graphics.Models
             private readonly Dictionary<int, byte[]> buffers = [];
             private readonly Dictionary<int, int> images = [];
 
+            private readonly Dictionary<int, int> boneOfNode = [];
+            private readonly List<int> boneOrder = [];
+            private readonly Dictionary<int, int> parentOfNode = [];
+
             private Matrix4x4 baseMatrix = Matrix4x4.Identity;
 
             public ModelData Read()
@@ -75,11 +79,102 @@ namespace YMM43D.Graphics.Models
                 RejectUnsupported();
 
                 baseMatrix = FacesAway() ? Matrix4x4.CreateRotationY(MathF.PI) : Matrix4x4.Identity;
+                builder.Root = baseMatrix;
+
+                ReadBones();
 
                 foreach (var node in RootNodes())
                     Visit(node, baseMatrix, 0);
 
                 return builder.Build();
+            }
+
+            // 骨組みを読む。glTF では skins に骨（joints）の一覧と、
+            // 骨が動いていないときの頂点との関係（inverseBindMatrices）が入っている。
+            private void ReadBones()
+            {
+                if (!root.TryGetProperty("skins", out var skins) || skins.GetArrayLength() == 0)
+                    return;
+
+                foreach (var skin in skins.EnumerateArray())
+                {
+                    if (!skin.TryGetProperty("joints", out var joints))
+                        continue;
+
+                    var nodes = joints.EnumerateArray().Select(joint => joint.GetInt32()).ToArray();
+
+                    var inverseBinds = skin.TryGetProperty("inverseBindMatrices", out var accessor)
+                        ? ReadMatrices(accessor.GetInt32())
+                        : null;
+
+                    var start = builder.Bones.Count;
+
+                    for (var i = 0; i < nodes.Length; i++)
+                    {
+                        if (boneOfNode.ContainsKey(nodes[i]))
+                            continue;
+
+                        boneOfNode[nodes[i]] = builder.Bones.Count;
+                        boneOrder.Add(nodes[i]);
+
+                        var node = root.GetProperty("nodes")[nodes[i]];
+
+                        builder.Bones.Add(new ModelBone(
+                            node.TryGetProperty("name", out var name) ? name.GetString() ?? $"骨 {i + 1}" : $"骨 {i + 1}",
+                            -1,
+                            LocalMatrix(node),
+                            inverseBinds is not null && i < inverseBinds.Length ? inverseBinds[i] : Matrix4x4.Identity));
+                    }
+
+                    // 親子は、この skin に入っている骨のあいだだけでつなぐ。
+                    for (var i = start; i < builder.Bones.Count; i++)
+                    {
+                        var parent = ParentOfNode(boneOrder[i]);
+
+                        if (parent >= 0 && boneOfNode.TryGetValue(parent, out var bone))
+                            builder.Bones[i] = builder.Bones[i] with { Parent = bone };
+                    }
+                }
+            }
+
+            private int ParentOfNode(int index)
+            {
+                if (parentOfNode.Count == 0 && root.TryGetProperty("nodes", out var all))
+                {
+                    var at = 0;
+
+                    foreach (var node in all.EnumerateArray())
+                    {
+                        if (node.TryGetProperty("children", out var children))
+                        {
+                            foreach (var child in children.EnumerateArray())
+                                parentOfNode[child.GetInt32()] = at;
+                        }
+
+                        at++;
+                    }
+                }
+
+                return parentOfNode.GetValueOrDefault(index, -1);
+            }
+
+            private Matrix4x4[] ReadMatrices(int accessorIndex)
+            {
+                var values = ReadVectors(accessorIndex, 16);
+                var matrices = new Matrix4x4[values.Length / 16];
+
+                for (var i = 0; i < matrices.Length; i++)
+                {
+                    var at = i * 16;
+
+                    matrices[i] = new Matrix4x4(
+                        values[at], values[at + 1], values[at + 2], values[at + 3],
+                        values[at + 4], values[at + 5], values[at + 6], values[at + 7],
+                        values[at + 8], values[at + 9], values[at + 10], values[at + 11],
+                        values[at + 12], values[at + 13], values[at + 14], values[at + 15]);
+                }
+
+                return matrices;
             }
 
             // VRM 0.x の人は -Z を向いて作られているので、こちらを向くように半回転させる。
@@ -143,10 +238,11 @@ namespace YMM43D.Graphics.Models
                 if (node.TryGetProperty("mesh", out var mesh))
                 {
                     // 骨に付いたメッシュは、置き場所を骨が決めるので、ノードの変換は使わない（glTF の決まり）。
-                    // 骨を動かすまでは、頂点がそのまま基本の姿勢になる。
-                    var placed = node.TryGetProperty("skin", out _) ? baseMatrix : world;
+                    // 向き合わせは骨の行列側に入れるので、ここでは掛けない。
+                    var skinned = node.TryGetProperty("skin", out var skin);
+                    var placed = skinned ? Matrix4x4.Identity : world;
 
-                    AddMesh(root.GetProperty("meshes")[mesh.GetInt32()], placed);
+                    AddMesh(root.GetProperty("meshes")[mesh.GetInt32()], placed, skinned ? skin.GetInt32() : -1);
                 }
 
                 if (node.TryGetProperty("children", out var children))
@@ -178,7 +274,7 @@ namespace YMM43D.Graphics.Models
                      * Matrix4x4.CreateTranslation(translation[0], translation[1], translation[2]);
             }
 
-            private void AddMesh(JsonElement mesh, in Matrix4x4 world)
+            private void AddMesh(JsonElement mesh, in Matrix4x4 world, int skinIndex = -1)
             {
                 Matrix4x4.Invert(world, out var inverse);
                 var normalMatrix = Matrix4x4.Transpose(inverse);
@@ -199,6 +295,16 @@ namespace YMM43D.Graphics.Models
                     var normals = attributes.TryGetProperty("NORMAL", out var n) ? ReadVectors(n.GetInt32(), 3) : null;
                     var texCoords = attributes.TryGetProperty("TEXCOORD_0", out var uv) ? ReadVectors(uv.GetInt32(), 2) : null;
                     var colors = attributes.TryGetProperty("COLOR_0", out var c) ? ReadColors(c.GetInt32()) : null;
+
+                    var joints = skinIndex >= 0 && attributes.TryGetProperty("JOINTS_0", out var j)
+                        ? ReadVectors(j.GetInt32(), 4)
+                        : null;
+
+                    var weights = joints is not null && attributes.TryGetProperty("WEIGHTS_0", out var w)
+                        ? ReadVectors(w.GetInt32(), 4)
+                        : null;
+
+                    var skinJoints = skinIndex >= 0 ? JointsOf(skinIndex) : [];
 
                     var indices = primitive.TryGetProperty("indices", out var i)
                         ? ReadIndices(i.GetInt32())
@@ -223,7 +329,8 @@ namespace YMM43D.Graphics.Models
                             position,
                             normal.LengthSquared() > 1e-20f ? Vector3.Normalize(normal) : Vector3.Zero,
                             texCoords is null ? Vector2.Zero : new Vector2(texCoords[v * 2], texCoords[v * 2 + 1]),
-                            colors?[v] ?? Vector4.One);
+                            colors?[v] ?? Vector4.One,
+                            Influence(joints, weights, skinJoints, v));
                     }
 
                     for (var t = 0; t + 2 < indices.Length; t += 3)
@@ -241,6 +348,48 @@ namespace YMM43D.Graphics.Models
                             FillFlatNormal(a, b, d);
                     }
                 }
+            }
+
+            private int[] JointsOf(int skinIndex)
+            {
+                if (!root.TryGetProperty("skins", out var skins) || skinIndex >= skins.GetArrayLength())
+                    return [];
+
+                var skin = skins[skinIndex];
+
+                if (!skin.TryGetProperty("joints", out var joints))
+                    return [];
+
+                return [.. joints.EnumerateArray().Select(joint => boneOfNode.GetValueOrDefault(joint.GetInt32(), -1))];
+            }
+
+            private static ModelInfluence Influence(float[]? joints, float[]? weights, int[] skinJoints, int vertex)
+            {
+                if (joints is null || weights is null)
+                    return ModelInfluence.None;
+
+                Span<ushort> bones = stackalloc ushort[4];
+                Span<float> amounts = stackalloc float[4];
+
+                for (var i = 0; i < 4; i++)
+                {
+                    var at = vertex * 4 + i;
+                    var joint = at < joints.Length ? (int)joints[at] : 0;
+                    var bone = joint >= 0 && joint < skinJoints.Length ? skinJoints[joint] : -1;
+                    var weight = at < weights.Length ? weights[at] : 0f;
+
+                    bones[i] = bone >= 0 ? (ushort)bone : (ushort)0;
+                    amounts[i] = bone >= 0 ? weight : 0f;
+                }
+
+                var total = amounts[0] + amounts[1] + amounts[2] + amounts[3];
+
+                if (total <= 1e-6f)
+                    return ModelInfluence.None;
+
+                return new ModelInfluence(
+                    bones[0], bones[1], bones[2], bones[3],
+                    new Vector4(amounts[0], amounts[1], amounts[2], amounts[3]) / total);
             }
 
             private void FillFlatNormal(uint a, uint b, uint c)
@@ -387,6 +536,9 @@ namespace YMM43D.Graphics.Models
                     "VEC2" => 2,
                     "VEC3" => 3,
                     "VEC4" => 4,
+                    "MAT2" => 4,
+                    "MAT3" => 9,
+                    "MAT4" => 16,
                     var other => throw new InvalidDataException($"accessor の型 {other} には対応していません。"),
                 };
 

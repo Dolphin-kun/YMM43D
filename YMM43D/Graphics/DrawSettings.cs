@@ -17,5 +17,8 @@ namespace YMM43D.Graphics
         public ID3D11ShaderResourceView? Texture { get; init; }
 
         public ID3D11SamplerState? Sampler { get; init; }
+
+        // 骨ごとの行列。骨で動かすモデルのときだけ入れる。
+        public ID3D11ShaderResourceView? Bones { get; init; }
     }
 }

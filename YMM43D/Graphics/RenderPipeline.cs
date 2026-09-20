@@ -104,6 +104,9 @@ namespace YMM43D.Graphics
                 context.PSSetSampler(0, settings.Sampler ?? states.LinearSampler);
             }
 
+            if (settings.Bones is not null)
+                context.VSSetShaderResource(Models.ModelBoneBuffer.Slot, settings.Bones);
+
             if (mesh.IndexBuffer is not null)
             {
                 context.IASetIndexBuffer(mesh.IndexBuffer, mesh.IndexFormat, 0);
@@ -132,6 +135,9 @@ namespace YMM43D.Graphics
         {
             if (settings.Texture is not null)
                 context.PSSetShaderResource(0, null!);
+
+            if (settings.Bones is not null)
+                context.VSSetShaderResource(Models.ModelBoneBuffer.Slot, null!);
 
             context.OMSetBlendState(null);
             context.OMSetDepthStencilState(null);

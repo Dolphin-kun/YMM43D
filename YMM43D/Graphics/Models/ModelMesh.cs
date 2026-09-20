@@ -51,7 +51,10 @@ namespace YMM43D.Graphics.Models
                 }
             }
 
-            var vertexBuffer = D3D11Buffers.Create(device, vertices, BindFlags.VertexBuffer);
+            var vertexBuffer = source.HasBones
+                ? D3D11Buffers.Create(device, Skinned(vertices, source), BindFlags.VertexBuffer)
+                : D3D11Buffers.Create(device, vertices, BindFlags.VertexBuffer);
+
             disposer.Collect(vertexBuffer);
 
             var textures = new ID3D11ShaderResourceView?[source.Images.Length];
@@ -72,7 +75,11 @@ namespace YMM43D.Graphics.Models
             foreach (var part in source.Parts)
             {
                 var indices = source.Indices.AsSpan(part.IndexStart, part.IndexCount).ToArray();
-                var mesh = new PartMesh(vertexBuffer, D3D11Buffers.Create(device, indices, BindFlags.IndexBuffer), indices.Length);
+                var mesh = new PartMesh(
+                    vertexBuffer,
+                    D3D11Buffers.Create(device, indices, BindFlags.IndexBuffer),
+                    indices.Length,
+                    source.HasBones);
                 disposer.Collect(mesh);
 
                 var texture = part.Material >= 0 && part.Material < replaced.Length ? replaced[part.Material] : null;
@@ -81,6 +88,23 @@ namespace YMM43D.Graphics.Models
             }
 
             Parts = parts;
+        }
+
+        private static SkinnedVertex[] Skinned(Vertex[] vertices, ModelData source)
+        {
+            var skinned = new SkinnedVertex[vertices.Length];
+
+            for (var i = 0; i < vertices.Length; i++)
+            {
+                var influence = source.Influences[i];
+
+                skinned[i] = new SkinnedVertex(
+                    vertices[i],
+                    influence.Bone0, influence.Bone1, influence.Bone2, influence.Bone3,
+                    influence.Weights);
+            }
+
+            return skinned;
         }
 
         private ID3D11ShaderResourceView? CreateTexture(ID3D11Device device, ID3D11DeviceContext context, ModelImage image)
@@ -114,7 +138,8 @@ namespace YMM43D.Graphics.Models
 
         public void Dispose() => disposer.Dispose();
 
-        private sealed class PartMesh(ID3D11Buffer vertexBuffer, ID3D11Buffer indexBuffer, int count) : IMesh
+        private sealed class PartMesh(
+            ID3D11Buffer vertexBuffer, ID3D11Buffer indexBuffer, int count, bool skinned) : IMesh
         {
             public ID3D11Buffer VertexBuffer { get; } = vertexBuffer;
 
@@ -122,9 +147,10 @@ namespace YMM43D.Graphics.Models
 
             public int DrawCount { get; } = count;
 
-            public int VertexStride => Vertex.Stride;
+            public int VertexStride => skinned ? SkinnedVertex.Stride : Vertex.Stride;
 
-            public InputElementDescription[] InputElements => Vertex.InputElements;
+            public InputElementDescription[] InputElements
+                => skinned ? SkinnedVertex.InputElements : Vertex.InputElements;
 
             public PrimitiveTopology Topology => PrimitiveTopology.TriangleList;
 

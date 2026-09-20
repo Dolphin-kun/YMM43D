@@ -69,9 +69,15 @@ namespace YMM43D.Project.Model
         public ImmutableList<ModelMaterialSlot> Materials { get => materials; set => Set(ref materials, value); }
         private ImmutableList<ModelMaterialSlot> materials = [];
 
+        // 動かした骨だけを持つ。モデルの骨は数が多いので、全部は並べない。
+        [Display(AutoGenerateField = true)]
+        public ImmutableList<ModelBonePose> Bones { get => bones; set => Set(ref bones, value); }
+        private ImmutableList<ModelBonePose> bones = [];
+
         public Model3DParameter(SharedDataStore? sharedData) : base(sharedData)
         {
             SubscribeChildUndoRedoable(Materials);
+            SubscribeChildUndoRedoable(Bones);
         }
 
         public override async ValueTask EndEditAsync()
@@ -100,6 +106,52 @@ namespace YMM43D.Project.Model
 
                 return new ModelMaterialSlot(name, kept?.Texture ?? string.Empty);
             })];
+        }
+
+        // 骨ごとの回転。動かしていない骨は単位行列のまま。
+        internal IReadOnlyList<Matrix4x4>? GetPose(ModelData model, in FrameContext time)
+        {
+            if (!model.HasBones || Bones.Count == 0)
+                return null;
+
+            Matrix4x4[]? pose = null;
+
+            foreach (var bone in Bones)
+            {
+                if (bone.Name.Length == 0 || bone.IsStill(time))
+                    continue;
+
+                var index = IndexOfBone(model, bone.Name);
+
+                if (index < 0)
+                    continue;
+
+                pose ??= Identity(model.Bones.Length);
+                pose[index] = bone.GetRotation(time);
+            }
+
+            return pose;
+        }
+
+        private static Matrix4x4[] Identity(int count)
+        {
+            var pose = new Matrix4x4[count];
+
+            for (var i = 0; i < count; i++)
+                pose[i] = Matrix4x4.Identity;
+
+            return pose;
+        }
+
+        private static int IndexOfBone(ModelData model, string name)
+        {
+            for (var i = 0; i < model.Bones.Length; i++)
+            {
+                if (model.Bones[i].Name == name)
+                    return i;
+            }
+
+            return -1;
         }
 
         internal IReadOnlyList<ModelImage?> GetReplacements(ModelData model)
@@ -146,7 +198,7 @@ namespace YMM43D.Project.Model
             => new Model3DSource(devices, this);
 
         protected override IEnumerable<IAnimatable> GetAnimatables()
-            => [Size, RotationX, RotationY, RotationZ, Gloss, GlossSharpness, CameraSyncAnimation];
+            => [Size, RotationX, RotationY, RotationZ, Gloss, GlossSharpness, CameraSyncAnimation, .. Bones];
 
         public override IEnumerable<string> CreateMaskExoFilter(
             int keyFrameIndex, ExoOutputDescription desc, ShapeMaskExoOutputDescription shapeMaskDesc) => [];

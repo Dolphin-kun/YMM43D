@@ -27,14 +27,18 @@ namespace YMM43D.Project.Model
             var mesh = shared.GetMesh(render.Context, model, parameter.Tint.ToVector4(), parameter.GetReplacements(model));
             var states = RenderStates.For(render.Device);
 
+            var bones = model.HasBones ? shared.WriteBones(render.Context, model, parameter.GetPose(model, item.Time)) : null;
+            var pipeline = model.HasBones ? shared.SkinnedPipeline : shared.Pipeline;
+
             foreach (var (part, texture) in mesh.Parts)
             {
                 var settings = item.ToDrawSettings(FaceCulling.None, texture ?? shared.GetWhite(render.Context)) with
                 {
                     Sampler = states.LinearWrapSampler,
+                    Bones = bones,
                 };
 
-                shared.Pipeline.Draw(render.Context, constants, settings, part);
+                pipeline.Draw(render.Context, constants, settings, part);
             }
         }
 
@@ -59,14 +63,30 @@ namespace YMM43D.Project.Model
             private ModelMesh? mesh;
             private ID3D11Texture2D? whiteTexture;
             private ID3D11ShaderResourceView? white;
+            private RenderPipeline<TransformConstants>? skinnedPipeline;
+            private ModelBoneBuffer? boneBuffer;
 
             public RenderPipeline<TransformConstants> Pipeline { get; }
+
+            // 骨のあるモデルのときだけ作る。
+            public RenderPipeline<TransformConstants> SkinnedPipeline
+                => skinnedPipeline ??= new RenderPipeline<TransformConstants>(
+                    device, SkinnedVertex.InputElements, new SkinnedTextureMaterial(device));
 
             public ModelResources(ID3D11Device device)
             {
                 this.device = device;
 
                 Pipeline = new RenderPipeline<TransformConstants>(device, Vertex.InputElements, new TextureMaterial(device));
+            }
+
+            public ID3D11ShaderResourceView? WriteBones(
+                ID3D11DeviceContext context, ModelData model, IReadOnlyList<Matrix4x4>? pose)
+            {
+                boneBuffer ??= new ModelBoneBuffer(device);
+                boneBuffer.Write(context, ModelPose.Skin(model, pose));
+
+                return boneBuffer.View;
             }
 
             public ID3D11ShaderResourceView GetWhite(ID3D11DeviceContext context)
@@ -111,6 +131,10 @@ namespace YMM43D.Project.Model
             {
                 mesh?.Dispose();
                 mesh = null;
+                boneBuffer?.Dispose();
+                boneBuffer = null;
+                skinnedPipeline?.Dispose();
+                skinnedPipeline = null;
                 white?.Dispose();
                 white = null;
                 whiteTexture?.Dispose();
