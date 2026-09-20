@@ -47,7 +47,12 @@ namespace YMM43D.Project.Model
             if (parameter.Model is not { } model)
                 return WorldBounds.Empty;
 
-            return model.Bounds.Transform(parameter.GetLocalMatrix(model, itemTime));
+            // 骨を動かすと手足が基本の姿勢からはみ出すので、そのぶんまで含めて測る。
+            var bounds = model.HasBones && parameter.GetPose(model, itemTime) is { } pose
+                ? model.PosedBounds(ModelPose.Skin(model, pose))
+                : model.Bounds;
+
+            return bounds.Transform(parameter.GetLocalMatrix(model, itemTime));
         }
 
         public override void Dispose()

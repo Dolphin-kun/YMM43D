@@ -7,8 +7,11 @@ namespace YMM43D.Graphics.Models
     public static class ModelPose
     {
         public static Matrix4x4[] Skin(ModelData model, IReadOnlyList<Matrix4x4>? localRotations = null)
+            => Skin(model.Bones, model.Root, localRotations);
+
+        public static Matrix4x4[] Skin(
+            ModelBone[] bones, in Matrix4x4 root, IReadOnlyList<Matrix4x4>? localRotations = null)
         {
-            var bones = model.Bones;
             var skin = new Matrix4x4[bones.Length];
 
             if (bones.Length == 0)
@@ -21,7 +24,7 @@ namespace YMM43D.Graphics.Models
                 Global(bones, localRotations, globals, done, i, 0);
 
             for (var i = 0; i < bones.Length; i++)
-                skin[i] = bones[i].InverseBind * globals[i] * model.Root;
+                skin[i] = bones[i].InverseBind * globals[i] * root;
 
             return skin;
         }

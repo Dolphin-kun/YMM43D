@@ -52,11 +52,108 @@ namespace YMM43D.Graphics.Models
 
         public ModelImage[] Images { get; } = images;
 
-        // 骨のあるモデルは、頂点が骨の座標系のままなので、向き合わせを掛けてから測る。
-        public WorldBounds Bounds { get; } = Measure(
-            vertices, influences is { Length: > 0 } ? root ?? Matrix4x4.Identity : Matrix4x4.Identity);
+        // 骨ごとに、その骨が主に動かす頂点の範囲。姿勢を変えたときの範囲を出すのに使う。
+        public WorldBounds[] BoneBounds { get; } = MeasureBones(vertices, bones, influences);
 
-        private static WorldBounds Measure(Vertex[] vertices, in Matrix4x4 transform)
+        // 骨のあるモデルは、頂点が骨の座標系のままなので、骨を掛けたあと（基本の姿勢）で測る。
+        public WorldBounds Bounds { get; } = Measure(
+            vertices,
+            bones is { Length: > 0 } && influences is { Length: > 0 } && influences.Length == vertices.Length
+                ? ModelPose.Skin(bones, root ?? Matrix4x4.Identity)
+                : null,
+            influences,
+            root ?? Matrix4x4.Identity);
+
+        // 骨で動かしたあとの頂点の位置。骨が無いモデルではそのままの位置。
+        public static Vector3 Place(
+            in Vector3 position, in ModelInfluence influence, IReadOnlyList<Matrix4x4> skin)
+        {
+            var weights = influence.Weights;
+
+            return weights.X * Vector3.Transform(position, skin[influence.Bone0])
+                 + weights.Y * Vector3.Transform(position, skin[influence.Bone1])
+                 + weights.Z * Vector3.Transform(position, skin[influence.Bone2])
+                 + weights.W * Vector3.Transform(position, skin[influence.Bone3]);
+        }
+
+        // 今の姿勢で占める範囲。骨ごとの範囲を動かして囲み直す。
+        public WorldBounds PosedBounds(IReadOnlyList<Matrix4x4> skin)
+        {
+            if (BoneBounds.Length == 0)
+                return Bounds;
+
+            var min = new Vector3(float.MaxValue);
+            var max = new Vector3(float.MinValue);
+            var found = false;
+
+            for (var i = 0; i < BoneBounds.Length && i < skin.Count; i++)
+            {
+                if (BoneBounds[i].Max.X < BoneBounds[i].Min.X)
+                    continue;
+
+                var moved = BoneBounds[i].Transform(skin[i]);
+
+                min = Vector3.Min(min, moved.Min);
+                max = Vector3.Max(max, moved.Max);
+                found = true;
+            }
+
+            return found ? new WorldBounds(min, max) : Bounds;
+        }
+
+        // 頂点を、いちばん強く引っぱる骨に割り当てて範囲を測る。
+        private static WorldBounds[] MeasureBones(
+            Vertex[] vertices, ModelBone[]? bones, ModelInfluence[]? influences)
+        {
+            if (bones is not { Length: > 0 } || influences is null || influences.Length != vertices.Length)
+                return [];
+
+            var min = new Vector3[bones.Length];
+            var max = new Vector3[bones.Length];
+            var used = new bool[bones.Length];
+
+            for (var i = 0; i < vertices.Length; i++)
+            {
+                var influence = influences[i];
+
+                if (influence.IsEmpty)
+                    continue;
+
+                var weights = influence.Weights;
+                var bone = influence.Bone0;
+                var best = weights.X;
+
+                if (weights.Y > best) { bone = influence.Bone1; best = weights.Y; }
+                if (weights.Z > best) { bone = influence.Bone2; best = weights.Z; }
+                if (weights.W > best) { bone = influence.Bone3; }
+
+                if (bone >= bones.Length)
+                    continue;
+
+                var position = vertices[i].Position;
+
+                if (!used[bone])
+                {
+                    used[bone] = true;
+                    min[bone] = position;
+                    max[bone] = position;
+                    continue;
+                }
+
+                min[bone] = Vector3.Min(min[bone], position);
+                max[bone] = Vector3.Max(max[bone], position);
+            }
+
+            var found = new WorldBounds[bones.Length];
+
+            for (var i = 0; i < bones.Length; i++)
+                found[i] = used[i] ? new WorldBounds(min[i], max[i]) : new WorldBounds(Vector3.One, Vector3.Zero);
+
+            return found;
+        }
+
+        private static WorldBounds Measure(
+            Vertex[] vertices, Matrix4x4[]? skin, ModelInfluence[]? influences, Matrix4x4 root)
         {
             if (vertices.Length == 0)
                 return WorldBounds.Empty;
@@ -64,9 +161,11 @@ namespace YMM43D.Graphics.Models
             var min = new Vector3(float.MaxValue);
             var max = new Vector3(float.MinValue);
 
-            foreach (var vertex in vertices)
+            for (var i = 0; i < vertices.Length; i++)
             {
-                var position = Vector3.Transform(vertex.Position, transform);
+                var position = skin is null || influences is null || influences[i].IsEmpty
+                    ? Vector3.Transform(vertices[i].Position, skin is null ? Matrix4x4.Identity : root)
+                    : Place(vertices[i].Position, influences[i], skin);
 
                 min = Vector3.Min(min, position);
                 max = Vector3.Max(max, position);

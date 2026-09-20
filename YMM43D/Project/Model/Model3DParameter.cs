@@ -121,13 +121,17 @@ namespace YMM43D.Project.Model
                 if (bone.Name.Length == 0 || bone.IsStill(time))
                     continue;
 
-                var index = IndexOfBone(model, bone.Name);
+                var rotation = bone.GetRotation(time);
 
-                if (index < 0)
-                    continue;
+                // 同じ名前の骨が複数あることがある（メッシュごとに骨組みを持つ fbx など）。
+                for (var i = 0; i < model.Bones.Length; i++)
+                {
+                    if (model.Bones[i].Name != bone.Name)
+                        continue;
 
-                pose ??= Identity(model.Bones.Length);
-                pose[index] = bone.GetRotation(time);
+                    pose ??= Identity(model.Bones.Length);
+                    pose[i] = rotation;
+                }
             }
 
             return pose;
@@ -141,17 +145,6 @@ namespace YMM43D.Project.Model
                 pose[i] = Matrix4x4.Identity;
 
             return pose;
-        }
-
-        private static int IndexOfBone(ModelData model, string name)
-        {
-            for (var i = 0; i < model.Bones.Length; i++)
-            {
-                if (model.Bones[i].Name == name)
-                    return i;
-            }
-
-            return -1;
         }
 
         internal IReadOnlyList<ModelImage?> GetReplacements(ModelData model)

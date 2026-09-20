@@ -21,15 +21,18 @@ namespace YMM43D.Graphics.Models
             private readonly Dictionary<long, FbxNode> objects = [];
             private readonly Dictionary<long, List<long>> childrenOf = [];
             private readonly Dictionary<long, List<(long Child, string Property)>> propertiesOf = [];
-            private readonly Dictionary<long, long> parentOf = [];
+            private readonly Dictionary<long, List<long>> parentsOf = [];
             private readonly Dictionary<long, int> images = [];
             private readonly Dictionary<long, Matrix4x4> worlds = [];
+            private readonly Dictionary<(long Skin, long Model), int> boneOfModel = [];
+            private readonly List<(long Skin, long Model)> boneModels = [];
 
             public ModelData Read()
             {
                 Collect();
 
                 var axis = AxisMatrix();
+                builder.Root = axis;
 
                 foreach (var (id, node) in objects)
                 {
@@ -39,11 +42,38 @@ namespace YMM43D.Graphics.Models
                     foreach (var child in childrenOf.GetValueOrDefault(id) ?? [])
                     {
                         if (objects.GetValueOrDefault(child) is { Name: "Geometry" } geometry)
-                            AddGeometry(geometry, id, GeometricMatrix(node) * WorldOf(id) * axis);
+                            AddGeometry(geometry, id, GeometricMatrix(node) * WorldOf(id) * axis, GeometricMatrix(node));
                     }
                 }
 
+                LinkBones();
+
                 return builder.Build();
+            }
+
+            // 骨の親子は、骨になっているモデルどうしのあいだだけでつなぐ。
+            // あいだに骨でないもの（Armature など）が挟まっていたら、その変換は子の骨に入れる。
+            private void LinkBones()
+            {
+                for (var i = 0; i < boneModels.Count; i++)
+                {
+                    var (skin, model) = boneModels[i];
+                    var local = LocalMatrix(objects[model]);
+                    var parent = ParentModelOf(model);
+                    var depth = 0;
+
+                    while (parent != 0 && !boneOfModel.ContainsKey((skin, parent)) && depth++ < 64)
+                    {
+                        local *= LocalMatrix(objects[parent]);
+                        parent = ParentModelOf(parent);
+                    }
+
+                    builder.Bones[i] = builder.Bones[i] with
+                    {
+                        Local = local,
+                        Parent = parent != 0 && boneOfModel.TryGetValue((skin, parent), out var bone) ? bone : -1,
+                    };
+                }
             }
 
             private void Collect()
@@ -63,7 +93,7 @@ namespace YMM43D.Graphics.Models
                     if (kind == "OO")
                     {
                         (childrenOf.TryGetValue(parent, out var list) ? list : childrenOf[parent] = []).Add(child);
-                        parentOf.TryAdd(child, parent);
+                        (parentsOf.TryGetValue(child, out var parents) ? parents : parentsOf[child] = []).Add(parent);
                     }
                     else if (kind == "OP")
                     {
@@ -108,6 +138,19 @@ namespace YMM43D.Graphics.Models
                 }
             }
 
+            // 置き場所の親になるのは、モデルであるものだけ。
+            // 骨のモデルはクラスターの子にもなっているので、そちらは親として数えない。
+            private long ParentModelOf(long id)
+            {
+                foreach (var parent in parentsOf.GetValueOrDefault(id) ?? [])
+                {
+                    if (objects.GetValueOrDefault(parent) is { Name: "Model" })
+                        return parent;
+                }
+
+                return 0;
+            }
+
             private Matrix4x4 WorldOf(long id)
             {
                 if (worlds.TryGetValue(id, out var known))
@@ -118,10 +161,8 @@ namespace YMM43D.Graphics.Models
                 var node = objects.GetValueOrDefault(id);
                 var local = node is null ? Matrix4x4.Identity : LocalMatrix(node);
 
-                var parent = parentOf.GetValueOrDefault(id);
-                var world = parent != 0 && objects.GetValueOrDefault(parent) is { Name: "Model" }
-                    ? local * WorldOf(parent)
-                    : local;
+                var parent = ParentModelOf(id);
+                var world = parent != 0 ? local * WorldOf(parent) : local;
 
                 return worlds[id] = world;
             }
@@ -230,7 +271,7 @@ namespace YMM43D.Graphics.Models
                     }
                     : 0d;
 
-            private void AddGeometry(FbxNode geometry, long modelId, in Matrix4x4 world)
+            private void AddGeometry(FbxNode geometry, long modelId, in Matrix4x4 world, Matrix4x4 geometric)
             {
                 var positions = geometry.DoublesOf("Vertices");
                 var polygons = geometry.IntegersOf("PolygonVertexIndex");
@@ -240,7 +281,11 @@ namespace YMM43D.Graphics.Models
 
                 var pointCount = positions.Length / 3;
 
-                Matrix4x4.Invert(world, out var inverse);
+                // 骨の付いたメッシュは、置き場所を骨の行列が決めるので、ここでは動かさない。
+                var influences = ReadSkin(geometry, pointCount, geometric);
+                var placed = influences is null ? world : Matrix4x4.Identity;
+
+                Matrix4x4.Invert(placed, out var inverse);
                 var normalMatrix = Matrix4x4.Transpose(inverse);
 
                 var normals = Layer(geometry, "LayerElementNormal", "Normals", "NormalsIndex");
@@ -303,7 +348,7 @@ namespace YMM43D.Graphics.Models
                                         (float)positions[point * 3],
                                         (float)positions[point * 3 + 1],
                                         (float)positions[point * 3 + 2]),
-                                    world);
+                                    placed);
 
                                 var normal = normals.Vector3At(normalAt);
                                 normal = Vector3.TransformNormal(normal, normalMatrix);
@@ -314,7 +359,10 @@ namespace YMM43D.Graphics.Models
                                     position,
                                     normal.LengthSquared() > 1e-20f ? Vector3.Normalize(normal) : Vector3.Zero,
                                     new Vector2(uv.X, 1f - uv.Y),
-                                    Vector4.One);
+                                    Vector4.One,
+                                    influences is not null && point < influences.Length
+                                        ? influences[point]
+                                        : ModelInfluence.None);
                             }
                         }
 
@@ -324,6 +372,134 @@ namespace YMM43D.Graphics.Models
                             FillFlatNormal(made[0], made[1], made[2]);
                     }
                 }
+            }
+
+            // 骨の割り当て。FBX では骨 1 本ごとに「どの頂点をどれだけ引っぱるか」が書かれている。
+            private ModelInfluence[]? ReadSkin(FbxNode geometry, int pointCount, Matrix4x4 geometric)
+            {
+                List<(int Bone, float Weight)>[]? lists = null;
+
+                foreach (var skinId in childrenOf.GetValueOrDefault(geometry.Number(0)) ?? [])
+                {
+                    if (objects.GetValueOrDefault(skinId) is not { Name: "Deformer" } skin || Subclass(skin) != "Skin")
+                        continue;
+
+                    foreach (var clusterId in childrenOf.GetValueOrDefault(skinId) ?? [])
+                    {
+                        if (objects.GetValueOrDefault(clusterId) is not { Name: "Deformer" } cluster
+                            || Subclass(cluster) != "Cluster")
+                        {
+                            continue;
+                        }
+
+                        var indexes = cluster.IntegersOf("Indexes");
+                        var weights = cluster.DoublesOf("Weights");
+
+                        if (indexes.Length == 0 || BoneOf(cluster, clusterId, skinId, geometric) is not { } bone)
+                            continue;
+
+                        lists ??= new List<(int, float)>[pointCount];
+
+                        for (var i = 0; i < indexes.Length && i < weights.Length; i++)
+                        {
+                            var point = indexes[i];
+
+                            if (point < 0 || point >= pointCount || weights[i] <= 0d)
+                                continue;
+
+                            (lists[point] ??= []).Add((bone, (float)weights[i]));
+                        }
+                    }
+                }
+
+                if (lists is null)
+                    return null;
+
+                var influences = new ModelInfluence[pointCount];
+
+                for (var i = 0; i < pointCount; i++)
+                    influences[i] = Pick(lists[i]);
+
+                return influences;
+            }
+
+            // 引っぱる力の大きい順に 4 本まで使い、合計が 1 になるようにそろえる。
+            private static ModelInfluence Pick(List<(int Bone, float Weight)>? list)
+            {
+                if (list is null || list.Count == 0)
+                    return ModelInfluence.None;
+
+                list.Sort((a, b) => b.Weight.CompareTo(a.Weight));
+
+                Span<ushort> bones = stackalloc ushort[4];
+                Span<float> amounts = stackalloc float[4];
+                var total = 0f;
+
+                for (var i = 0; i < 4 && i < list.Count; i++)
+                {
+                    bones[i] = (ushort)list[i].Bone;
+                    amounts[i] = list[i].Weight;
+                    total += list[i].Weight;
+                }
+
+                if (total <= 1e-6f)
+                    return ModelInfluence.None;
+
+                return new ModelInfluence(
+                    bones[0], bones[1], bones[2], bones[3],
+                    new Vector4(amounts[0], amounts[1], amounts[2], amounts[3]) / total);
+            }
+
+            private int? BoneOf(FbxNode cluster, long clusterId, long skinId, in Matrix4x4 geometric)
+            {
+                long model = 0;
+
+                foreach (var child in childrenOf.GetValueOrDefault(clusterId) ?? [])
+                {
+                    if (objects.GetValueOrDefault(child) is { Name: "Model" })
+                    {
+                        model = child;
+                        break;
+                    }
+                }
+
+                if (model == 0 || objects.GetValueOrDefault(model) is not { } node)
+                    return null;
+
+                if (boneOfModel.TryGetValue((skinId, model), out var known))
+                    return known;
+
+                // 骨が動いていないときの、頂点と骨の関係。
+                // fbx の Transform は、すでに「メッシュの置き場所 × 骨の置き場所の逆」になっている。
+                // メッシュだけに掛かる変換は、頂点に焼いていないのでここで掛ける。
+                var bind = geometric * Matrix(cluster.DoublesOf("Transform"));
+
+                boneOfModel[(skinId, model)] = builder.Bones.Count;
+                boneModels.Add((skinId, model));
+
+                builder.Bones.Add(new ModelBone(NameOf(node), -1, LocalMatrix(node), bind));
+
+                return boneOfModel[(skinId, model)];
+            }
+
+            private static Matrix4x4 Matrix(double[] values)
+            {
+                if (values.Length < 16)
+                    return Matrix4x4.Identity;
+
+                return new Matrix4x4(
+                    (float)values[0], (float)values[1], (float)values[2], (float)values[3],
+                    (float)values[4], (float)values[5], (float)values[6], (float)values[7],
+                    (float)values[8], (float)values[9], (float)values[10], (float)values[11],
+                    (float)values[12], (float)values[13], (float)values[14], (float)values[15]);
+            }
+
+            private static string Subclass(FbxNode node)
+            {
+                var text = node.Text(2);
+                var end = text.IndexOf('\0');
+
+                return end >= 0 ? text[..end] : text;
             }
 
             private void FillFlatNormal(uint a, uint b, uint c)

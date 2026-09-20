@@ -127,12 +127,24 @@ namespace YMM43D.Graphics.Models
                     }
 
                     // 親子は、この skin に入っている骨のあいだだけでつなぐ。
+                    // あいだに骨でないノードが挟まっていたら、その変換は子の骨に入れる。
                     for (var i = start; i < builder.Bones.Count; i++)
                     {
+                        var local = builder.Bones[i].Local;
                         var parent = ParentOfNode(boneOrder[i]);
+                        var depth = 0;
 
-                        if (parent >= 0 && boneOfNode.TryGetValue(parent, out var bone))
-                            builder.Bones[i] = builder.Bones[i] with { Parent = bone };
+                        while (parent >= 0 && !boneOfNode.ContainsKey(parent) && depth++ < 64)
+                        {
+                            local *= LocalMatrix(root.GetProperty("nodes")[parent]);
+                            parent = ParentOfNode(parent);
+                        }
+
+                        builder.Bones[i] = builder.Bones[i] with
+                        {
+                            Local = local,
+                            Parent = parent >= 0 && boneOfNode.TryGetValue(parent, out var bone) ? bone : -1,
+                        };
                     }
                 }
             }
