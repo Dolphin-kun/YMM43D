@@ -26,7 +26,28 @@ namespace YMM43D.Plugin
         private nint bakedDeviceKey;
         private bool isDisposed;
 
+        private VideoEffect3DProcessorBase? groupMemberProcessor;
+
         protected IGraphicsDevicesAndContext Devices { get; } = devices;
+
+        // グループ制御に付けたエフェクトは、中のアイテム 1 つずつに掛かる。
+        // そのとき中のアイテムが 3D を持っているなら、絵を板にせずその 3D をそのまま使う。
+        protected virtual bool KeepsGroupMemberSolid => false;
+
+        // 中に 3D が無いときも、グループ制御の中心を軸にした親として掛けるか。
+        protected virtual bool ParentsGroupMembers => false;
+
+        // グループ制御の中心を軸にして掛ける親の行列。
+        protected virtual Matrix4x4 GetGroupParentMatrix(in FrameContext time) => Matrix4x4.Identity;
+
+        // グループ制御に付けたエフェクトか。
+        protected bool IsGroupEffect { get; private set; }
+
+        // グループ制御の中のアイテムが持っている 3D の中身。
+        protected I3DProvider? GroupMemberSolid { get; private set; }
+
+        // その中身がこのプラグインのエフェクトなら、その処理側。配置を引き継ぐのに使う。
+        protected VideoEffect3DProcessorBase? GroupMemberProcessor => groupMemberProcessor;
 
         internal IGraphicsDevicesAndContext SourceDevices => Devices;
 
@@ -45,7 +66,16 @@ namespace YMM43D.Plugin
 
         protected abstract WorldBounds GetLocalBounds(in FrameContext itemTime);
 
-        WorldBounds I3DBounds.GetLocalBounds(in FrameContext itemTime) => GetLocalBounds(itemTime);
+        WorldBounds I3DBounds.GetLocalBounds(in FrameContext itemTime) => Bounds(itemTime);
+
+        // 中の 3D をそのまま描くときは、占める範囲もその中身に合わせる。
+        // 複製してばらまくように自分で範囲を決めるものは、false にして GetLocalBounds を使う。
+        protected virtual bool UsesGroupMemberBounds => true;
+
+        private WorldBounds Bounds(in FrameContext itemTime)
+            => UsesGroupMemberBounds && GroupMemberSolid is I3DBounds bounded
+                ? bounded.GetLocalBounds(itemTime)
+                : GetLocalBounds(itemTime);
 
         public DrawDescription Update(EffectDescription effectDescription)
         {
@@ -53,6 +83,7 @@ namespace YMM43D.Plugin
             owner?.ReportInput(this, effectDescription.Layer, effectDescription.InputIndex, effectDescription.InputCount);
 
             BakeInput();
+            FindGroupMemberSolid(effectDescription);
             OnUpdating(effectDescription);
 
             var itemTime = FrameContext.FromItem(effectDescription);
@@ -78,7 +109,7 @@ namespace YMM43D.Plugin
             localMatrix = world;
 
             output = renderer.Render(
-                Devices, effectDescription, GetLocalBounds(itemTime), world, Draw,
+                Devices, effectDescription, Bounds(itemTime), world, Draw,
                 out var imageReach,
                 self: (I3DProvider?)owner ?? this,
                 placement: placement);
@@ -94,9 +125,66 @@ namespace YMM43D.Plugin
 
         protected virtual bool TryInheritTransform(out Matrix4x4 local, out Matrix4x4 world)
         {
+            if (IsGroupEffect
+                && (GroupMemberSolid is not null || ParentsGroupMembers)
+                && EffectDescription is { } description)
+            {
+                var parent = GetGroupParentMatrix(FrameContext.FromItem(description));
+
+                if (groupMemberProcessor is { } source
+                    && source.TryGetLocalMatrix(out local)
+                    && source.TryGetPlacement(out var sourcePlacement))
+                {
+                    world = sourcePlacement * parent;
+                    return true;
+                }
+
+                local = Matrix4x4.Identity;
+                world = ItemPlacement.GetWorldMatrix(description.DrawDescription) * parent;
+                return true;
+            }
+
             local = Matrix4x4.Identity;
             world = Matrix4x4.Identity;
             return false;
+        }
+
+        private void FindGroupMemberSolid(EffectDescription description)
+        {
+            IsGroupEffect = false;
+            GroupMemberSolid = null;
+            groupMemberProcessor = null;
+
+            if (!KeepsGroupMemberSolid
+                || owner is null
+                || SceneDepthCollector.FindOwner(description) is not { } item
+                || !GroupEffectSource.IsOnGroup(item, owner))
+            {
+                return;
+            }
+
+            IsGroupEffect = true;
+            GroupMemberSolid = GroupEffectSource.Find(item, description, owner, Devices, this);
+            groupMemberProcessor = GroupMemberSolid as VideoEffect3DProcessorBase;
+        }
+
+        // グループ制御の中のアイテムが持つ 3D を、そのまま描く。
+        protected bool TryDrawGroupMemberSolid(in Render3DContext render, in DrawContext3D item)
+        {
+            if (GroupMemberSolid is not { } source)
+                return false;
+
+            source.Draw(render, new DrawContext3D
+            {
+                World = item.World,
+                Opacity = item.Opacity,
+                Blend = item.Blend,
+                IsAlwaysOnTop = item.IsAlwaysOnTop,
+                DepthOnly = item.DepthOnly,
+                Time = item.Time,
+            });
+
+            return true;
         }
 
         private static DrawDescription Neutralize(DrawDescription draw, float imageReach) => draw with

@@ -272,6 +272,18 @@ public class ExtrusionEffect : VideoEffect3DBase
 | `Draw(in Render3DContext, DrawContext3D)` | 3D 空間への描画。プレビューと出力の両方から呼ばれる |
 | `GetLocalBounds(in FrameContext)` | 描くものが占める範囲。`Update` が組み立てるワールド行列を掛ける前の座標系で答える |
 
+グループ制御に付けられたときに、中のアイテムが持っている 3D をそのまま使いたい場合は、次の口を使います。`KeepsGroupMemberSolid` を `true` にすると、基底クラスが `GroupEffectSource` で中身を探し、範囲と配置をその中身から引き継ぎます。探す順は、同じグループ制御に並べた 1 つ前の 3D エフェクトがそのアイテムのために作った処理側、無ければ中のアイテム自身が持つ 3D（最後の 3D エフェクト、無ければ 3D の図形）です。
+
+| メンバー | 役割 |
+|---|---|
+| `KeepsGroupMemberSolid` | グループ制御に付けたとき、中のアイテムの 3D を板に潰さずそのまま使うか（既定は `false`） |
+| `TryDrawGroupMemberSolid(in Render3DContext, in DrawContext3D)` | その 3D をそのまま描く。`Draw` の先頭で呼び、`true` なら自前の描画はしない |
+| `ParentsGroupMembers` | 中に 3D が無いときも、グループ制御の中心を軸にした親として掛けるか（「3D空間に置く」だけ `true`） |
+| `GetGroupParentMatrix(in FrameContext)` | 親として掛ける行列。回転を持つエフェクトはここで返す |
+| `IsGroupEffect` / `GroupMemberSolid` | グループ制御に付けられたか / 見つかった中身 |
+| `GroupMemberProcessor` | その中身がこのプラグインのエフェクトのときの処理側。配置だけ引き継ぎたいときに使う |
+| `UsesGroupMemberBounds` | 占める範囲もその中身に合わせるか。縁や複製で外に広がるものは `false` にする（既定は `true`） |
+
 ```csharp
 internal sealed class ExtrusionProcessor : VideoEffect3DProcessorBase
 {
@@ -587,7 +599,7 @@ var pipeline = pipelines.Get(render.Device);
 | `Render3DContext` | struct | 描画先のデバイス・コンテキストとカメラ行列 |
 | `DrawContext3D` | class | 1 つのアイテムを描画するための情報 |
 | `Provider3DRegistry` | static class | パラメータとプロバイダーの対応表 |
-| `GroupEffectSource` | static class | グループ制御に付けたエフェクトかどうかの判定と、中のアイテムが持つ 3D の中身の取得 |
+| `GroupEffectSource` | static class | グループ制御に付けたエフェクトかどうかの判定と、受け取る 3D の中身（同じグループの前のエフェクトの結果、または中のアイテムの 3D）の取得 |
 
 #### 座標と時間
 

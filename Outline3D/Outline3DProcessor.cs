@@ -45,10 +45,24 @@ namespace Outline3D
                 ? preceding.TryGetSize(out size, out offset)
                 : base.TryGetSize(out size, out offset);
 
+        // グループ制御に付けたときは、中のアイテムの 3D（や、同じグループの前の 3D エフェクトの結果）を受け取る。
+        protected override bool KeepsGroupMemberSolid => true;
+
+        // 縁のぶん外に広がるので、範囲は自分で決める。
+        protected override bool UsesGroupMemberBounds => false;
+
         protected override void OnUpdating(EffectDescription effectDescription)
         {
             precedingEffect = null;
             solidSource = null;
+
+            if (GroupMemberSolid is { } member)
+            {
+                solidSource = member;
+                precedingEffect = GroupMemberProcessor;
+                UpdateBrush(effectDescription);
+                return;
+            }
 
             if (SceneDepthCollector.FindOwner(effectDescription) is not { } owner)
                 return;
