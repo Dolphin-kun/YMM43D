@@ -21,8 +21,8 @@ namespace YMM43D.Project.Model
         private const string Rotation = "3D回転";
         private const string Paint = "色";
 
-        [Display(GroupName = Body, Name = "ファイル", Description = "obj / gltf / glb / vrm のファイル")]
-        [FileSelector(FileGroupType.None, CustomFilterName = "3Dモデル", CustomFilterValue = "*.obj;*.gltf;*.glb;*.vrm")]
+        [Display(GroupName = Body, Name = "ファイル", Description = "obj / gltf / glb / vrm / fbx のファイル")]
+        [FileSelector(FileGroupType.None, CustomFilterName = "3Dモデル", CustomFilterValue = "*.obj;*.gltf;*.glb;*.vrm;*.fbx")]
         public string File { get => file; set => Set(ref file, value ?? string.Empty); }
         private string file = string.Empty;
 
