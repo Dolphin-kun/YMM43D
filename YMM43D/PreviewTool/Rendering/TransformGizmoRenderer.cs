@@ -26,7 +26,7 @@ namespace YMM43D.PreviewTool.Rendering
 
         public void Draw(in Render3DContext render, in TransformGizmo gizmo, GizmoHandle active, bool canRotate)
         {
-            var world = Matrix4x4.CreateScale(gizmo.Scale) * Matrix4x4.CreateTranslation(gizmo.Origin);
+            var world = Matrix4x4.CreateScale(gizmo.Scale) * gizmo.Orientation * Matrix4x4.CreateTranslation(gizmo.Origin);
             var transform = render.GetWorldViewProjection(world);
 
             var settings = new DrawSettings { IgnoreDepth = true };

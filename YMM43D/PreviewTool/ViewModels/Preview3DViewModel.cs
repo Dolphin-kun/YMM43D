@@ -36,6 +36,7 @@ namespace YMM43D.PreviewTool.ViewModels
         private readonly Preview3DRenderer renderer = new();
         private readonly FreeCameraController freeCamera = new();
         private readonly ItemDragController itemDrag = new();
+        private readonly BoneDragController boneDrag = new();
         private readonly PreviewSceneBuilder sceneBuilder;
 
         private TimelineRefresher? refresher;
@@ -46,6 +47,7 @@ namespace YMM43D.PreviewTool.ViewModels
         private TimelineSourceAndDevices? sourceAndDevices;
         private IReadOnlyList<IVideoItem> selection = [];
         private IItem? selectedMarker;
+        private int selectedBone = -1;
         private ImmutableList<IItem>? lastItems;
         private PreviewScene? preparedScene;
         private Point? toggleClickAt;
@@ -454,8 +456,9 @@ namespace YMM43D.PreviewTool.ViewModels
                 Selection = selection,
                 Markers = SceneMarkerResolver.Resolve(timeline),
                 SelectedMarker = selectedMarker,
+                SelectedBone = selectedBone,
                 ShowsGrid = showsGrid,
-                ActiveHandle = itemDrag.Handle,
+                ActiveHandle = boneDrag.IsDragging ? boneDrag.Handle : itemDrag.Handle,
             };
         }
 
@@ -512,6 +515,16 @@ namespace YMM43D.PreviewTool.ViewModels
                         return false;
 
                     return TryGrab(position);
+
+                case D3D11Host.MouseEventKind.Move when boneDrag.IsDragging:
+                    if (renderer.CreateRay(ToVector(position)) is { } boneRay && boneDrag.Update(boneRay, CurrentSnap()))
+                        refresher?.ForceRefresh(timeline!);
+
+                    return true;
+
+                case D3D11Host.MouseEventKind.Up when boneDrag.IsDragging:
+                    boneDrag.End();
+                    return true;
 
                 case D3D11Host.MouseEventKind.Move when itemDrag.IsDragging:
                     if (renderer.CreateRay(ToVector(position)) is { } ray && itemDrag.Update(ray, CurrentSnap()))
@@ -577,6 +590,9 @@ namespace YMM43D.PreviewTool.ViewModels
                 && renderer.Gizmo is { } gizmo
                 && renderer.CreateRay(screen) is { } gizmoRay)
             {
+                if (SelectedBone() is { } bone && !bone.Item.IsLocked)
+                    return boneDrag.Begin(bone, gizmo, grabbed, gizmoRay, GetEditScope(bone.Item));
+
                 if (renderer.GizmoMarker is { } held && CanGrab(held))
                 {
                     return itemDrag.BeginMarker(
@@ -586,6 +602,13 @@ namespace YMM43D.PreviewTool.ViewModels
 
                 if (MovableSelection() is { Count: > 0 } movable)
                     return BeginItems(movable, movable[0], gizmo.Origin, grabbed, gizmoRay);
+            }
+
+            if (renderer.PickBone(screen) is var picked2 and >= 0)
+            {
+                selectedBone = picked2;
+                RequestRender();
+                return true;
             }
 
             if (renderer.PickMarker(screen) is { } placed
@@ -608,12 +631,18 @@ namespace YMM43D.PreviewTool.ViewModels
                 return false;
             }
 
+            // 骨ではないところを掴んだら、骨の選択は外す。
+            selectedBone = -1;
+
             if (!selection.Contains(picked.Item))
                 Select([picked.Item]);
 
             return MovableSelection() is { Count: > 0 } targets
                 && BeginItems(targets, picked.Item, picked.Origin, GizmoHandle.Free, ray);
         }
+
+        private PreviewBone? SelectedBone()
+            => selectedBone >= 0 && selectedBone < renderer.Bones.Count ? renderer.Bones[selectedBone] : null;
 
         private IReadOnlyList<IVideoItem> MovableSelection()
             => [.. selection.Where(item => !item.IsLocked)];
@@ -648,6 +677,8 @@ namespace YMM43D.PreviewTool.ViewModels
             if (timeline is null)
                 return;
 
+            selectedBone = -1;
+
             timeline.SelectedItems = [.. items];
             SyncSelectionState();
         }
@@ -658,6 +689,7 @@ namespace YMM43D.PreviewTool.ViewModels
         {
             selection = [];
             selectedMarker = null;
+            selectedBone = -1;
 
             if (timeline?.SelectedItems is { Count: > 0 })
                 timeline.SelectedItems = [];

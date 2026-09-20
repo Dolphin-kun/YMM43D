@@ -22,6 +22,8 @@ namespace YMM43D.PreviewTool
         private readonly CameraGizmoRenderer cameraGizmo = new();
         private readonly MarkerRenderer markers = new();
         private readonly TransformGizmoRenderer transformGizmo = new();
+
+        private readonly BoneRenderer boneRenderer = new();
         private readonly AxisIndicatorRenderer axisIndicator = new();
         private readonly FlatItemProvider flatItemProvider = new();
         private readonly ItemDrawContextBuilder contextBuilder = new();
@@ -34,6 +36,8 @@ namespace YMM43D.PreviewTool
         private Vector3 frustumApex;
         private Vector3[] frustumCorners = [];
         private TransformGizmo? lastGizmo;
+
+        private IReadOnlyList<PreviewBone> lastBones = [];
         private Matrix4x4 lastViewProjection = Matrix4x4.Identity;
         private Matrix4x4 lastView = Matrix4x4.Identity;
         private Matrix4x4 lastProjection = Matrix4x4.Identity;
@@ -165,12 +169,18 @@ namespace YMM43D.PreviewTool
 
             gizmoMarker = FindGizmoMarker(scene);
 
+            lastBones = ResolveBones(entries, scene);
+            boneRenderer.Draw(render, lastBones, viewPose.Position, scene.SelectedBone);
+
             lastGizmo = gizmoMarker is { } placed
                 ? TransformGizmo.Create(placed.Marker.Position, viewPose.Position)
-                : FindGizmo(scene.Selection, viewPose.Position);
+                : SelectedBone(scene) is { } bone
+                    ? TransformGizmo.Create(bone.Position, viewPose.Position, BoneOrientation(bone))
+                    : FindGizmo(scene.Selection, viewPose.Position);
 
+            // 骨のつまみは回す用なので、画面内で回す輪は出さない。
             if (lastGizmo is { } gizmo)
-                transformGizmo.Draw(render, gizmo, scene.ActiveHandle, gizmoMarker is null);
+                transformGizmo.Draw(render, gizmo, scene.ActiveHandle, gizmoMarker is null && SelectedBone(scene) is null);
 
             axisIndicator.Draw(render, viewPose, width, height);
 
@@ -189,6 +199,69 @@ namespace YMM43D.PreviewTool
                 pickResult = ResolvePick(cursor);
             }
         }
+
+        // 選んでいるアイテムが骨を持つモデルなら、その骨を並べる。
+        private static IReadOnlyList<PreviewBone> ResolveBones(
+            List<(PreviewItem Item, DrawContext3D Context)> entries, PreviewScene scene)
+        {
+            foreach (var selected in scene.Selection)
+            {
+                foreach (var (previewItem, context) in entries)
+                {
+                    if (!ReferenceEquals(previewItem.Item, selected))
+                        continue;
+
+                    if (BoneOverlay.Resolve(selected, context.Time, context.World) is { Count: > 0 } bones)
+                        return bones;
+                }
+            }
+
+            return [];
+        }
+
+        private PreviewBone? SelectedBone(PreviewScene scene)
+            => scene.SelectedBone >= 0 && scene.SelectedBone < lastBones.Count
+                ? lastBones[scene.SelectedBone]
+                : null;
+
+        private static Matrix4x4 BoneOrientation(in PreviewBone bone)
+        {
+            var pose = bone.Parameter.FindBonePose(bone.Name);
+
+            return pose is null
+                ? bone.HandleOrientation(0f, 0f, 0f)
+                : bone.HandleOrientation(
+                    pose.RotationX.GetFloat(bone.Time),
+                    pose.RotationY.GetFloat(bone.Time),
+                    pose.RotationZ.GetFloat(bone.Time));
+        }
+
+        public IReadOnlyList<PreviewBone> Bones => lastBones;
+
+        // 骨の玉を画面の上で探す。いちばん近いものを返す。
+        public int PickBone(Vector2 position)
+        {
+            var nearest = BoneGrabThreshold;
+            var found = -1;
+
+            for (var i = 0; i < lastBones.Count; i++)
+            {
+                if (ToScreen(lastBones[i].Position) is not { } screen)
+                    continue;
+
+                var distance = Vector2.Distance(screen, position);
+
+                if (distance < nearest)
+                {
+                    nearest = distance;
+                    found = i;
+                }
+            }
+
+            return found;
+        }
+
+        public const float BoneGrabThreshold = 10f;
 
         public void RequestPick(Vector2 position)
         {
@@ -575,6 +648,7 @@ namespace YMM43D.PreviewTool
 
             grid.Dispose();
             cameraGizmo.Dispose();
+            boneRenderer.Dispose();
             markers.Dispose();
             transformGizmo.Dispose();
             axisIndicator.Dispose();
@@ -614,6 +688,9 @@ namespace YMM43D.PreviewTool
         public required IReadOnlyList<PreviewItem> Items { get; init; }
 
         public IReadOnlyCollection<IVideoItem> Selection { get; init; } = [];
+
+        // 選んでいる骨の番号。選んでいなければ -1。
+        public int SelectedBone { get; init; } = -1;
 
         public IReadOnlyList<SceneMarkerResolver.PlacedMarker> Markers { get; init; } = [];
 

@@ -17,7 +17,7 @@ namespace YMM43D.Commons
         Free,
     }
 
-    public readonly record struct TransformGizmo(Vector3 Origin, float Scale)
+    public readonly record struct TransformGizmo(Vector3 Origin, float Scale, Matrix4x4 Orientation)
     {
         public const float AxisLength = 1f;
 
@@ -31,11 +31,13 @@ namespace YMM43D.Commons
 
         public const float GrabThreshold = 9f;
 
-        public static TransformGizmo Create(in Vector3 origin, in Vector3 cameraPosition)
+        public static TransformGizmo Create(
+            in Vector3 origin, in Vector3 cameraPosition, in Matrix4x4? orientation = null)
         {
             var distance = Vector3.Distance(origin, cameraPosition);
 
-            return new TransformGizmo(origin, MathF.Max(0.05f, distance * ScreenRatio));
+            return new TransformGizmo(
+                origin, MathF.Max(0.05f, distance * ScreenRatio), orientation ?? Matrix4x4.Identity);
         }
 
         public static Vector3 AxisDirection(GizmoHandle handle) => handle switch
@@ -46,14 +48,23 @@ namespace YMM43D.Commons
             _ => Vector3.Zero,
         };
 
+        // 傾けて出しているときの、その軸が向いている先。
+        public Vector3 Axis(GizmoHandle handle)
+        {
+            var axis = Vector3.TransformNormal(AxisDirection(handle), Orientation);
+
+            return axis.LengthSquared() > 1e-12f ? Vector3.Normalize(axis) : AxisDirection(handle);
+        }
+
         public Vector3 AxisEnd(GizmoHandle handle)
-            => Origin + AxisDirection(handle) * (AxisLength * Scale);
+            => Origin + Axis(handle) * (AxisLength * Scale);
 
         public Vector3 RingPoint(int index)
         {
             var angle = MathF.Tau * index / RingSegments;
+            var point = new Vector3(MathF.Cos(angle), MathF.Sin(angle), 0f) * (RingRadius * Scale);
 
-            return Origin + new Vector3(MathF.Cos(angle), MathF.Sin(angle), 0f) * (RingRadius * Scale);
+            return Origin + Vector3.TransformNormal(point, Orientation);
         }
 
         public static float? ClosestOnAxis(in PickRay ray, in Vector3 origin, in Vector3 axis)

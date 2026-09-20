@@ -108,6 +108,35 @@ namespace YMM43D.Project.Model
             })];
         }
 
+        internal ModelBonePose? FindBonePose(string name)
+        {
+            foreach (var bone in Bones)
+            {
+                if (bone.Name == name)
+                    return bone;
+            }
+
+            return null;
+        }
+
+        // 名前の付いた骨の姿勢。無ければ作って足す（3Dプレビューで骨を選んだとき）。
+        internal ModelBonePose BoneFor(string name)
+        {
+            if (FindBonePose(name) is { } found)
+                return found;
+
+            var made = new ModelBonePose(name);
+
+            Bones = Bones.Add(made);
+            SubscribeChildUndoRedoable(Bones);
+
+            return made;
+        }
+
+        // 骨の置き場所。回転を掛ける前（Frames）と掛けたあと（Globals）の両方を返す。
+        internal ModelPose.PoseFrames GetBoneFrames(ModelData model, in FrameContext time)
+            => ModelPose.Compute(model.Bones, GetPose(model, time));
+
         // 骨ごとの回転。動かしていない骨は単位行列のまま。
         internal IReadOnlyList<Matrix4x4>? GetPose(ModelData model, in FrameContext time)
         {
