@@ -951,13 +951,20 @@ attribute.SetBindings(control, [new ItemProperty(item, pose, info, cache)]);
 
 `PropertiesEditor`（対象の編集欄をまとめて作るコントロール）でも同じことはできますが、**そのままだとグループの見出しが中に入れ子で出ます**。`ParentGroup` を合わせても消えないので、見出しを出したくないときは上のように 1 つずつ並べてください。
 
+> 横に置く見出しは**上詰め**（`VerticalAlignment.Top`）にしてください。`AnimationSlider` は中間点を打つとその数だけ縦に伸びるので、中央揃えにしていると見出しだけが真ん中に降りてきます。
+
 > `[Display]` の `Name` を空にすると、左の見出しが消えて編集欄が横いっぱいに広がります。グループ名と同じ言葉を二重に出したくないときに使えます。
 
 YMM4 本体のアイコンは `YukkuriMovieMaker.Resources.Icons` の鍵で引けます。`GeometryKeys` が図形（`Geometry`）、`IconKeys` が絵（`Viewbox`）です。図形のほうは何度でも使い回せるので、`Path` に入れて色をボタンの文字色に合わせるのが楽です。
 
+```xml
+<Path Data="{DynamicResource {x:Static icons:GeometryKeys.TrashCanOutline}}"/>
+```
+
+コードから組み立てるときは `SetResourceReference` が `DynamicResource` にあたります。
+
 ```csharp
-if (TryFindResource(GeometryKeys.TrashCanOutline) is Geometry found)
-    ...
+mark.SetResourceReference(Path.DataProperty, GeometryKeys.TrashCanOutline);
 ```
 
 > 辞書そのもの（`MaterialDesignIconGeometries.g.xaml`）を読み込むと 7400 個あって 2 秒以上かかります。**自分で読み込まず、本体が読み込んだものを引いてください。**

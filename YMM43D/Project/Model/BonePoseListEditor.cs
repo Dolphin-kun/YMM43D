@@ -119,6 +119,8 @@ namespace YMM43D.Project.Model
             var remove = new Button
             {
                 Content = DeleteMark(),
+                Background = Brushes.Transparent,
+                BorderThickness = new Thickness(0),
                 Padding = new Thickness(4, 1, 4, 1),
                 Margin = new Thickness(4, 0, 0, 0),
                 ToolTip = "この骨の回転をやめる",
@@ -151,22 +153,17 @@ namespace YMM43D.Project.Model
             return expander;
         }
 
-        // ゴミ箱の絵は YMM4 本体が持っているものを使う。見つからないときは文字で出す。
-        private FrameworkElement DeleteMark()
+        // ゴミ箱の絵は YMM4 本体が持っているものを使う。
+        private static FrameworkElement DeleteMark()
         {
-            if ((TryFindResource(GeometryKeys.TrashCanOutline)
-                ?? Application.Current?.TryFindResource(GeometryKeys.TrashCanOutline)) is not Geometry found)
-            {
-                return new TextBlock { Text = "✕" };
-            }
-
             var mark = new Path
             {
-                Data = found,
                 Stretch = Stretch.Uniform,
                 Width = 13,
                 Height = 13,
             };
+
+            mark.SetResourceReference(Path.DataProperty, GeometryKeys.TrashCanOutline);
 
             mark.SetBinding(System.Windows.Shapes.Shape.FillProperty, new Binding(nameof(Control.Foreground))
             {
@@ -207,11 +204,12 @@ namespace YMM43D.Project.Model
 
                 editors.Add((attribute, control));
 
+                // 中間点を打つと編集欄が縦に伸びるので、見出しは上に合わせて置く。
                 var label = new TextBlock
                 {
                     Text = cache.GetCustomAttribute<DisplayAttribute>(info)?.Name ?? name,
-                    VerticalAlignment = VerticalAlignment.Center,
-                    Margin = new Thickness(4, 0, 8, 0),
+                    VerticalAlignment = VerticalAlignment.Top,
+                    Margin = new Thickness(4, 4, 8, 0),
                 };
 
                 grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
