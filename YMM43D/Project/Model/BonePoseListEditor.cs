@@ -22,8 +22,9 @@ namespace YMM43D.Project.Model
 
         private static readonly PropertiesCache cache = new();
 
-        // 見出しの列の幅。
-        private const double LabelWidth = 50;
+        // 見出しの列の幅。折りたたみのぶんの下がりと合わせて、
+        // 本体のほかの編集欄（3D回転など）と左端がそろうようにしてある。
+        private const double LabelWidth = 79;
 
         private readonly StackPanel panel = new();
         private readonly List<(PropertyEditorAttribute2 Attribute, FrameworkElement Control)> editors = [];
