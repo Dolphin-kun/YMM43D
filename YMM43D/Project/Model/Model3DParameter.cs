@@ -20,6 +20,7 @@ namespace YMM43D.Project.Model
         private const string Body = "";
         private const string Rotation = "3D回転";
         private const string Paint = "色";
+        private const string Bone = "骨";
 
         [Display(GroupName = Body, Name = "ファイル", Description = "obj / gltf / glb / vrm / fbx のファイル")]
         [FileSelector(FileGroupType.None, CustomFilterName = "3Dモデル", CustomFilterValue = "*.obj;*.gltf;*.glb;*.vrm;*.fbx")]
@@ -70,7 +71,8 @@ namespace YMM43D.Project.Model
         private ImmutableList<ModelMaterialSlot> materials = [];
 
         // 動かした骨だけを持つ。モデルの骨は数が多いので、全部は並べない。
-        [Display(AutoGenerateField = true)]
+        [Display(GroupName = Bone, Name = "")]
+        [BonePoseList]
         public ImmutableList<ModelBonePose> Bones { get => bones; set => Set(ref bones, value); }
         private ImmutableList<ModelBonePose> bones = [];
 

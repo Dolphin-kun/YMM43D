@@ -175,7 +175,7 @@ namespace YMM43D.PreviewTool
             gizmoMarker = FindGizmoMarker(scene);
 
             lastBones = ResolveBones(entries, scene);
-            boneRenderer.Draw(render, lastBones, viewPose.Position, scene.SelectedBone);
+            boneRenderer.Draw(render, lastBones, scene.SelectedBone);
 
             lastGizmo = gizmoMarker is { } placed
                 ? TransformGizmo.Create(placed.Marker.Position, viewPose.Position)
@@ -250,30 +250,49 @@ namespace YMM43D.PreviewTool
 
         public IReadOnlyList<PreviewBone> Bones => lastBones;
 
-        // 骨の玉を画面の上で探す。いちばん近いものを返す。
+        // 骨の体（頭から尻尾まで）を画面の上で探す。いちばん近いものを返す。
+        // 関節のところは骨が重なるので、同じくらい近いときは
+        // ねじれ用より関節の骨を、さらにその中では掴んだ側に頭がある骨を選ぶ。
         public int PickBone(Vector2 position)
         {
-            var nearest = BoneGrabThreshold;
+            var nearest = float.MaxValue;
+            var nearestHead = float.MaxValue;
             var found = -1;
 
             for (var i = 0; i < lastBones.Count; i++)
             {
-                if (ToScreen(lastBones[i].Position) is not { } screen)
+                if (ToScreen(lastBones[i].Position) is not { } head)
                     continue;
 
-                var distance = Vector2.Distance(screen, position);
+                var distance = DistanceToSegment(position, head, ToScreen(lastBones[i].Tail) ?? head);
 
-                if (distance < nearest)
-                {
-                    nearest = distance;
-                    found = i;
-                }
+                if (distance >= BoneGrabThreshold)
+                    continue;
+
+                var toHead = Vector2.Distance(position, head);
+
+                var better = found < 0
+                    || distance < nearest - BoneTieBreak
+                    || (distance < nearest + BoneTieBreak
+                        && (lastBones[i].HasChildren != lastBones[found].HasChildren
+                            ? lastBones[i].HasChildren
+                            : toHead < nearestHead));
+
+                if (!better)
+                    continue;
+
+                found = i;
+                nearest = MathF.Min(nearest, distance);
+                nearestHead = toHead;
             }
 
             return found;
         }
 
         public const float BoneGrabThreshold = 10f;
+
+        // 骨どうしの近さがこれくらいしか違わないなら、同じくらい近いものとして扱う。
+        private const float BoneTieBreak = 4f;
 
         public void RequestPick(Vector2 position)
         {

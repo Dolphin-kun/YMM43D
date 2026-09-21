@@ -9,11 +9,9 @@ namespace YMM43D.Project.Model
     // 骨 1 本の姿勢。モデルに書かれている骨の名前で結びつける。
     public class ModelBonePose : Animatable
     {
-        private const string Group = "骨";
+        // 名前は折りたたみの見出しに出すので、編集欄は作らない。
+        internal const string Group = "骨";
 
-        [Display(GroupName = Group, Name = "骨の名前",
-            Description = "モデルに書かれている骨の名前です。書き換えても変わりません")]
-        [TextEditor]
         public string Name
         {
             get => name;

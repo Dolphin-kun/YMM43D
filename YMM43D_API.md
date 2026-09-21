@@ -922,6 +922,37 @@ public Animation X { get; } = new(0, -1000000, 1000000);
 
 `OnPropertyChanged` を忘れると、種類を切り替えても編集欄が開き閉じしません。
 
+### 自前の編集欄を作る
+
+`PropertyEditorAttribute` を継承すると、そのプロパティの編集欄を自分で作れます。`Create()` で中身を返し、`SetBindings` で値とつなぎ、`ClearBindings` で外します。`IPropertyEditorControl`（`BeginEdit` / `EndEdit`）と `IPropertyEditorControl2`（`SetEditorInfo`）を実装しておくと、中間点や取り消し・やり直しがいつもどおり効きます。
+
+```csharp
+internal sealed class BonePoseListAttribute : PropertyEditorAttribute
+{
+    public BonePoseListAttribute() => PropertyEditorSize = PropertyEditorSize.FullWidth;
+
+    public override FrameworkElement Create() => new BonePoseListEditor();
+
+    public override void SetBindings(
+        FrameworkElement control, object item, object propertyOwner, PropertyInfo propertyInfo)
+    { ... }
+}
+```
+
+中に**いつもの編集欄**（`AnimationSlider` など）を並べたいときは、そのプロパティに付いている属性をそのまま使います。`PropertyEditorAttribute2.SetBindings` に `ItemProperty` を渡すだけで、本体と同じ見た目の編集欄になります。`PropertiesCache` は `new` して使い回せます。
+
+```csharp
+var info = typeof(ModelBonePose).GetProperty(nameof(ModelBonePose.RotationX))!;
+var attribute = cache.GetCustomAttribute<PropertyEditorAttribute2>(info)!;
+var control = attribute.Create();
+
+attribute.SetBindings(control, [new ItemProperty(item, pose, info, cache)]);
+```
+
+`PropertiesEditor`（対象の編集欄をまとめて作るコントロール）でも同じことはできますが、**そのままだとグループの見出しが中に入れ子で出ます**。`ParentGroup` を合わせても消えないので、見出しを出したくないときは上のように 1 つずつ並べてください。
+
+> `[Display]` の `Name` を空にすると、左の見出しが消えて編集欄が横いっぱいに広がります。グループ名と同じ言葉を二重に出したくないときに使えます。
+
 ### 3Dプレビューに反映されないもの
 
 3D 図形アイテムは本物の立体として描かれるため、平面化されたピクセルを加工するエフェクト（グリッチノイズやモザイクなど）は 3Dプレビューには現れません。動画出力では一度 2D 画像に焼かれてから適用されるため、出力には反映されます。

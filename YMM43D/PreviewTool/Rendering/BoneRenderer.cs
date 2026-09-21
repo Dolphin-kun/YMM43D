@@ -8,18 +8,15 @@ using YMM43D.Graphics.Meshes;
 
 namespace YMM43D.PreviewTool.Rendering
 {
-    // 骨を線でつないで出す。手前の物に隠れないように、奥行きを見ないで描く。
+    // 骨を Blender と同じ八面体の形で出す。手前の物に隠れないように、奥行きを見ないで描く。
     internal sealed class BoneRenderer : IDisposable
     {
         private static readonly Color4 BoneColor = new(0.45f, 0.75f, 1f, 1f);
 
         private static readonly Color4 SelectedColor = new(1f, 0.85f, 0.3f, 1f);
 
-        // 骨の玉の大きさ。カメラからの距離に対する割合で決める。
-        private const float KnobRatio = 0.005f;
-
-        // 子を持たない骨（ねじれ用や飾りの骨）は、関節と見分けられるように小さく出す。
-        private const float LeafRatio = 0.5f;
+        // 頭から尻尾までの長さに対する、いちばん太いところの太さと、その位置。
+        private const float Thickness = 0.1f;
 
         private readonly DeviceResourceCache<BoneResources> resources;
 
@@ -28,11 +25,7 @@ namespace YMM43D.PreviewTool.Rendering
             resources = new DeviceResourceCache<BoneResources>(device => new BoneResources(device));
         }
 
-        public void Draw(
-            in Render3DContext render,
-            IReadOnlyList<PreviewBone> bones,
-            in Vector3 cameraPosition,
-            int selected)
+        public void Draw(in Render3DContext render, IReadOnlyList<PreviewBone> bones, int selected)
         {
             if (bones.Count == 0)
                 return;
@@ -40,30 +33,37 @@ namespace YMM43D.PreviewTool.Rendering
             var shared = resources.Get(render.Device);
 
             for (var i = 0; i < bones.Count; i++)
-            {
-                var bone = bones[i];
-                var isSelected = i == selected;
-
-                if (bone.HasParent)
-                    shared.DrawSegment(render, bone.ParentPosition, bone.Position, isSelected);
-
-                var size = MathF.Max(0.01f, Vector3.Distance(bone.Position, cameraPosition) * KnobRatio)
-                         * (bone.HasChildren ? 1f : LeafRatio);
-
-                shared.DrawKnob(render, bone.Position, size, isSelected);
-            }
+                shared.DrawBone(render, bones[i].Position, bones[i].Tail, i == selected);
         }
 
         public void Dispose() => resources.Dispose();
 
-        private static Vector3[] Knob()
+        // Blender の骨と同じ形。頭から少し進んだところに四角い輪があり、そこから尻尾へすぼまる。
+        private static Vector3[] Body()
         {
+            var head = Vector3.Zero;
+            var tail = Vector3.UnitZ;
+
+            Vector3[] ring =
+            [
+                new(Thickness, 0f, Thickness),
+                new(0f, Thickness, Thickness),
+                new(-Thickness, 0f, Thickness),
+                new(0f, -Thickness, Thickness),
+            ];
+
             var points = new List<Vector3>();
 
-            foreach (var axis in new[] { Vector3.UnitX, Vector3.UnitY, Vector3.UnitZ })
+            for (var i = 0; i < ring.Length; i++)
             {
-                points.Add(-axis);
-                points.Add(axis);
+                points.Add(head);
+                points.Add(ring[i]);
+
+                points.Add(ring[i]);
+                points.Add(ring[(i + 1) % ring.Length]);
+
+                points.Add(ring[i]);
+                points.Add(tail);
             }
 
             return [.. points];
@@ -74,29 +74,22 @@ namespace YMM43D.PreviewTool.Rendering
             private readonly RenderPipeline<TransformConstants> pipeline = new(
                 device, Vertex.InputElements, new VertexColorMaterial(device));
 
-            private readonly Dictionary<bool, LineMesh> segments = [];
-            private readonly Dictionary<bool, LineMesh> knobs = [];
+            private readonly Dictionary<bool, LineMesh> bodies = [];
 
-            public void DrawSegment(
-                in Render3DContext render, in Vector3 from, in Vector3 to, bool isSelected)
+            public void DrawBone(
+                in Render3DContext render, in Vector3 head, in Vector3 tail, bool isSelected)
             {
-                var direction = to - from;
+                var direction = tail - head;
                 var length = direction.Length();
 
                 if (length < 1e-6f)
                     return;
 
                 var world = Matrix4x4.CreateScale(length) * Aim(direction / length)
-                          * Matrix4x4.CreateTranslation(from);
+                          * Matrix4x4.CreateTranslation(head);
 
-                Draw(render, Mesh(segments, isSelected, [Vector3.Zero, Vector3.UnitZ]), world);
+                Draw(render, Mesh(bodies, isSelected, Body()), world);
             }
-
-            public void DrawKnob(in Render3DContext render, in Vector3 at, float size, bool isSelected)
-                => Draw(
-                    render,
-                    Mesh(knobs, isSelected, Knob()),
-                    Matrix4x4.CreateScale(size) * Matrix4x4.CreateTranslation(at));
 
             private void Draw(in Render3DContext render, LineMesh mesh, in Matrix4x4 world)
             {
@@ -129,14 +122,10 @@ namespace YMM43D.PreviewTool.Rendering
 
             public void Dispose()
             {
-                foreach (var mesh in segments.Values)
+                foreach (var mesh in bodies.Values)
                     mesh.Dispose();
 
-                foreach (var mesh in knobs.Values)
-                    mesh.Dispose();
-
-                segments.Clear();
-                knobs.Clear();
+                bodies.Clear();
                 pipeline.Dispose();
             }
         }

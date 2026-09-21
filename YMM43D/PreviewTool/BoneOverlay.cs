@@ -15,7 +15,7 @@ namespace YMM43D.PreviewTool
         string Name,
         string ParentName,
         Vector3 Position,
-        Vector3 ParentPosition,
+        Vector3 Tail,
         bool HasParent,
         bool HasChildren,
         Matrix4x4 Frame)
@@ -75,33 +75,106 @@ namespace YMM43D.PreviewTool
             var world = parameter.GetLocalMatrix(model, itemTime) * itemWorld;
 
             var bones = new PreviewBone[model.Bones.Length];
-            var hasChildren = new bool[model.Bones.Length];
+            var positions = new Vector3[model.Bones.Length];
 
-            foreach (var bone in model.Bones)
-            {
-                if (bone.Parent >= 0 && bone.Parent < hasChildren.Length)
-                    hasChildren[bone.Parent] = true;
-            }
+            for (var i = 0; i < model.Bones.Length; i++)
+                positions[i] = Vector3.Transform(Vector3.Zero, pose.Globals[i] * model.Root * world);
+
+            var tails = Tails(model.Bones, positions);
 
             for (var i = 0; i < model.Bones.Length; i++)
             {
                 var bone = model.Bones[i];
                 var frame = pose.Frames[i] * model.Root * world;
-                var position = Vector3.Transform(Vector3.Zero, pose.Globals[i] * model.Root * world);
 
                 var parent = bone.Parent;
                 var hasParent = parent >= 0 && parent < model.Bones.Length;
 
-                var parentPosition = hasParent
-                    ? Vector3.Transform(Vector3.Zero, pose.Globals[parent] * model.Root * world)
-                    : position;
-
                 bones[i] = new PreviewBone(
                     item, parameter, itemTime, i, bone.Name, hasParent ? model.Bones[parent].Name : string.Empty,
-                    position, parentPosition, hasParent, hasChildren[i], frame);
+                    positions[i], tails[i].Tail, hasParent, tails[i].HasChildren, frame);
             }
 
             return bones;
+        }
+
+        // 骨の尻尾（先っぽ）を決める。Blender と同じように、
+        // 子が 1 本だけならその子まで、そうでなければ短い出っ張りにする。
+        private static (Vector3 Tail, bool HasChildren)[] Tails(ModelBone[] bones, Vector3[] positions)
+        {
+            // 同じ場所に重なっている骨（ねじれ用など）は、つなぎ先として数えない。
+            var spread = Spread(positions);
+            var same = MathF.Max(spread * 1e-4f, 1e-6f);
+            var fallback = MathF.Max(spread * 0.05f, 1e-5f);
+
+            var made = new (Vector3 Tail, bool HasChildren)[bones.Length];
+            var directions = new Vector3[bones.Length];
+
+            var children = new List<int>[bones.Length];
+
+            for (var i = 0; i < bones.Length; i++)
+                children[i] = [];
+
+            for (var i = 0; i < bones.Length; i++)
+            {
+                if (bones[i].Parent >= 0 && bones[i].Parent < bones.Length)
+                    children[bones[i].Parent].Add(i);
+            }
+
+            for (var i = 0; i < bones.Length; i++)
+            {
+                var reach = children[i]
+                    .Where(child => Vector3.Distance(positions[child], positions[i]) > same)
+                    .ToArray();
+
+                var parent = bones[i].Parent;
+                var hasParent = parent >= 0 && parent < bones.Length;
+
+                // 伸びる向き。親から自分へ流れてきた向きを引き継ぎ、無ければ親の向きを使う。
+                var flow = hasParent && Vector3.Distance(positions[i], positions[parent]) > same
+                    ? Vector3.Normalize(positions[i] - positions[parent])
+                    : hasParent && directions[parent].LengthSquared() > 0f
+                        ? directions[parent]
+                        : Vector3.UnitY;
+
+                if (reach.Length == 1)
+                {
+                    made[i] = (positions[reach[0]], true);
+                    directions[i] = Vector3.Normalize(positions[reach[0]] - positions[i]);
+
+                    continue;
+                }
+
+                var nearest = reach.Length > 0
+                    ? reach.Min(child => Vector3.Distance(positions[child], positions[i]))
+                    : hasParent && Vector3.Distance(positions[i], positions[parent]) > same
+                        ? Vector3.Distance(positions[i], positions[parent])
+                        : fallback;
+
+                made[i] = (positions[i] + flow * (nearest * 0.25f), reach.Length > 0);
+                directions[i] = flow;
+            }
+
+            return made;
+        }
+
+        private static float Spread(Vector3[] positions)
+        {
+            if (positions.Length == 0)
+                return 0f;
+
+            var min = new Vector3(float.MaxValue);
+            var max = new Vector3(float.MinValue);
+
+            foreach (var position in positions)
+            {
+                min = Vector3.Min(min, position);
+                max = Vector3.Max(max, position);
+            }
+
+            var extent = max - min;
+
+            return MathF.Max(extent.X, MathF.Max(extent.Y, extent.Z));
         }
     }
 }
