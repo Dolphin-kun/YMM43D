@@ -104,38 +104,36 @@ namespace YMM43D.Graphics.Models
             }
 
             // ファイルが決めている「上」と「前」を、このプラグインの向き（Y が上・Z が手前）に合わせる。
+            // ファイルに書かれた「上」の向きだけを見て、Y を上にそろえる。
+            //
+            // FBX には上のほかに「前」と「右」も書けますが、**中身と食い違っているものが出回っています**。
+            // 手元の 2 本でも、Y 上のものは前 +Z で中身どおり、Z 上のものは前 +Y と書いてあるのに
+            // 中身は -Y を向いていました。書いてあるとおりに直すと後ろ向きになります。
+            // Z を上にするのは Blender と 3ds Max で、どちらも -Y が前なので、
+            // ゲームエンジンと同じように「上」だけを信じて直します。
             private Matrix4x4 AxisMatrix()
             {
                 if (root.Child("GlobalSettings")?.Child("Properties70") is not { } settings)
                     return Matrix4x4.Identity;
 
                 var up = (int)Value(settings, "UpAxis", 1);
-                var upSign = Value(settings, "UpAxisSign", 1) < 0 ? -1f : 1f;
-                var front = (int)Value(settings, "FrontAxis", 2);
-                var frontSign = Value(settings, "FrontAxisSign", 1) < 0 ? -1f : 1f;
-                var right = (int)Value(settings, "CoordAxis", 0);
-                var rightSign = Value(settings, "CoordAxisSign", 1) < 0 ? -1f : 1f;
+                var upward = Value(settings, "UpAxisSign", 1) < 0;
 
-                if (up == front || up == right || front == right)
-                    return Matrix4x4.Identity;
-
-                var matrix = Matrix4x4.Identity;
-
-                SetRow(ref matrix, right, new Vector3(rightSign, 0f, 0f));
-                SetRow(ref matrix, up, new Vector3(0f, upSign, 0f));
-                SetRow(ref matrix, front, new Vector3(0f, 0f, frontSign));
-
-                return matrix;
-            }
-
-            private static void SetRow(ref Matrix4x4 matrix, int index, Vector3 row)
-            {
-                switch (index)
+                // 並びを入れ替えるだけ。鏡にはしない（裏返ると面の表裏が逆になるため）。
+                return (up, upward) switch
                 {
-                    case 0: matrix.M11 = row.X; matrix.M12 = row.Y; matrix.M13 = row.Z; break;
-                    case 1: matrix.M21 = row.X; matrix.M22 = row.Y; matrix.M23 = row.Z; break;
-                    default: matrix.M31 = row.X; matrix.M32 = row.Y; matrix.M33 = row.Z; break;
-                }
+                    // X が上
+                    (0, false) => new Matrix4x4(0f, 1f, 0f, 0f, 0f, 0f, 1f, 0f, 1f, 0f, 0f, 0f, 0f, 0f, 0f, 1f),
+                    (0, true) => new Matrix4x4(0f, -1f, 0f, 0f, 0f, 0f, 1f, 0f, -1f, 0f, 0f, 0f, 0f, 0f, 0f, 1f),
+
+                    // Z が上。前（-Y）が画面の手前（+Z）に来るようにする。
+                    (2, false) => new Matrix4x4(1f, 0f, 0f, 0f, 0f, 0f, -1f, 0f, 0f, 1f, 0f, 0f, 0f, 0f, 0f, 1f),
+                    (2, true) => new Matrix4x4(1f, 0f, 0f, 0f, 0f, 0f, 1f, 0f, 0f, -1f, 0f, 0f, 0f, 0f, 0f, 1f),
+
+                    // Y が上。そのまま。
+                    (_, true) => new Matrix4x4(1f, 0f, 0f, 0f, 0f, -1f, 0f, 0f, 0f, 0f, -1f, 0f, 0f, 0f, 0f, 1f),
+                    _ => Matrix4x4.Identity,
+                };
             }
 
             // 置き場所の親になるのは、モデルであるものだけ。
