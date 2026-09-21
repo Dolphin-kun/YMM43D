@@ -22,6 +22,9 @@ namespace YMM43D.Project.Model
 
         private static readonly PropertiesCache cache = new();
 
+        // 見出しの列の幅。
+        private const double LabelWidth = 50;
+
         private readonly StackPanel panel = new();
         private readonly List<(PropertyEditorAttribute2 Attribute, FrameworkElement Control)> editors = [];
 
@@ -178,7 +181,8 @@ namespace YMM43D.Project.Model
         {
             var grid = new Grid { Margin = new Thickness(0, 2, 0, 6) };
 
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            // 見出しの幅はそろえる。これより長い名前が来たときだけ広がる。
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto, MinWidth = LabelWidth });
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
             foreach (var name in Shown)
@@ -205,10 +209,13 @@ namespace YMM43D.Project.Model
                 editors.Add((attribute, control));
 
                 // 中間点を打つと編集欄が縦に伸びるので、見出しは上に合わせて置く。
+                // 編集欄は中間点を打つと縦に伸びるので、見出しは上詰めにする。
+                // 横は列の幅いっぱいに広げたうえで、文字を真ん中に寄せる。
                 var label = new TextBlock
                 {
                     Text = cache.GetCustomAttribute<DisplayAttribute>(info)?.Name ?? name,
                     VerticalAlignment = VerticalAlignment.Top,
+                    TextAlignment = TextAlignment.Center,
                     Margin = new Thickness(4, 4, 8, 0),
                 };
 
