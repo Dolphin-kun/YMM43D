@@ -151,6 +151,19 @@
             </DockPanel>
         </Border>
 
-        <ContentControl Grid.Row="2" Content="{Binding D3DHost}"/>
+        <Grid Grid.Row="2">
+            <ContentControl Content="{Binding D3DHost}"/>
+
+            <Border HorizontalAlignment="Left"
+                    VerticalAlignment="Bottom"
+                    Margin="8"
+                    Padding="6,2"
+                    Background="#99000000"
+                    CornerRadius="3"
+                    IsHitTestVisible="False"
+                    Visibility="{Binding HasSelectedBone, Converter={StaticResource VisibleWhenTrue}}">
+                <TextBlock Text="{Binding SelectedBoneName}" Foreground="#FFD54F"/>
+            </Border>
+        </Grid>
     </Grid>
 </UserControl>

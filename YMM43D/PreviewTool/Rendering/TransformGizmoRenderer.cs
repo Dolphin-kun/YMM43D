@@ -24,7 +24,7 @@ namespace YMM43D.PreviewTool.Rendering
             resources = new DeviceResourceCache<GizmoResources>(device => new GizmoResources(device));
         }
 
-        public void Draw(in Render3DContext render, in TransformGizmo gizmo, GizmoHandle active, bool canRotate)
+        public void Draw(in Render3DContext render, in TransformGizmo gizmo, GizmoHandle active, GizmoStyle style)
         {
             var world = Matrix4x4.CreateScale(gizmo.Scale) * gizmo.Orientation * Matrix4x4.CreateTranslation(gizmo.Origin);
             var transform = render.GetWorldViewProjection(world);
@@ -33,9 +33,9 @@ namespace YMM43D.PreviewTool.Rendering
 
             var shared = resources.Get(render.Device);
 
-            foreach (var (handle, mesh) in shared.Parts)
+            foreach (var (handle, mesh) in style is GizmoStyle.Turn ? shared.TurnParts : shared.MoveParts)
             {
-                if (handle == GizmoHandle.RotateZ && !canRotate)
+                if (handle == GizmoHandle.RotateZ && style is GizmoStyle.Move)
                     continue;
 
                 var opacity = active == GizmoHandle.None || active == handle ? 1f : IdleOpacity;
@@ -64,17 +64,14 @@ namespace YMM43D.PreviewTool.Rendering
             ];
         }
 
-        private static Vector3[] BuildRing()
+        private static Vector3[] BuildRing(GizmoHandle handle)
         {
             var points = new List<Vector3>();
 
             for (var i = 0; i < TransformGizmo.RingSegments; i++)
             {
-                var from = MathF.Tau * i / TransformGizmo.RingSegments;
-                var to = MathF.Tau * (i + 1) / TransformGizmo.RingSegments;
-
-                points.Add(new Vector3(MathF.Cos(from), MathF.Sin(from), 0f) * TransformGizmo.RingRadius);
-                points.Add(new Vector3(MathF.Cos(to), MathF.Sin(to), 0f) * TransformGizmo.RingRadius);
+                points.Add(TransformGizmo.RingOffset(handle, i));
+                points.Add(TransformGizmo.RingOffset(handle, i + 1));
             }
 
             return [.. points];
@@ -87,17 +84,26 @@ namespace YMM43D.PreviewTool.Rendering
             public RenderPipeline<TransformConstants> Pipeline { get; } = new RenderPipeline<TransformConstants>(
                     device, Vertex.InputElements, new VertexColorMaterial(device));
 
-            public (GizmoHandle Handle, LineMesh Mesh)[] Parts { get; } =
+            // 動かすときの矢印と、画面に沿って回す輪。
+            public (GizmoHandle Handle, LineMesh Mesh)[] MoveParts { get; } =
                 [
                     (GizmoHandle.MoveX, new LineMesh(device, BuildArrow(Vector3.UnitX), AxisXColor)),
                     (GizmoHandle.MoveY, new LineMesh(device, BuildArrow(Vector3.UnitY), AxisYColor)),
                     (GizmoHandle.MoveZ, new LineMesh(device, BuildArrow(Vector3.UnitZ), AxisZColor)),
-                    (GizmoHandle.RotateZ, new LineMesh(device, BuildRing(), RingColor)),
+                    (GizmoHandle.RotateZ, new LineMesh(device, BuildRing(GizmoHandle.RotateZ), RingColor)),
+                ];
+
+            // 回すときの 3 本の輪。色は回転X/Y/Z に合わせる。
+            public (GizmoHandle Handle, LineMesh Mesh)[] TurnParts { get; } =
+                [
+                    (GizmoHandle.RotateX, new LineMesh(device, BuildRing(GizmoHandle.RotateX), AxisXColor)),
+                    (GizmoHandle.RotateY, new LineMesh(device, BuildRing(GizmoHandle.RotateY), AxisYColor)),
+                    (GizmoHandle.RotateZ, new LineMesh(device, BuildRing(GizmoHandle.RotateZ), AxisZColor)),
                 ];
 
             public void Dispose()
             {
-                foreach (var (_, mesh) in Parts)
+                foreach (var (_, mesh) in MoveParts.Concat(TurnParts))
                     mesh.Dispose();
 
                 Pipeline.Dispose();

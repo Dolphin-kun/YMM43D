@@ -18,6 +18,9 @@ namespace YMM43D.PreviewTool.Rendering
         // 骨の玉の大きさ。カメラからの距離に対する割合で決める。
         private const float KnobRatio = 0.005f;
 
+        // 子を持たない骨（ねじれ用や飾りの骨）は、関節と見分けられるように小さく出す。
+        private const float LeafRatio = 0.5f;
+
         private readonly DeviceResourceCache<BoneResources> resources;
 
         public BoneRenderer()
@@ -44,7 +47,8 @@ namespace YMM43D.PreviewTool.Rendering
                 if (bone.HasParent)
                     shared.DrawSegment(render, bone.ParentPosition, bone.Position, isSelected);
 
-                var size = MathF.Max(0.01f, Vector3.Distance(bone.Position, cameraPosition) * KnobRatio);
+                var size = MathF.Max(0.01f, Vector3.Distance(bone.Position, cameraPosition) * KnobRatio)
+                         * (bone.HasChildren ? 1f : LeafRatio);
 
                 shared.DrawKnob(render, bone.Position, size, isSelected);
             }

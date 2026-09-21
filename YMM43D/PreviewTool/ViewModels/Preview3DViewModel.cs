@@ -133,6 +133,24 @@ namespace YMM43D.PreviewTool.ViewModels
             OnPropertyChanged(nameof(SnapsEvery100));
         }
 
+        // 3Dプレビューの隅に出す、いま選んでいる骨の名前。
+        public string SelectedBoneName => SelectedBone() is { } bone
+            ? bone.HasParent ? $"骨 {bone.Name}（親 {bone.ParentName}）" : $"骨 {bone.Name}"
+            : string.Empty;
+
+        public bool HasSelectedBone => SelectedBoneName.Length > 0;
+
+        private void SetSelectedBone(int index)
+        {
+            if (selectedBone == index)
+                return;
+
+            selectedBone = index;
+
+            OnPropertyChanged(nameof(SelectedBoneName));
+            OnPropertyChanged(nameof(HasSelectedBone));
+        }
+
         public UpdateChecker Update => UpdateChecker.Instance;
 
         public bool CanAddItem => timeline is not null;
@@ -604,9 +622,9 @@ namespace YMM43D.PreviewTool.ViewModels
                     return BeginItems(movable, movable[0], gizmo.Origin, grabbed, gizmoRay);
             }
 
-            if (renderer.PickBone(screen) is var picked2 and >= 0)
+            if (renderer.PickBone(screen) is var pickedBone and >= 0)
             {
-                selectedBone = picked2;
+                SetSelectedBone(pickedBone);
                 RequestRender();
                 return true;
             }
@@ -632,7 +650,7 @@ namespace YMM43D.PreviewTool.ViewModels
             }
 
             // 骨ではないところを掴んだら、骨の選択は外す。
-            selectedBone = -1;
+            SetSelectedBone(-1);
 
             if (!selection.Contains(picked.Item))
                 Select([picked.Item]);
@@ -677,7 +695,7 @@ namespace YMM43D.PreviewTool.ViewModels
             if (timeline is null)
                 return;
 
-            selectedBone = -1;
+            SetSelectedBone(-1);
 
             timeline.SelectedItems = [.. items];
             SyncSelectionState();
@@ -689,7 +707,7 @@ namespace YMM43D.PreviewTool.ViewModels
         {
             selection = [];
             selectedMarker = null;
-            selectedBone = -1;
+            SetSelectedBone(-1);
 
             if (timeline?.SelectedItems is { Count: > 0 })
                 timeline.SelectedItems = [];

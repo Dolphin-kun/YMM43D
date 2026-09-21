@@ -13,9 +13,11 @@ namespace YMM43D.PreviewTool
         FrameContext Time,
         int Index,
         string Name,
+        string ParentName,
         Vector3 Position,
         Vector3 ParentPosition,
         bool HasParent,
+        bool HasChildren,
         Matrix4x4 Frame)
     {
         // 回転X/Y/Z の各つまみが向いている先。オイラー角の順（X→Y→Z）に合わせる。
@@ -73,6 +75,13 @@ namespace YMM43D.PreviewTool
             var world = parameter.GetLocalMatrix(model, itemTime) * itemWorld;
 
             var bones = new PreviewBone[model.Bones.Length];
+            var hasChildren = new bool[model.Bones.Length];
+
+            foreach (var bone in model.Bones)
+            {
+                if (bone.Parent >= 0 && bone.Parent < hasChildren.Length)
+                    hasChildren[bone.Parent] = true;
+            }
 
             for (var i = 0; i < model.Bones.Length; i++)
             {
@@ -88,7 +97,8 @@ namespace YMM43D.PreviewTool
                     : position;
 
                 bones[i] = new PreviewBone(
-                    item, parameter, itemTime, i, bone.Name, position, parentPosition, hasParent, frame);
+                    item, parameter, itemTime, i, bone.Name, hasParent ? model.Bones[parent].Name : string.Empty,
+                    position, parentPosition, hasParent, hasChildren[i], frame);
             }
 
             return bones;

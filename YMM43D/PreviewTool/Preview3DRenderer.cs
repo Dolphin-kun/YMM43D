@@ -18,6 +18,10 @@ namespace YMM43D.PreviewTool
 
         private static readonly GizmoHandle[] MoveHandles = [GizmoHandle.MoveX, GizmoHandle.MoveY, GizmoHandle.MoveZ];
 
+        private static readonly GizmoHandle[] TurnHandles = [GizmoHandle.RotateX, GizmoHandle.RotateY, GizmoHandle.RotateZ];
+
+        private static readonly GizmoHandle[] ScreenTurnHandle = [GizmoHandle.RotateZ];
+
         private readonly GridRenderer grid = new();
         private readonly CameraGizmoRenderer cameraGizmo = new();
         private readonly MarkerRenderer markers = new();
@@ -36,6 +40,7 @@ namespace YMM43D.PreviewTool
         private Vector3 frustumApex;
         private Vector3[] frustumCorners = [];
         private TransformGizmo? lastGizmo;
+        private GizmoStyle lastGizmoStyle;
 
         private IReadOnlyList<PreviewBone> lastBones = [];
         private Matrix4x4 lastViewProjection = Matrix4x4.Identity;
@@ -175,12 +180,19 @@ namespace YMM43D.PreviewTool
             lastGizmo = gizmoMarker is { } placed
                 ? TransformGizmo.Create(placed.Marker.Position, viewPose.Position)
                 : SelectedBone(scene) is { } bone
-                    ? TransformGizmo.Create(bone.Position, viewPose.Position, BoneOrientation(bone))
+                    ? TransformGizmo.Create(
+                        bone.Position, viewPose.Position, BoneOrientation(bone), TransformGizmo.BoneRatio)
                     : FindGizmo(scene.Selection, viewPose.Position);
 
-            // 骨のつまみは回す用なので、画面内で回す輪は出さない。
+            // 骨は回すだけなので、矢印ではなく 3 本の輪を出す。
+            lastGizmoStyle = gizmoMarker is not null
+                ? GizmoStyle.Move
+                : SelectedBone(scene) is not null
+                    ? GizmoStyle.Turn
+                    : GizmoStyle.MoveAndTurn;
+
             if (lastGizmo is { } gizmo)
-                transformGizmo.Draw(render, gizmo, scene.ActiveHandle, gizmoMarker is null && SelectedBone(scene) is null);
+                transformGizmo.Draw(render, gizmo, scene.ActiveHandle, lastGizmoStyle);
 
             axisIndicator.Draw(render, viewPose, width, height);
 
@@ -432,36 +444,47 @@ namespace YMM43D.PreviewTool
             var found = GizmoHandle.None;
             var nearest = TransformGizmo.GrabThreshold;
 
-            foreach (var handle in MoveHandles)
+            if (lastGizmoStyle is not GizmoStyle.Turn)
             {
-                if (ToScreen(gizmo.AxisEnd(handle)) is not { } end)
-                    continue;
+                foreach (var handle in MoveHandles)
+                {
+                    if (ToScreen(gizmo.AxisEnd(handle)) is not { } end)
+                        continue;
 
-                var distance = DistanceToSegment(position, origin, end);
-                if (distance >= nearest)
-                    continue;
+                    var distance = DistanceToSegment(position, origin, end);
+                    if (distance >= nearest)
+                        continue;
 
-                nearest = distance;
-                found = handle;
+                    nearest = distance;
+                    found = handle;
+                }
             }
 
-            if (gizmoMarker is not null)
-                return found;
-
-            for (var i = 0; i < TransformGizmo.RingSegments; i++)
+            var rings = lastGizmoStyle switch
             {
-                if (ToScreen(gizmo.RingPoint(i)) is not { } from
-                    || ToScreen(gizmo.RingPoint(i + 1)) is not { } to)
+                GizmoStyle.Turn => TurnHandles,
+                GizmoStyle.MoveAndTurn => ScreenTurnHandle,
+                _ => [],
+            };
+
+            // 重なって見えるときは、いちばん近い輪を選ぶ。
+            foreach (var handle in rings)
+            {
+                for (var i = 0; i < TransformGizmo.RingSegments; i++)
                 {
-                    continue;
+                    if (ToScreen(gizmo.RingPoint(handle, i)) is not { } from
+                        || ToScreen(gizmo.RingPoint(handle, i + 1)) is not { } to)
+                    {
+                        continue;
+                    }
+
+                    var distance = DistanceToSegment(position, from, to);
+                    if (distance >= nearest)
+                        continue;
+
+                    nearest = distance;
+                    found = handle;
                 }
-
-                var distance = DistanceToSegment(position, from, to);
-                if (distance >= nearest)
-                    continue;
-
-                nearest = distance;
-                found = GizmoHandle.RotateZ;
             }
 
             return found;

@@ -34,12 +34,12 @@ namespace YMM43D.PreviewTool
             in PickRay ray,
             in EditScope edit)
         {
-            if (grabbed is not (GizmoHandle.MoveX or GizmoHandle.MoveY or GizmoHandle.MoveZ))
+            if (grabbed is not (GizmoHandle.RotateX or GizmoHandle.RotateY or GizmoHandle.RotateZ))
                 return false;
 
             var found = bone.Parameter.BoneFor(bone.Name);
 
-            axis = gizmo.Axis(grabbed);
+            axis = gizmo.TurnAxis(grabbed);
 
             if (axis.LengthSquared() < 1e-12f)
                 return false;
@@ -56,8 +56,8 @@ namespace YMM43D.PreviewTool
 
             target = grabbed switch
             {
-                GizmoHandle.MoveX => found.RotationX,
-                GizmoHandle.MoveY => found.RotationY,
+                GizmoHandle.RotateX => found.RotationX,
+                GizmoHandle.RotateY => found.RotationY,
                 _ => found.RotationZ,
             };
 

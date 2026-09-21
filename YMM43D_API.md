@@ -640,8 +640,9 @@ var pipeline = pipelines.Get(render.Device);
 | 型 | 種別 | 説明 |
 |---|---|---|
 | `PickRay` | struct | 画面上の1点から伸ばす半直線 |
-| `TransformGizmo` | struct | アイテムを動かす向きの案内。矢印と輪の当たり判定 |
-| `GizmoHandle` | enum | 案内のどこを掴んでいるか |
+| `TransformGizmo` | struct | アイテムを動かす向きの案内。矢印と輪の当たり判定。`Orientation` で傾けて出せる |
+| `GizmoHandle` | enum | 案内のどこを掴んでいるか。動かす `MoveX/Y/Z` と回す `RotateX/Y/Z` |
+| `GizmoStyle` | enum | 案内の出し方。矢印だけ・矢印と輪・3本の輪だけ（骨） |
 | `ISceneMarkerSource` | interface | 3Dプレビューに目印を出すアイテム。掴んで動かされたら差分を受け取る |
 | `SceneMarker` | struct | 目印の見た目と場所 |
 | `MarkerKind` | enum | 目印の絵柄。平行光・点光源・スポットライト・カメラ |
