@@ -16,6 +16,7 @@ namespace YMM43D.PreviewTool
         string ParentName,
         Vector3 Position,
         Vector3 Tail,
+        Vector3 ParentTail,
         bool HasParent,
         bool HasChildren,
         Matrix4x4 Frame)
@@ -92,7 +93,8 @@ namespace YMM43D.PreviewTool
 
                 bones[i] = new PreviewBone(
                     item, parameter, itemTime, i, bone.Name, hasParent ? model.Bones[parent].Name : string.Empty,
-                    positions[i], tails[i].Tail, hasParent, tails[i].HasChildren, frame);
+                    positions[i], tails[i].Tail, hasParent ? tails[parent].Tail : positions[i],
+                    hasParent, tails[i].HasChildren, frame);
             }
 
             return bones;

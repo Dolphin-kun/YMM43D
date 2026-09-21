@@ -4,7 +4,11 @@ using System.ComponentModel.DataAnnotations;
 using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
+using System.Windows.Media;
+using System.Windows.Shapes;
 using YukkuriMovieMaker.Commons;
+using YukkuriMovieMaker.Resources.Icons;
 
 namespace YMM43D.Project.Model
 {
@@ -21,8 +25,8 @@ namespace YMM43D.Project.Model
         private readonly StackPanel panel = new();
         private readonly List<(PropertyEditorAttribute2 Attribute, FrameworkElement Control)> editors = [];
 
-        // 開いている骨は、並べ直しても開いたままにする。
-        private readonly HashSet<string> opened = [];
+        // 骨は開いた状態で出す。閉じた骨だけ覚えておいて、並べ直しても閉じたままにする。
+        private readonly HashSet<string> closed = [];
 
         private object? item;
         private object? target;
@@ -114,8 +118,8 @@ namespace YMM43D.Project.Model
         {
             var remove = new Button
             {
-                Content = "✕",
-                Padding = new Thickness(6, 0, 6, 0),
+                Content = DeleteMark(),
+                Padding = new Thickness(4, 1, 4, 1),
                 Margin = new Thickness(4, 0, 0, 0),
                 ToolTip = "この骨の回転をやめる",
             };
@@ -138,13 +142,38 @@ namespace YMM43D.Project.Model
             {
                 Header = header,
                 Content = Values(pose),
-                IsExpanded = opened.Contains(pose.Name),
+                IsExpanded = !closed.Contains(pose.Name),
             };
 
-            expander.Expanded += (_, _) => opened.Add(pose.Name);
-            expander.Collapsed += (_, _) => opened.Remove(pose.Name);
+            expander.Expanded += (_, _) => closed.Remove(pose.Name);
+            expander.Collapsed += (_, _) => closed.Add(pose.Name);
 
             return expander;
+        }
+
+        // ゴミ箱の絵は YMM4 本体が持っているものを使う。見つからないときは文字で出す。
+        private FrameworkElement DeleteMark()
+        {
+            if ((TryFindResource(GeometryKeys.TrashCanOutline)
+                ?? Application.Current?.TryFindResource(GeometryKeys.TrashCanOutline)) is not Geometry found)
+            {
+                return new TextBlock { Text = "✕" };
+            }
+
+            var mark = new Path
+            {
+                Data = found,
+                Stretch = Stretch.Uniform,
+                Width = 13,
+                Height = 13,
+            };
+
+            mark.SetBinding(System.Windows.Shapes.Shape.FillProperty, new Binding(nameof(Control.Foreground))
+            {
+                RelativeSource = new RelativeSource(RelativeSourceMode.FindAncestor) { AncestorType = typeof(Button) },
+            });
+
+            return mark;
         }
 
         // 骨 1 本ぶんの編集欄。いつもの編集欄をそのまま作って並べる。

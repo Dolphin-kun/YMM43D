@@ -55,6 +55,7 @@ namespace YMM43D.PreviewTool.ViewModels
         private bool drivesSceneCamera;
         private bool insertsKeyFrame;
         private bool showsGrid = true;
+        private bool showsMesh;
         private bool snapsToGrid;
         private float snapStep = SnapGrid.DefaultStep;
         private bool hadSelectedItem;
@@ -97,6 +98,12 @@ namespace YMM43D.PreviewTool.ViewModels
         {
             get => showsGrid;
             set => Set(ref showsGrid, value, nameof(ShowsGrid));
+        }
+
+        public bool ShowsMesh
+        {
+            get => showsMesh;
+            set => Set(ref showsMesh, value, nameof(ShowsMesh));
         }
 
         public bool SnapsToGrid
@@ -145,7 +152,16 @@ namespace YMM43D.PreviewTool.ViewModels
             if (selectedBone == index)
                 return;
 
+            var left = SelectedBone();
+
             selectedBone = index;
+
+            // 選んだ骨はすぐパラメータに出す。動かさないまま選び直したら片付ける。
+            if (left is { } gone)
+                gone.Parameter.DropBoneIfUntouched(gone.Name);
+
+            if (SelectedBone() is { } chosen && !chosen.Item.IsLocked)
+                chosen.Parameter.BoneFor(chosen.Name);
 
             OnPropertyChanged(nameof(SelectedBoneName));
             OnPropertyChanged(nameof(HasSelectedBone));
@@ -476,6 +492,7 @@ namespace YMM43D.PreviewTool.ViewModels
                 SelectedMarker = selectedMarker,
                 SelectedBone = selectedBone,
                 ShowsGrid = showsGrid,
+                ShowsMesh = showsMesh,
                 ActiveHandle = boneDrag.IsDragging ? boneDrag.Handle : itemDrag.Handle,
             };
         }
@@ -742,6 +759,10 @@ namespace YMM43D.PreviewTool.ViewModels
 
                 case Key.K when modifiers == ModifierKeys.None:
                     InsertsKeyFrame = !InsertsKeyFrame;
+                    return true;
+
+                case Key.W when modifiers == ModifierKeys.None:
+                    ShowsMesh = !ShowsMesh;
                     return true;
 
                 case Key.G when modifiers == ModifierKeys.None:

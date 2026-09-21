@@ -15,6 +15,12 @@ namespace YMM43D.PreviewTool.Rendering
 
         private static readonly Color4 SelectedColor = new(1f, 0.85f, 0.3f, 1f);
 
+        // 親子のつながりを出す点線の色。骨そのものより控えめにする。
+        private static readonly Color4 LinkColor = new(0.4f, 0.5f, 0.65f, 1f);
+
+        // 点線の刻み数。
+        private const int Dashes = 12;
+
         // 頭から尻尾までの長さに対する、いちばん太いところの太さと、その位置。
         private const float Thickness = 0.1f;
 
@@ -32,11 +38,34 @@ namespace YMM43D.PreviewTool.Rendering
 
             var shared = resources.Get(render.Device);
 
+            // 先につながりの点線を描き、その上に骨を描く。
+            for (var i = 0; i < bones.Count; i++)
+            {
+                if (bones[i].HasParent)
+                    shared.DrawLink(render, bones[i].ParentTail, bones[i].Position);
+            }
+
             for (var i = 0; i < bones.Count; i++)
                 shared.DrawBone(render, bones[i].Position, bones[i].Tail, i == selected);
         }
 
         public void Dispose() => resources.Dispose();
+
+        // 親の尻尾から子の頭へ引く点線。長さ 1 の線を刻んだもの。
+        private static Vector3[] Dotted()
+        {
+            var points = new List<Vector3>();
+
+            for (var i = 0; i < Dashes; i++)
+            {
+                var from = i / (float)Dashes;
+
+                points.Add(new Vector3(0f, 0f, from));
+                points.Add(new Vector3(0f, 0f, from + 0.5f / Dashes));
+            }
+
+            return [.. points];
+        }
 
         // Blender の骨と同じ形。頭から少し進んだところに四角い輪があり、そこから尻尾へすぼまる。
         private static Vector3[] Body()
@@ -75,6 +104,22 @@ namespace YMM43D.PreviewTool.Rendering
                 device, Vertex.InputElements, new VertexColorMaterial(device));
 
             private readonly Dictionary<bool, LineMesh> bodies = [];
+
+            private LineMesh? link;
+
+            public void DrawLink(in Render3DContext render, in Vector3 from, in Vector3 to)
+            {
+                var direction = to - from;
+                var length = direction.Length();
+
+                if (length < 1e-6f)
+                    return;
+
+                var world = Matrix4x4.CreateScale(length) * Aim(direction / length)
+                          * Matrix4x4.CreateTranslation(from);
+
+                Draw(render, link ??= new LineMesh(device, Dotted(), LinkColor), world);
+            }
 
             public void DrawBone(
                 in Render3DContext render, in Vector3 head, in Vector3 tail, bool isSelected)
@@ -124,6 +169,9 @@ namespace YMM43D.PreviewTool.Rendering
             {
                 foreach (var mesh in bodies.Values)
                     mesh.Dispose();
+
+                link?.Dispose();
+                link = null;
 
                 bodies.Clear();
                 pipeline.Dispose();

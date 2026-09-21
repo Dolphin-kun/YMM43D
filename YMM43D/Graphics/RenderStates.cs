@@ -32,6 +32,24 @@ namespace YMM43D.Graphics
 
         public ID3D11RasterizerState CullFront { get; }
 
+        private readonly ID3D11RasterizerState meshNone;
+        private readonly ID3D11RasterizerState meshBack;
+        private readonly ID3D11RasterizerState meshFront;
+
+        // 面を塗らずに線だけで描くかどうか。3Dプレビューで「網で出す」を入れている間だけ立てる。
+        // 描いているスレッドごとに持つので、書き出し側の描画には影響しない。
+        [ThreadStatic]
+        private static bool meshMode;
+
+        public static bool IsMeshMode { get => meshMode; set => meshMode = value; }
+
+        public ID3D11RasterizerState Rasterizer(FaceCulling culling) => culling switch
+        {
+            FaceCulling.Back => meshMode ? meshBack : CullBack,
+            FaceCulling.Front => meshMode ? meshFront : CullFront,
+            _ => meshMode ? meshNone : CullNone,
+        };
+
         public ID3D11SamplerState LinearSampler { get; }
 
         public ID3D11SamplerState PointSampler { get; }
@@ -85,6 +103,10 @@ namespace YMM43D.Graphics
             CullBack = CreateRasterizer(device, CullMode.Back);
             CullFront = CreateRasterizer(device, CullMode.Front);
 
+            meshNone = CreateRasterizer(device, CullMode.None, FillMode.Wireframe);
+            meshBack = CreateRasterizer(device, CullMode.Back, FillMode.Wireframe);
+            meshFront = CreateRasterizer(device, CullMode.Front, FillMode.Wireframe);
+
             LinearSampler = CreateSampler(device, Filter.MinMagMipLinear);
             PointSampler = CreateSampler(device, Filter.MinMagMipPoint);
             LinearWrapSampler = CreateSampler(device, Filter.MinMagMipLinear, TextureAddressMode.Wrap);
@@ -125,11 +147,12 @@ namespace YMM43D.Graphics
             return Collect(device.CreateBlendState(desc));
         }
 
-        private ID3D11RasterizerState CreateRasterizer(ID3D11Device device, CullMode cullMode)
+        private ID3D11RasterizerState CreateRasterizer(
+            ID3D11Device device, CullMode cullMode, FillMode fillMode = FillMode.Solid)
         {
             return Collect(device.CreateRasterizerState(new RasterizerDescription
             {
-                FillMode = FillMode.Solid,
+                FillMode = fillMode,
                 CullMode = cullMode,
                 DepthClipEnable = true,
                 MultisampleEnable = true,

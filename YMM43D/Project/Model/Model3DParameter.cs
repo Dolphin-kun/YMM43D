@@ -135,6 +135,13 @@ namespace YMM43D.Project.Model
             return made;
         }
 
+        // 選んだだけで増えた骨を片付ける。回転を動かしていなければ外す。
+        internal void DropBoneIfUntouched(string name)
+        {
+            if (FindBonePose(name) is { IsUntouched: true } found)
+                Bones = Bones.Remove(found);
+        }
+
         // 骨の置き場所。回転を掛ける前（Frames）と掛けたあと（Globals）の両方を返す。
         internal ModelPose.PoseFrames GetBoneFrames(ModelData model, in FrameContext time)
             => ModelPose.Compute(model.Bones, GetPose(model, time));

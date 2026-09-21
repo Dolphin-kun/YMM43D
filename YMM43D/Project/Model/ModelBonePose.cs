@@ -48,6 +48,12 @@ namespace YMM43D.Project.Model
             => Rotation3D.ForObject(
                 RotationX.GetFloat(time), RotationY.GetFloat(time), RotationZ.GetFloat(time));
 
+        // 回転を一度も動かしていない骨。選んだだけで増えた骨を片付けるのに使う。
+        internal bool IsUntouched => Untouched(RotationX) && Untouched(RotationY) && Untouched(RotationZ);
+
+        private static bool Untouched(Animation animation)
+            => animation.Values.Count == 1 && animation.Values[0].Value == 0;
+
         internal bool IsStill(in FrameContext time)
             => RotationX.GetFloat(time) == 0f
             && RotationY.GetFloat(time) == 0f

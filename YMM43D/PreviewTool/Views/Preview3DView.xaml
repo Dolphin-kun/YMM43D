@@ -67,6 +67,12 @@
                           IsChecked="{Binding ShowsGrid}"
                           InputGestureText="G"
                           ToolTip="床の格子と、原点を通る2本の座標軸を出すかどうか。動画の出力には関係ありません。"/>
+
+                <MenuItem Header="モデルを網で出す"
+                          IsCheckable="True"
+                          IsChecked="{Binding ShowsMesh}"
+                          InputGestureText="W"
+                          ToolTip="3Dモデルを面で塗らず、線だけ（網）で出します。体の中の骨が見えるので、骨を掴みやすくなります。動画の出力には関係ありません。"/>
             </MenuItem>
 
             <MenuItem Header="編集">

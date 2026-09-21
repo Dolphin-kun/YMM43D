@@ -82,12 +82,7 @@ namespace YMM43D.Graphics
 
             context.OMSetDepthStencilState(DepthStateFor(settings));
 
-            context.RSSetState(settings.Culling switch
-            {
-                FaceCulling.Back => states.CullBack,
-                FaceCulling.Front => states.CullFront,
-                _ => states.CullNone,
-            });
+            context.RSSetState(states.Rasterizer(settings.Culling));
 
             context.VSSetShader(Material.VertexShader);
             context.PSSetShader(Material.PixelShader);

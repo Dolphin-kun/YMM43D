@@ -953,6 +953,15 @@ attribute.SetBindings(control, [new ItemProperty(item, pose, info, cache)]);
 
 > `[Display]` の `Name` を空にすると、左の見出しが消えて編集欄が横いっぱいに広がります。グループ名と同じ言葉を二重に出したくないときに使えます。
 
+YMM4 本体のアイコンは `YukkuriMovieMaker.Resources.Icons` の鍵で引けます。`GeometryKeys` が図形（`Geometry`）、`IconKeys` が絵（`Viewbox`）です。図形のほうは何度でも使い回せるので、`Path` に入れて色をボタンの文字色に合わせるのが楽です。
+
+```csharp
+if (TryFindResource(GeometryKeys.TrashCanOutline) is Geometry found)
+    ...
+```
+
+> 辞書そのもの（`MaterialDesignIconGeometries.g.xaml`）を読み込むと 7400 個あって 2 秒以上かかります。**自分で読み込まず、本体が読み込んだものを引いてください。**
+
 ### 3Dプレビューに反映されないもの
 
 3D 図形アイテムは本物の立体として描かれるため、平面化されたピクセルを加工するエフェクト（グリッチノイズやモザイクなど）は 3Dプレビューには現れません。動画出力では一度 2D 画像に焼かれてから適用されるため、出力には反映されます。

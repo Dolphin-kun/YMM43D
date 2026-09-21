@@ -2,8 +2,10 @@
 using Vortice.Direct3D11;
 using Vortice.Mathematics;
 using YMM43D.Commons;
+using YMM43D.Graphics;
 using YMM43D.Player;
 using YMM43D.PreviewTool.Rendering;
+using YMM43D.Project.Model;
 using YukkuriMovieMaker.Project.Items;
 
 namespace YMM43D.PreviewTool
@@ -159,8 +161,20 @@ namespace YMM43D.PreviewTool
             pickMarkers = scene.Markers;
             markers.Draw(render, scene.Markers, scene.SelectedMarker);
 
-            foreach (var (previewItem, drawContext) in entries)
-                previewItem.Provider.Draw(render, drawContext);
+            // 「モデルを網で出す」を入れているときは、骨のあるモデルを線だけで描く。
+            try
+            {
+                foreach (var (previewItem, drawContext) in entries)
+                {
+                    RenderStates.IsMeshMode = scene.ShowsMesh && IsModel(previewItem.Item);
+
+                    previewItem.Provider.Draw(render, drawContext);
+                }
+            }
+            finally
+            {
+                RenderStates.IsMeshMode = false;
+            }
 
             pickTargets =
             [
@@ -230,6 +244,9 @@ namespace YMM43D.PreviewTool
 
             return [];
         }
+
+        private static bool IsModel(IVideoItem item)
+            => item is ShapeItem { ShapeParameter: Model3DParameter };
 
         private PreviewBone? SelectedBone(PreviewScene scene)
             => scene.SelectedBone >= 0 && scene.SelectedBone < lastBones.Count
@@ -733,6 +750,8 @@ namespace YMM43D.PreviewTool
 
         // 選んでいる骨の番号。選んでいなければ -1。
         public int SelectedBone { get; init; } = -1;
+
+        public bool ShowsMesh { get; init; }
 
         public IReadOnlyList<SceneMarkerResolver.PlacedMarker> Markers { get; init; } = [];
 
