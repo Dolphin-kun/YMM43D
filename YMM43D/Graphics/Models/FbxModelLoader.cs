@@ -23,6 +23,9 @@ namespace YMM43D.Graphics.Models
             private readonly Dictionary<long, List<(long Child, string Property)>> propertiesOf = [];
             private readonly Dictionary<long, List<long>> parentsOf = [];
             private readonly Dictionary<long, int> images = [];
+
+            private UnityPackage? unity;
+            private bool searchedUnity;
             private readonly Dictionary<long, Matrix4x4> worlds = [];
             private readonly Dictionary<(long Skin, long Model), int> boneOfModel = [];
             private readonly List<(long Skin, long Model)> boneModels = [];
@@ -642,19 +645,51 @@ namespace YMM43D.Graphics.Models
 
                 images[materialId] = -1;
 
-                if (FindTexture(materialId) is not { } texture)
-                    return -1;
-
                 try
                 {
-                    if (ImageBytes(texture) is { Length: > 0 } data)
+                    if (FindTexture(materialId) is { } texture && ImageBytes(texture) is { Length: > 0 } data)
                         return images[materialId] = builder.AddImage(ModelImageDecoder.Decode(data));
+
+                    // 画像をまったく指していない fbx が配られていることがある。
+                    // そばに unitypackage があれば、材質に合う画像をそこから取り出す。
+                    if (objects.GetValueOrDefault(materialId) is { } material
+                        && Unity?.Image(NameOf(material)) is { Length: > 0 } packed)
+                    {
+                        return images[materialId] = builder.AddImage(ModelImageDecoder.Decode(packed));
+                    }
                 }
                 catch (Exception)
                 {
                 }
 
                 return -1;
+            }
+
+            private UnityPackage? Unity
+            {
+                get
+                {
+                    if (!searchedUnity)
+                    {
+                        searchedUnity = true;
+                        unity = UnityPackage.Open(directory, MaterialNames());
+                    }
+
+                    return unity;
+                }
+            }
+
+            private List<string> MaterialNames()
+            {
+                var names = new List<string>();
+
+                foreach (var (_, node) in objects)
+                {
+                    if (node.Name == "Material" && NameOf(node) is { Length: > 0 } name && !names.Contains(name))
+                        names.Add(name);
+                }
+
+                return names;
             }
 
             private FbxNode? FindTexture(long materialId)
