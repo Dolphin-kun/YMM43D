@@ -1,4 +1,4 @@
-using System.Collections.Immutable;
+﻿using System.Collections.Immutable;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Numerics;
@@ -16,7 +16,7 @@ using YukkuriMovieMaker.Settings;
 
 namespace YMM43D.Project.Model
 {
-    internal sealed class Model3DParameter : ShapeParameter3DBase
+    internal sealed class Model3DParameter : ShapeParameter3DBase, IModelLook
     {
         private const string Body = "";
         private const string Rotation = "3D回転";
@@ -168,37 +168,18 @@ namespace YMM43D.Project.Model
         }
 
         // 表情の強さから、形ごとにどれだけ動かすかを出す。
-        internal IReadOnlyList<float>? GetMorphWeights(ModelData model, in FrameContext time)
+        public IReadOnlyList<float>? GetMorphWeights(ModelData model, in FrameContext time)
         {
             if (!model.HasMorphs || Expressions.Count == 0)
                 return null;
 
-            float[]? weights = null;
+            var at = time;
 
-            foreach (var value in Expressions)
-            {
-                if (value.Name.Length == 0 || value.IsStill(time))
-                    continue;
-
-                var strength = value.Weight.GetFloat(time) / 100f;
-
-                foreach (var expression in model.Expressions)
-                {
-                    if (expression.Name != value.Name)
-                        continue;
-
-                    foreach (var bind in expression.Binds)
-                    {
-                        if (bind.Morph < 0 || bind.Morph >= model.Morphs.Length)
-                            continue;
-
-                        weights ??= new float[model.Morphs.Length];
-                        weights[bind.Morph] = Math.Clamp(weights[bind.Morph] + (strength * bind.Weight), 0f, 1f);
-                    }
-                }
-            }
-
-            return weights;
+            return ModelExpressionWeights.Of(
+                model,
+                Expressions
+                    .Where(value => value.Name.Length > 0 && !value.IsStill(at))
+                    .Select(value => (value.Name, value.Weight.GetFloat(at) / 100f)));
         }
 
         private void SyncMaterials()
@@ -259,7 +240,7 @@ namespace YMM43D.Project.Model
             => ModelPose.Compute(model.Bones, GetPose(model, time));
 
         // 骨ごとの回転。動かしていない骨は単位行列のまま。
-        internal IReadOnlyList<Matrix4x4>? GetPose(ModelData model, in FrameContext time)
+        public IReadOnlyList<Matrix4x4>? GetPose(ModelData model, in FrameContext time)
         {
             if (!model.HasBones || Bones.Count == 0)
                 return null;
@@ -297,7 +278,7 @@ namespace YMM43D.Project.Model
             return pose;
         }
 
-        internal IReadOnlyList<ModelImage?> GetReplacements(ModelData model)
+        public IReadOnlyList<ModelImage?> GetReplacements(ModelData model)
         {
             var replacements = new ModelImage?[model.Materials.Length];
 
@@ -311,7 +292,7 @@ namespace YMM43D.Project.Model
         }
 
         // 材質ごとの透け方の上書き。「モデルのまま」の材質は null。
-        internal IReadOnlyList<(ModelBlend Blend, float Cutoff)?> GetBlends(ModelData model)
+        public IReadOnlyList<(ModelBlend Blend, float Cutoff)?> GetBlends(ModelData model)
         {
             var chosen = new (ModelBlend Blend, float Cutoff)?[model.Materials.Length];
 
@@ -334,15 +315,20 @@ namespace YMM43D.Project.Model
         {
         }
 
+        ModelData? IModelLook.Model => Model;
+
         internal ModelData? Model => ModelLibrary.Find(File);
 
-        // 陰影を何段に分けるか。0 ならこれまでどおりなめらかに塗る。
-        internal float ToonSteps => !IsUnlit && IsToon ? ToonLevels : 0f;
+        // モデルの色に掛け合わせる色。
+        public Vector4 Tone => Tint.ToVector4();
 
-        internal SurfaceGloss GetGloss(in FrameContext time)
+        // 陰影を何段に分けるか。0 ならこれまでどおりなめらかに塗る。
+        public float ToonSteps => !IsUnlit && IsToon ? ToonLevels : 0f;
+
+        public SurfaceGloss GetGloss(in FrameContext time)
             => IsUnlit ? SurfaceGloss.None : SurfaceGloss.FromPercent(Gloss.GetFloat(time), GlossSharpness.GetFloat(time));
 
-        internal Matrix4x4 GetLocalMatrix(ModelData model, in FrameContext time)
+        public Matrix4x4 GetLocalMatrix(ModelData model, in FrameContext time)
         {
             var bounds = model.Bounds;
             var extent = bounds.Max - bounds.Min;
