@@ -21,8 +21,7 @@ namespace YMM43D.Project.Model
                 return;
 
             var world = parameter.GetLocalMatrix(model, item.Time) * item.World;
-            var constants = render.CreateConstants(
-                world, item.Opacity, parameter.IsUnlit, item.AlphaCutoff, parameter.GetGloss(item.Time));
+            var gloss = parameter.GetGloss(item.Time);
 
             var mesh = shared.GetMesh(render.Context, model, parameter.Tint.ToVector4(), parameter.GetReplacements(model));
             var states = RenderStates.For(render.Device);
@@ -30,16 +29,54 @@ namespace YMM43D.Project.Model
             var bones = model.HasBones ? shared.WriteBones(render.Context, model, parameter.GetPose(model, item.Time)) : null;
             var pipeline = model.HasBones ? shared.SkinnedPipeline : shared.Pipeline;
 
-            foreach (var (part, texture) in mesh.Parts)
+            var blends = parameter.GetBlends(model);
+
+            foreach (var (shape, texture, part) in Ordered(mesh.Parts, blends, world, render.GetCameraPosition()))
             {
+                var (blend, sharpness) = BlendOf(part, blends);
+
+                // 透かして重ねるところは、影や前後判定のための描画には出さない。
+                if (blend == ModelBlend.Blend && (item.DepthOnly || render.IsShadowPass))
+                    continue;
+
+                var cutoff = blend == ModelBlend.Mask ? MathF.Max(sharpness, item.AlphaCutoff) : item.AlphaCutoff;
+
+                var constants = render.CreateConstants(
+                    world, item.Opacity, parameter.IsUnlit, cutoff, gloss, parameter.ToonSteps);
+
                 var settings = item.ToDrawSettings(FaceCulling.None, texture ?? shared.GetWhite(render.Context)) with
                 {
                     Sampler = states.LinearWrapSampler,
                     Bones = bones,
+
+                    // 透かして重ねるところは、奥行きを書き込むと後ろのものを消してしまう。
+                    SkipDepthWrite = blend == ModelBlend.Blend,
                 };
 
-                pipeline.Draw(render.Context, constants, settings, part);
+                pipeline.Draw(render.Context, constants, settings, shape);
             }
+        }
+
+        // モデルに書いてある透け方。パラメータの「材質」で決めていれば、そちらを使う。
+        private static (ModelBlend Blend, float Cutoff) BlendOf(
+            in ModelPart part, IReadOnlyList<(ModelBlend Blend, float Cutoff)?> chosen)
+            => part.Material >= 0 && part.Material < chosen.Count && chosen[part.Material] is { } set
+                ? set
+                : (part.Blend, part.Cutoff);
+
+        // 透かして重ねるところだけ、奥にあるものから順に描く。ほかはモデルに書かれた順のまま。
+        private static IEnumerable<(IMesh Mesh, ID3D11ShaderResourceView? Texture, ModelPart Part)> Ordered(
+            IReadOnlyList<(IMesh Mesh, ID3D11ShaderResourceView? Texture, ModelPart Part)> parts,
+            IReadOnlyList<(ModelBlend Blend, float Cutoff)?> chosen,
+            Matrix4x4 world,
+            Vector3 camera)
+        {
+            var solid = parts.Where(one => BlendOf(one.Part, chosen).Blend != ModelBlend.Blend);
+            var clear = parts
+                .Where(one => BlendOf(one.Part, chosen).Blend == ModelBlend.Blend)
+                .OrderByDescending(one => Vector3.DistanceSquared(Vector3.Transform(one.Part.Center, world), camera));
+
+            return solid.Concat(clear);
         }
 
         protected override WorldBounds GetWorldBounds(in FrameContext itemTime)

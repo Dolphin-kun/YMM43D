@@ -13,6 +13,7 @@ cbuffer SceneConstants : register(b0)
     float4 FogColor;
     float4 Options;
     float4 Surface;
+    float4 Shading;
 };
 #define Opacity     Options.x
 #define Unlit       Options.y
@@ -22,5 +23,6 @@ cbuffer SceneConstants : register(b0)
 #define LightCount  Surface.y
 #define Gloss       Surface.z
 #define GlossPower  Surface.w
+#define ToonSteps   Shading.x
 
 #endif

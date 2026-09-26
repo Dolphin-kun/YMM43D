@@ -17,7 +17,7 @@ namespace YMM43D.Graphics.Models
 
         public IReadOnlyList<ModelImage?> Replacements { get; }
 
-        public IReadOnlyList<(IMesh Mesh, ID3D11ShaderResourceView? Texture)> Parts { get; }
+        public IReadOnlyList<(IMesh Mesh, ID3D11ShaderResourceView? Texture, ModelPart Part)> Parts { get; }
 
         public ModelMesh(
             ID3D11Device device,
@@ -70,7 +70,7 @@ namespace YMM43D.Graphics.Models
                     replaced[i] = CreateTexture(device, context, image);
             }
 
-            var parts = new List<(IMesh, ID3D11ShaderResourceView?)>();
+            var parts = new List<(IMesh, ID3D11ShaderResourceView?, ModelPart)>();
 
             foreach (var part in source.Parts)
             {
@@ -84,7 +84,7 @@ namespace YMM43D.Graphics.Models
 
                 var texture = part.Material >= 0 && part.Material < replaced.Length ? replaced[part.Material] : null;
 
-                parts.Add((mesh, texture ?? (part.Image >= 0 ? textures[part.Image] : null)));
+                parts.Add((mesh, texture ?? (part.Image >= 0 ? textures[part.Image] : null), part));
             }
 
             Parts = parts;

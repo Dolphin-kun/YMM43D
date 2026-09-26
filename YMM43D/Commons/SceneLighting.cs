@@ -14,7 +14,8 @@ namespace YMM43D.Commons
             SceneLighting? lighting = null,
             bool unlit = false,
             float alphaCutoff = 0f,
-            SurfaceGloss gloss = default)
+            SurfaceGloss gloss = default,
+            float toonSteps = 0f)
         {
             var scene = lighting ?? SceneLighting.Default;
             var fog = scene.Fog;
@@ -28,6 +29,7 @@ namespace YMM43D.Commons
             constants.Surface.Y = scene.Lights.Count;
             constants.Surface.Z = gloss.Strength;
             constants.Surface.W = gloss.Power;
+            constants.Shading.X = toonSteps;
 
             return constants;
         }

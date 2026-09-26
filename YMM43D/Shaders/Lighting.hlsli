@@ -22,6 +22,19 @@ float LightFalloff(Light light, float3 world, out float3 toLight)
     return fade * cone * cone;
 }
 
+// なめらかな明るさを決まった段数に丸める。境目はわずかにぼかして、ぎざぎざを抑える。
+float Toonify(float level)
+{
+    const float softness = 0.04;
+
+    float steps = max(ToonSteps, 2.0) - 1.0;
+    float scaled = saturate(level) * steps;
+    float stair = floor(scaled);
+    float edge = smoothstep(0.5 - softness, 0.5 + softness, scaled - stair);
+
+    return (stair + edge) / steps;
+}
+
 float3 ApplyLight(float3 color, float3 normal, float3 world)
 {
     float3 worldDx = ddx(world);
@@ -58,16 +71,21 @@ float3 ApplyLight(float3 color, float3 normal, float3 world)
         if (lambert <= 0.0 || fade <= 0.0)
             continue;
 
-        float3 received = light.Color.rgb * fade * ShadowAt(light, world, worldDx, worldDy, n, lambert);
+        float shaded = lambert * ShadowAt(light, world, worldDx, worldDy, n, lambert);
 
-        sum += received * lambert;
+        if (ToonSteps >= 2.0)
+            shaded = Toonify(shaded);
+
+        float3 received = light.Color.rgb * fade;
+
+        sum += received * shaded;
 
         if (Gloss > 0.0)
         {
             float3 halfway = normalize(toLight + toEye);
             float normalization = (GlossPower + 8.0) / 8.0;
 
-            shine += received * lambert * normalization * pow(saturate(dot(n, halfway)), GlossPower);
+            shine += received * shaded * normalization * pow(saturate(dot(n, halfway)), GlossPower);
         }
     }
 

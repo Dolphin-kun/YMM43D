@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Numerics;
 using System.Windows.Media;
@@ -51,8 +52,45 @@ namespace YMM43D.Project.Model
         [Display(GroupName = Paint, Name = "陰影をつけない",
             Description = "光源を無視して、モデルの色のまま塗ります")]
         [ToggleSlider]
-        public bool IsUnlit { get => isUnlit; set => Set(ref isUnlit, value); }
+        public bool IsUnlit
+        {
+            get => isUnlit;
+            set
+            {
+                Set(ref isUnlit, value);
+                OnPropertyChanged(nameof(IsShaded));
+            }
+        }
         private bool isUnlit;
+
+        [Display(GroupName = Paint, Name = "アニメ塗り",
+            Description = "陰影をなめらかにせず、決まった段数に分けて塗ります。トゥーン調のモデル向け")]
+        [ToggleSlider]
+        [ShowPropertyEditorWhen(nameof(IsUnlit), false)]
+        public bool IsToon
+        {
+            get => isToon;
+            set
+            {
+                Set(ref isToon, value);
+                OnPropertyChanged(nameof(IsShaded));
+            }
+        }
+        private bool isToon;
+
+        [Display(GroupName = Paint, Name = "塗りの段数", Description = "明るさを何段に分けるか")]
+        [TextBoxSlider("F0", "段", 2, 5)]
+        [ShowPropertyEditorWhen(nameof(IsShaded), true)]
+        public int ToonLevels
+        {
+            get => toonLevels;
+            set => Set(ref toonLevels, Math.Clamp(value, 2, 8));
+        }
+        private int toonLevels = 2;
+
+        [Browsable(false)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public bool IsShaded => !IsUnlit && IsToon;
 
         [Display(GroupName = Paint, Name = "つや",
             Description = "光が映り込んだ明るい点の強さ。0 でつやなし")]
@@ -188,19 +226,34 @@ namespace YMM43D.Project.Model
         internal IReadOnlyList<ModelImage?> GetReplacements(ModelData model)
         {
             var replacements = new ModelImage?[model.Materials.Length];
-            var slots = Materials;
 
             for (var i = 0; i < replacements.Length; i++)
             {
-                var slot = i < slots.Count && slots[i].Name == model.Materials[i]
-                    ? slots[i]
-                    : slots.FirstOrDefault(candidate => candidate.Name == model.Materials[i]);
-
-                if (slot is { Texture.Length: > 0 })
+                if (FindSlot(model, i) is { Texture.Length: > 0 } slot)
                     replacements[i] = ModelLibrary.FindImage(slot.Texture);
             }
 
             return replacements;
+        }
+
+        // 材質ごとの透け方の上書き。「モデルのまま」の材質は null。
+        internal IReadOnlyList<(ModelBlend Blend, float Cutoff)?> GetBlends(ModelData model)
+        {
+            var chosen = new (ModelBlend Blend, float Cutoff)?[model.Materials.Length];
+
+            for (var i = 0; i < chosen.Length; i++)
+                chosen[i] = FindSlot(model, i)?.Override;
+
+            return chosen;
+        }
+
+        private ModelMaterialSlot? FindSlot(ModelData model, int material)
+        {
+            var slots = Materials;
+
+            return material < slots.Count && slots[material].Name == model.Materials[material]
+                ? slots[material]
+                : slots.FirstOrDefault(candidate => candidate.Name == model.Materials[material]);
         }
 
         public Model3DParameter() : this(null)
@@ -208,6 +261,9 @@ namespace YMM43D.Project.Model
         }
 
         internal ModelData? Model => ModelLibrary.Find(File);
+
+        // 陰影を何段に分けるか。0 ならこれまでどおりなめらかに塗る。
+        internal float ToonSteps => !IsUnlit && IsToon ? ToonLevels : 0f;
 
         internal SurfaceGloss GetGloss(in FrameContext time)
             => IsUnlit ? SurfaceGloss.None : SurfaceGloss.FromPercent(Gloss.GetFloat(time), GlossSharpness.GetFloat(time));
@@ -254,8 +310,12 @@ namespace YMM43D.Project.Model
             public Animation GlossSharpness { get; } = new(50, 0, 100);
             public Color Tint { get; set; } = Colors.White;
             public bool IsUnlit { get; set; }
+            public bool IsToon { get; set; }
+            public int ToonLevels { get; set; } = 2;
             public ImmutableList<string> MaterialNames { get; set; } = [];
             public ImmutableList<string> MaterialTextures { get; set; } = [];
+            public ImmutableList<ModelSlotBlend> MaterialBlends { get; set; } = [];
+            public ImmutableList<double> MaterialCutoffs { get; set; } = [];
 
             public SharedData(Model3DParameter parameter)
             {
@@ -268,8 +328,12 @@ namespace YMM43D.Project.Model
                 GlossSharpness.CopyFrom(parameter.GlossSharpness);
                 Tint = parameter.Tint;
                 IsUnlit = parameter.IsUnlit;
+                IsToon = parameter.IsToon;
+                ToonLevels = parameter.ToonLevels;
                 MaterialNames = [.. parameter.Materials.Select(slot => slot.Name)];
                 MaterialTextures = [.. parameter.Materials.Select(slot => slot.Texture)];
+                MaterialBlends = [.. parameter.Materials.Select(slot => slot.Blend)];
+                MaterialCutoffs = [.. parameter.Materials.Select(slot => slot.Cutoff)];
             }
 
             public void CopyTo(Model3DParameter parameter)
@@ -283,8 +347,14 @@ namespace YMM43D.Project.Model
                 parameter.GlossSharpness.CopyFrom(GlossSharpness);
                 parameter.Tint = Tint;
                 parameter.IsUnlit = IsUnlit;
+                parameter.IsToon = IsToon;
+                parameter.ToonLevels = ToonLevels;
                 parameter.Materials = [.. MaterialNames.Select((name, i) =>
-                    new ModelMaterialSlot(name, i < MaterialTextures.Count ? MaterialTextures[i] : string.Empty))];
+                    new ModelMaterialSlot(name, i < MaterialTextures.Count ? MaterialTextures[i] : string.Empty)
+                    {
+                        Blend = i < MaterialBlends.Count ? MaterialBlends[i] : ModelSlotBlend.Model,
+                        Cutoff = i < MaterialCutoffs.Count ? MaterialCutoffs[i] : 0.5,
+                    })];
             }
         }
     }

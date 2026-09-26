@@ -5,7 +5,28 @@ using YMM43D.Commons;
 
 namespace YMM43D.Graphics.Models
 {
-    public readonly record struct ModelPart(int IndexStart, int IndexCount, Vector4 Color, int Image, int Material);
+    // 材質の透け方。glTF の alphaMode に合わせる。
+    public enum ModelBlend
+    {
+        // そのまま描く。
+        Opaque,
+
+        // 薄いところを切り抜く（髪の毛先やまつ毛など）。
+        Mask,
+
+        // 透かして重ねる。奥から順に描き、奥行きは書き込まない。
+        Blend,
+    }
+
+    public readonly record struct ModelPart(
+        int IndexStart,
+        int IndexCount,
+        Vector4 Color,
+        int Image,
+        int Material,
+        ModelBlend Blend,
+        float Cutoff,
+        Vector3 Center);
 
     public sealed record ModelImage(int Width, int Height, byte[] Pixels);
 
@@ -190,6 +211,8 @@ namespace YMM43D.Graphics.Models
         private Vector4 partColor = Vector4.One;
         private int partImage = -1;
         private int partMaterial = -1;
+        private ModelBlend partBlend = ModelBlend.Opaque;
+        private float partCutoff = 0.5f;
 
         public List<ModelBone> Bones { get; } = [];
 
@@ -203,11 +226,19 @@ namespace YMM43D.Graphics.Models
             return images.Count - 1;
         }
 
-        public void BeginPart(Vector4 color, int image, string key, string name)
+        public void BeginPart(
+            Vector4 color,
+            int image,
+            string key,
+            string name,
+            ModelBlend blend = ModelBlend.Opaque,
+            float cutoff = 0.5f)
         {
             EndPart();
             partColor = color;
             partImage = image;
+            partBlend = blend;
+            partCutoff = cutoff;
 
             if (!materialKeys.TryGetValue(key, out partMaterial))
             {
@@ -271,9 +302,39 @@ namespace YMM43D.Graphics.Models
         private void EndPart()
         {
             if (indices.Count > partStart)
-                parts.Add(new ModelPart(partStart, indices.Count - partStart, partColor, partImage, partMaterial));
+            {
+                parts.Add(new ModelPart(
+                    partStart,
+                    indices.Count - partStart,
+                    partColor,
+                    partImage,
+                    partMaterial,
+                    partBlend,
+                    partCutoff,
+                    CenterOf(partStart, indices.Count - partStart)));
+            }
 
             partStart = indices.Count;
+        }
+
+        // 透かして重ねるところを奥から順に描くための、そのかたまりの真ん中。
+        private Vector3 CenterOf(int start, int count)
+        {
+            if (count == 0)
+                return Vector3.Zero;
+
+            var min = new Vector3(float.MaxValue);
+            var max = new Vector3(float.MinValue);
+
+            for (var i = start; i < start + count; i++)
+            {
+                var position = vertices[(int)indices[i]].Position;
+
+                min = Vector3.Min(min, position);
+                max = Vector3.Max(max, position);
+            }
+
+            return (min + max) * 0.5f;
         }
     }
 }

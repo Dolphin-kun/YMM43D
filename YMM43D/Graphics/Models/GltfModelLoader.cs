@@ -322,10 +322,10 @@ namespace YMM43D.Graphics.Models
                         ? ReadIndices(i.GetInt32())
                         : [.. Enumerable.Range(0, count).Select(index => (uint)index)];
 
-                    var (color, image) = ReadMaterial(primitive);
+                    var (color, image, blend, cutoff) = ReadMaterial(primitive);
                     var (key, name) = MaterialName(primitive);
 
-                    builder.BeginPart(color, image, key, name);
+                    builder.BeginPart(color, image, key, name, blend, cutoff);
 
                     var start = (uint)builder.VertexCount;
 
@@ -433,23 +433,39 @@ namespace YMM43D.Graphics.Models
                 return ($"#{number}", name);
             }
 
-            private (Vector4 Color, int Image) ReadMaterial(JsonElement primitive)
+            private (Vector4 Color, int Image, ModelBlend Blend, float Cutoff) ReadMaterial(JsonElement primitive)
             {
                 if (!primitive.TryGetProperty("material", out var index) || !root.TryGetProperty("materials", out var materials))
-                    return (Vector4.One, -1);
+                    return (Vector4.One, -1, ModelBlend.Opaque, 0.5f);
 
                 var material = materials[index.GetInt32()];
+                var (blend, cutoff) = ReadAlpha(material);
 
                 if (!material.TryGetProperty("pbrMetallicRoughness", out var pbr))
-                    return (Vector4.One, -1);
+                    return (Vector4.One, -1, blend, cutoff);
 
                 var factor = pbr.TryGetProperty("baseColorFactor", out var f) ? Floats(f, 4) : [1f, 1f, 1f, 1f];
                 var color = new Vector4(factor[0], factor[1], factor[2], factor[3]);
 
                 if (!pbr.TryGetProperty("baseColorTexture", out var texture))
-                    return (color, -1);
+                    return (color, -1, blend, cutoff);
 
-                return (color, ImageOfTexture(texture.GetProperty("index").GetInt32()));
+                return (color, ImageOfTexture(texture.GetProperty("index").GetInt32()), blend, cutoff);
+            }
+
+            // 材質の透け方。glTF の alphaMode と alphaCutoff をそのまま読む。
+            private static (ModelBlend Blend, float Cutoff) ReadAlpha(JsonElement material)
+            {
+                var cutoff = material.TryGetProperty("alphaCutoff", out var given) ? given.GetSingle() : 0.5f;
+
+                var blend = material.TryGetProperty("alphaMode", out var mode) ? mode.GetString() switch
+                {
+                    "MASK" => ModelBlend.Mask,
+                    "BLEND" => ModelBlend.Blend,
+                    _ => ModelBlend.Opaque,
+                } : ModelBlend.Opaque;
+
+                return (blend, cutoff);
             }
 
             private int ImageOfTexture(int textureIndex)
