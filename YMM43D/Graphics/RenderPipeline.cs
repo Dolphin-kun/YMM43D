@@ -102,6 +102,9 @@ namespace YMM43D.Graphics
             if (settings.Bones is not null)
                 context.VSSetShaderResource(Models.ModelBoneBuffer.Slot, settings.Bones);
 
+            if (settings.Morphs is not null)
+                context.VSSetShaderResource(Models.ModelMorphBuffer.Slot, settings.Morphs);
+
             if (mesh.IndexBuffer is not null)
             {
                 context.IASetIndexBuffer(mesh.IndexBuffer, mesh.IndexFormat, 0);

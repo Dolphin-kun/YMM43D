@@ -27,7 +27,8 @@ namespace YMM43D.Project.Model
             var states = RenderStates.For(render.Device);
 
             var bones = model.HasBones ? shared.WriteBones(render.Context, model, parameter.GetPose(model, item.Time)) : null;
-            var pipeline = model.HasBones ? shared.SkinnedPipeline : shared.Pipeline;
+            var morphs = shared.WriteMorphs(render.Context, model, parameter.GetMorphWeights(model, item.Time));
+            var pipeline = model.IsDeformed ? shared.SkinnedPipeline : shared.Pipeline;
 
             var blends = parameter.GetBlends(model);
 
@@ -48,6 +49,7 @@ namespace YMM43D.Project.Model
                 {
                     Sampler = states.LinearWrapSampler,
                     Bones = bones,
+                    Morphs = morphs,
 
                     // 透かして重ねるところは、奥行きを書き込むと後ろのものを消してしまう。
                     SkipDepthWrite = blend == ModelBlend.Blend,
@@ -107,6 +109,7 @@ namespace YMM43D.Project.Model
             private ID3D11ShaderResourceView? white;
             private RenderPipeline<TransformConstants>? skinnedPipeline;
             private ModelBoneBuffer? boneBuffer;
+            private ModelMorphBuffer? morphBuffer;
 
             public RenderPipeline<TransformConstants> Pipeline { get; }
 
@@ -129,6 +132,17 @@ namespace YMM43D.Project.Model
                 boneBuffer.Write(context, ModelPose.Skin(model, pose));
 
                 return boneBuffer.View;
+            }
+
+            public ID3D11ShaderResourceView? WriteMorphs(
+                ID3D11DeviceContext context, ModelData model, IReadOnlyList<float>? weights)
+            {
+                if (!model.HasMorphs)
+                    return null;
+
+                morphBuffer ??= new ModelMorphBuffer(device);
+
+                return morphBuffer.Write(context, model, weights);
             }
 
             public ID3D11ShaderResourceView GetWhite(ID3D11DeviceContext context)
@@ -175,6 +189,8 @@ namespace YMM43D.Project.Model
                 mesh = null;
                 boneBuffer?.Dispose();
                 boneBuffer = null;
+                morphBuffer?.Dispose();
+                morphBuffer = null;
                 skinnedPipeline?.Dispose();
                 skinnedPipeline = null;
                 white?.Dispose();

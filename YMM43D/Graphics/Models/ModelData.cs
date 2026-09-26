@@ -30,6 +30,18 @@ namespace YMM43D.Graphics.Models
 
     public sealed record ModelImage(int Width, int Height, byte[] Pixels);
 
+    // 表情で動く頂点 1 つぶん。動かない頂点は持たない。
+    public readonly record struct ModelMorphDelta(uint Vertex, Vector3 Offset);
+
+    // 表情の形 1 つ（「あ」の口、閉じた目など）。
+    public sealed record ModelMorph(string Name, ModelMorphDelta[] Deltas);
+
+    // 表情がどの形をどれだけ使うか。
+    public readonly record struct ModelExpressionBind(int Morph, float Weight);
+
+    // 表情 1 つ。VRM では「あ」「まばたき」「喜」などが決まった名前で入っている。
+    public sealed record ModelExpression(string Name, string Preset, ModelExpressionBind[] Binds);
+
     // 骨。親からの位置関係（Local）と、骨が動いていないときの頂点との関係（InverseBind）を持つ。
     public readonly record struct ModelBone(string Name, int Parent, Matrix4x4 Local, Matrix4x4 InverseBind);
 
@@ -49,7 +61,9 @@ namespace YMM43D.Graphics.Models
         string[] materials,
         ModelBone[]? bones = null,
         ModelInfluence[]? influences = null,
-        Matrix4x4? root = null)
+        Matrix4x4? root = null,
+        ModelMorph[]? morphs = null,
+        ModelExpression[]? expressions = null)
     {
         public const string NoMaterial = "（材質なし）";
 
@@ -64,6 +78,16 @@ namespace YMM43D.Graphics.Models
         public Matrix4x4 Root { get; } = root ?? Matrix4x4.Identity;
 
         public bool HasBones => Bones.Length > 0 && Influences.Length == vertices.Length;
+
+        // 表情で動かす形と、その組み合わせ。
+        public ModelMorph[] Morphs { get; } = morphs ?? [];
+
+        public ModelExpression[] Expressions { get; } = expressions ?? [];
+
+        public bool HasMorphs => Morphs.Length > 0;
+
+        // 骨か表情があるときは、頂点を GPU で動かす描き方に切り替える。
+        public bool IsDeformed => HasBones || HasMorphs;
 
         public Vertex[] Vertices { get; } = vertices;
 
@@ -216,6 +240,14 @@ namespace YMM43D.Graphics.Models
 
         public List<ModelBone> Bones { get; } = [];
 
+        // 表情で動く形。名前で引けるようにしておく（VRM の表情が番号で指してくる）。
+        public List<ModelMorph> Morphs { get; } = [];
+
+        public List<ModelExpression> Expressions { get; } = [];
+
+        // 動かす量が小さすぎる頂点は持たない。
+        public const float MorphThreshold = 1e-5f;
+
         public Matrix4x4 Root { get; set; } = Matrix4x4.Identity;
 
         public int VertexCount => vertices.Count;
@@ -296,7 +328,9 @@ namespace YMM43D.Graphics.Models
                 [.. used.Select(index => materials[index])],
                 skinned ? [.. Bones] : null,
                 skinned ? [.. influences] : null,
-                Root);
+                Root,
+                [.. Morphs],
+                [.. Expressions]);
         }
 
         private void EndPart()

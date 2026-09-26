@@ -68,6 +68,10 @@ namespace YMM43D.Graphics.Models
             private readonly Dictionary<int, byte[]> buffers = [];
             private readonly Dictionary<int, int> images = [];
 
+            // 表情で動く形。(メッシュ番号, 形の番号) で引く。
+            private readonly Dictionary<(int Mesh, int Target), List<ModelMorphDelta>> morphs = [];
+            private readonly List<(int Mesh, int Target)> morphOrder = [];
+
             private readonly Dictionary<int, int> boneOfNode = [];
             private readonly List<int> boneOrder = [];
             private readonly Dictionary<int, int> parentOfNode = [];
@@ -85,6 +89,8 @@ namespace YMM43D.Graphics.Models
 
                 foreach (var node in RootNodes())
                     Visit(node, baseMatrix, 0);
+
+                FinishMorphs();
 
                 return builder.Build();
             }
@@ -254,7 +260,11 @@ namespace YMM43D.Graphics.Models
                     var skinned = node.TryGetProperty("skin", out var skin);
                     var placed = skinned ? Matrix4x4.Identity : world;
 
-                    AddMesh(root.GetProperty("meshes")[mesh.GetInt32()], placed, skinned ? skin.GetInt32() : -1);
+                    AddMesh(
+                        root.GetProperty("meshes")[mesh.GetInt32()],
+                        placed,
+                        skinned ? skin.GetInt32() : -1,
+                        mesh.GetInt32());
                 }
 
                 if (node.TryGetProperty("children", out var children))
@@ -286,7 +296,7 @@ namespace YMM43D.Graphics.Models
                      * Matrix4x4.CreateTranslation(translation[0], translation[1], translation[2]);
             }
 
-            private void AddMesh(JsonElement mesh, in Matrix4x4 world, int skinIndex = -1)
+            private void AddMesh(JsonElement mesh, in Matrix4x4 world, int skinIndex = -1, int meshIndex = -1)
             {
                 Matrix4x4.Invert(world, out var inverse);
                 var normalMatrix = Matrix4x4.Transpose(inverse);
@@ -345,6 +355,8 @@ namespace YMM43D.Graphics.Models
                             Influence(joints, weights, skinJoints, v));
                     }
 
+                    AddMorphs(mesh, primitive, meshIndex, start, count, normalMatrix);
+
                     for (var t = 0; t + 2 < indices.Length; t += 3)
                     {
                         if (indices[t] >= count || indices[t + 1] >= count || indices[t + 2] >= count)
@@ -360,6 +372,179 @@ namespace YMM43D.Graphics.Models
                             FillFlatNormal(a, b, d);
                     }
                 }
+            }
+
+            // 集めた動きを形ごとにまとめ、表情の組み合わせを読む。
+            private void FinishMorphs()
+            {
+                for (var i = 0; i < morphOrder.Count && i < builder.Morphs.Count; i++)
+                    builder.Morphs[i] = builder.Morphs[i] with { Deltas = [.. morphs[morphOrder[i]]] };
+
+                if (ReadVrmExpressions() || ReadVrm1Expressions())
+                    return;
+
+                // VRM でなければ、形ひとつひとつをそのまま表情として並べる。
+                for (var i = 0; i < builder.Morphs.Count; i++)
+                {
+                    builder.Expressions.Add(
+                        new ModelExpression(builder.Morphs[i].Name, string.Empty, [new ModelExpressionBind(i, 1f)]));
+                }
+            }
+
+            private JsonElement? Extension(string name)
+                => root.TryGetProperty("extensions", out var extensions)
+                    && extensions.TryGetProperty(name, out var found) ? found : null;
+
+            // VRM 0.x の表情。「あ」「まばたき」などが、形の番号と強さの組で書かれている。
+            private bool ReadVrmExpressions()
+            {
+                if (Extension("VRM") is not { } vrm
+                    || !vrm.TryGetProperty("blendShapeMaster", out var master)
+                    || !master.TryGetProperty("blendShapeGroups", out var groups))
+                {
+                    return false;
+                }
+
+                foreach (var group in groups.EnumerateArray())
+                {
+                    var binds = new List<ModelExpressionBind>();
+
+                    if (group.TryGetProperty("binds", out var list))
+                    {
+                        foreach (var bind in list.EnumerateArray())
+                        {
+                            var mesh = bind.TryGetProperty("mesh", out var m) ? m.GetInt32() : -1;
+                            var index = bind.TryGetProperty("index", out var i) ? i.GetInt32() : -1;
+                            var weight = bind.TryGetProperty("weight", out var w) ? w.GetSingle() / 100f : 1f;
+
+                            if (MorphIndex(mesh, index) is { } morph)
+                                binds.Add(new ModelExpressionBind(morph, weight));
+                        }
+                    }
+
+                    var preset = group.TryGetProperty("presetName", out var p) ? p.GetString() ?? string.Empty : string.Empty;
+                    var name = group.TryGetProperty("name", out var n) ? n.GetString() ?? string.Empty : string.Empty;
+
+                    if (binds.Count > 0)
+                        builder.Expressions.Add(new ModelExpression(name.Length > 0 ? name : preset, preset, [.. binds]));
+                }
+
+                return builder.Expressions.Count > 0;
+            }
+
+            // VRM 1.0 の表情。指しているのがメッシュではなくノードになっている。
+            private bool ReadVrm1Expressions()
+            {
+                if (Extension("VRMC_vrm") is not { } vrm || !vrm.TryGetProperty("expressions", out var expressions))
+                    return false;
+
+                foreach (var kind in new[] { "preset", "custom" })
+                {
+                    if (!expressions.TryGetProperty(kind, out var group))
+                        continue;
+
+                    foreach (var one in group.EnumerateObject())
+                    {
+                        var binds = new List<ModelExpressionBind>();
+
+                        if (one.Value.TryGetProperty("morphTargetBinds", out var list))
+                        {
+                            foreach (var bind in list.EnumerateArray())
+                            {
+                                var node = bind.TryGetProperty("node", out var n) ? n.GetInt32() : -1;
+                                var index = bind.TryGetProperty("index", out var i) ? i.GetInt32() : -1;
+                                var weight = bind.TryGetProperty("weight", out var w) ? w.GetSingle() : 1f;
+
+                                if (MorphIndex(MeshOfNode(node), index) is { } morph)
+                                    binds.Add(new ModelExpressionBind(morph, weight));
+                            }
+                        }
+
+                        if (binds.Count > 0)
+                            builder.Expressions.Add(new ModelExpression(one.Name, one.Name, [.. binds]));
+                    }
+                }
+
+                return builder.Expressions.Count > 0;
+            }
+
+            private int MeshOfNode(int node)
+            {
+                if (node < 0 || !root.TryGetProperty("nodes", out var nodes) || node >= nodes.GetArrayLength())
+                    return -1;
+
+                return nodes[node].TryGetProperty("mesh", out var mesh) ? mesh.GetInt32() : -1;
+            }
+
+            // 書き手によっては、メッシュの番号ではなくノードの番号で指してくる。両方で探す。
+            private int? MorphIndex(int mesh, int target)
+            {
+                var found = morphOrder.IndexOf((mesh, target));
+
+                if (found < 0 && MeshOfNode(mesh) is var byNode and >= 0)
+                    found = morphOrder.IndexOf((byNode, target));
+
+                return found >= 0 ? found : null;
+            }
+
+            // 表情で動く形（モーフターゲット）を読む。
+            // 1 つのメッシュが複数のかたまりに分かれていても、同じ番号の形は 1 つにまとめる。
+            private void AddMorphs(
+                JsonElement mesh, JsonElement primitive, int meshIndex, uint start, int count, in Matrix4x4 normalMatrix)
+            {
+                if (meshIndex < 0 || !primitive.TryGetProperty("targets", out var targets))
+                    return;
+
+                var names = TargetNames(mesh, primitive);
+                var index = 0;
+
+                foreach (var target in targets.EnumerateArray())
+                {
+                    if (!target.TryGetProperty("POSITION", out var accessor))
+                    {
+                        index++;
+                        continue;
+                    }
+
+                    var offsets = ReadVectors(accessor.GetInt32(), 3);
+                    var morph = MorphAt(meshIndex, index, index < names.Length ? names[index] : $"表情 {index + 1}");
+
+                    for (var v = 0; v < count && (v * 3) + 2 < offsets.Length; v++)
+                    {
+                        var offset = Vector3.TransformNormal(
+                            new Vector3(offsets[v * 3], offsets[v * 3 + 1], offsets[v * 3 + 2]), normalMatrix);
+
+                        if (offset.LengthSquared() > ModelBuilder.MorphThreshold * ModelBuilder.MorphThreshold)
+                            morph.Add(new ModelMorphDelta(start + (uint)v, offset));
+                    }
+
+                    index++;
+                }
+            }
+
+            private static string[] TargetNames(JsonElement mesh, JsonElement primitive)
+            {
+                foreach (var holder in new[] { primitive, mesh })
+                {
+                    if (holder.TryGetProperty("extras", out var extras)
+                        && extras.TryGetProperty("targetNames", out var names))
+                    {
+                        return [.. names.EnumerateArray().Select(one => one.GetString() ?? string.Empty)];
+                    }
+                }
+
+                return [];
+            }
+
+            private List<ModelMorphDelta> MorphAt(int meshIndex, int target, string name)
+            {
+                if (morphs.TryGetValue((meshIndex, target), out var known))
+                    return known;
+
+                morphOrder.Add((meshIndex, target));
+                builder.Morphs.Add(new ModelMorph(name, []));
+
+                return morphs[(meshIndex, target)] = [];
             }
 
             private int[] JointsOf(int skinIndex)

@@ -20,5 +20,8 @@ namespace YMM43D.Graphics
 
         // 骨ごとの行列。骨で動かすモデルのときだけ入れる。
         public ID3D11ShaderResourceView? Bones { get; init; }
+
+        // 表情で頂点をずらす量。表情のあるモデルのときだけ入れる。
+        public ID3D11ShaderResourceView? Morphs { get; init; }
     }
 }

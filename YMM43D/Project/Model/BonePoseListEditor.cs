@@ -20,11 +20,6 @@ namespace YMM43D.Project.Model
         private static readonly string[] Shown =
             [nameof(ModelBonePose.RotationX), nameof(ModelBonePose.RotationY), nameof(ModelBonePose.RotationZ)];
 
-        private static readonly PropertiesCache cache = new();
-
-        // 見出しの列の幅。本体のほかの編集欄（3D回転など）とだいたい左端がそろう。
-        private const double LabelWidth = 80;
-
         private readonly StackPanel panel = new();
         private readonly List<(PropertyEditorAttribute2 Attribute, FrameworkElement Control)> editors = [];
 
@@ -179,56 +174,20 @@ namespace YMM43D.Project.Model
         // 骨 1 本ぶんの編集欄。いつもの編集欄をそのまま作って並べる。
         private UIElement Values(ModelBonePose pose)
         {
-            var grid = new Grid { Margin = new Thickness(0, 2, 0, 6) };
-
-            // 見出しの幅はそろえる。これより長い名前が来たときだけ広がる。
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto, MinWidth = LabelWidth });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            var grid = ModelEditorRows.Table();
 
             foreach (var name in Shown)
             {
-                if (typeof(ModelBonePose).GetProperty(name) is not { } info
-                    || cache.GetCustomAttribute<PropertyEditorAttribute2>(info) is not { } attribute)
-                {
+                if (ModelEditorRows.Add(grid, item ?? pose, pose, name, null, editorInfo) is not { } made)
                     continue;
-                }
 
-                var control = attribute.Create();
-
-                attribute.SetBindings(control, [new ItemProperty(item ?? pose, pose, info, cache)]);
-
-                if (control is IPropertyEditorControl2 told && editorInfo is { } known)
-                    told.SetEditorInfo(known);
-
-                if (control is IPropertyEditorControl edited)
+                if (made.Control is IPropertyEditorControl edited)
                 {
                     edited.BeginEdit += OnBeginEdit;
                     edited.EndEdit += OnEndEdit;
                 }
 
-                editors.Add((attribute, control));
-
-                // 中間点を打つと編集欄が縦に伸びるので、見出しは上に合わせて置く。
-                // 編集欄は中間点を打つと縦に伸びるので、見出しは上詰めにする。
-                // 横は列の幅いっぱいに広げたうえで、文字を真ん中に寄せる。
-                var label = new TextBlock
-                {
-                    Text = cache.GetCustomAttribute<DisplayAttribute>(info)?.Name ?? name,
-                    VerticalAlignment = VerticalAlignment.Top,
-                    TextAlignment = TextAlignment.Center,
-                    Margin = new Thickness(4, 4, 8, 0),
-                };
-
-                grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-
-                var row = grid.RowDefinitions.Count - 1;
-
-                Grid.SetRow(label, row);
-                Grid.SetRow(control, row);
-                Grid.SetColumn(control, 1);
-
-                grid.Children.Add(label);
-                grid.Children.Add(control);
+                editors.Add(made);
             }
 
             return grid;

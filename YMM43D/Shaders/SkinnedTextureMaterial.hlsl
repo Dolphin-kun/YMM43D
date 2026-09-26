@@ -15,6 +15,9 @@ struct BoneMatrix
 
 StructuredBuffer<BoneMatrix> Bones : register(t3);
 
+// 表情で頂点をずらす量。つないでいないときは 0 が返る。
+StructuredBuffer<float4> Morphs : register(t4);
+
 struct VS_IN_SKINNED
 {
     float3 Pos : POSITION;
@@ -23,6 +26,7 @@ struct VS_IN_SKINNED
     float3 Nrm : NORMAL;
     uint4  Idx : BLENDINDICES;
     float4 Wgt : BLENDWEIGHT;
+    uint   Id  : SV_VertexID;
 };
 
 float4 ApplyBone(float4 value, BoneMatrix bone)
@@ -40,13 +44,16 @@ float4 Blend(float4 value, uint4 indices, float4 weights)
 
 PS_IN VSMain(VS_IN_SKINNED input)
 {
+    // 表情のぶんだけ先にずらしてから、骨で動かす。
+    float3 shaped = input.Pos + Morphs[input.Id].xyz;
+
     float total = input.Wgt.x + input.Wgt.y + input.Wgt.z + input.Wgt.w;
 
     // 骨に結びついていない頂点は、そのままの場所に置く。
     if (total <= 0.0001)
-        return MakeVertex(input.Pos, input.Col, input.Tex, input.Nrm);
+        return MakeVertex(shaped, input.Col, input.Tex, input.Nrm);
 
-    float3 position = Blend(float4(input.Pos, 1.0), input.Idx, input.Wgt).xyz;
+    float3 position = Blend(float4(shaped, 1.0), input.Idx, input.Wgt).xyz;
     float3 normal = Blend(float4(input.Nrm, 0.0), input.Idx, input.Wgt).xyz;
 
     return MakeVertex(position, input.Col, input.Tex, normal);

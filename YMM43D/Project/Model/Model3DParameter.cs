@@ -22,6 +22,7 @@ namespace YMM43D.Project.Model
         private const string Rotation = "3D回転";
         private const string Paint = "色";
         private const string Bone = "骨";
+        private const string Face = "表情";
 
         [Display(GroupName = Body, Name = "ファイル", Description = "obj / gltf / glb / vrm / fbx のファイル")]
         [FileSelector(FileGroupType.None, CustomFilterName = "3Dモデル", CustomFilterValue = "*.obj;*.gltf;*.glb;*.vrm;*.fbx")]
@@ -108,6 +109,12 @@ namespace YMM43D.Project.Model
         public ImmutableList<ModelMaterialSlot> Materials { get => materials; set => Set(ref materials, value); }
         private ImmutableList<ModelMaterialSlot> materials = [];
 
+        // モデルに入っている表情。読み込んだときに並べ、強さだけを動かす。
+        [Display(GroupName = Face, Name = "")]
+        [ExpressionList]
+        public ImmutableList<ModelExpressionValue> Expressions { get => expressions; set => Set(ref expressions, value); }
+        private ImmutableList<ModelExpressionValue> expressions = [];
+
         // 動かした骨だけを持つ。モデルの骨は数が多いので、全部は並べない。
         [Display(GroupName = Bone, Name = "")]
         [BonePoseList]
@@ -118,6 +125,7 @@ namespace YMM43D.Project.Model
         {
             SubscribeChildUndoRedoable(Materials);
             SubscribeChildUndoRedoable(Bones);
+            SubscribeChildUndoRedoable(Expressions);
         }
 
         public override async ValueTask EndEditAsync()
@@ -125,6 +133,72 @@ namespace YMM43D.Project.Model
             await base.EndEditAsync();
 
             SyncMaterials();
+            SyncExpressions();
+        }
+
+        // モデルに入っている表情を並べ直す。強さは、同じ名前のものを引き継ぐ。
+        private void SyncExpressions()
+        {
+            if (Model is not { } model)
+                return;
+
+            if (Expressions.Select(one => one.Name).SequenceEqual(model.Expressions.Select(one => one.Name)))
+                return;
+
+            var remaining = Expressions.ToList();
+
+            Expressions =
+            [
+                .. model.Expressions.Select(one =>
+                {
+                    var kept = remaining.FirstOrDefault(value => value.Name == one.Name);
+
+                    if (kept is not null)
+                    {
+                        remaining.Remove(kept);
+
+                        return kept;
+                    }
+
+                    return new ModelExpressionValue(one.Name);
+                }),
+            ];
+
+            SubscribeChildUndoRedoable(Expressions);
+        }
+
+        // 表情の強さから、形ごとにどれだけ動かすかを出す。
+        internal IReadOnlyList<float>? GetMorphWeights(ModelData model, in FrameContext time)
+        {
+            if (!model.HasMorphs || Expressions.Count == 0)
+                return null;
+
+            float[]? weights = null;
+
+            foreach (var value in Expressions)
+            {
+                if (value.Name.Length == 0 || value.IsStill(time))
+                    continue;
+
+                var strength = value.Weight.GetFloat(time) / 100f;
+
+                foreach (var expression in model.Expressions)
+                {
+                    if (expression.Name != value.Name)
+                        continue;
+
+                    foreach (var bind in expression.Binds)
+                    {
+                        if (bind.Morph < 0 || bind.Morph >= model.Morphs.Length)
+                            continue;
+
+                        weights ??= new float[model.Morphs.Length];
+                        weights[bind.Morph] = Math.Clamp(weights[bind.Morph] + (strength * bind.Weight), 0f, 1f);
+                    }
+                }
+            }
+
+            return weights;
         }
 
         private void SyncMaterials()
@@ -285,7 +359,7 @@ namespace YMM43D.Project.Model
             => new Model3DSource(devices, this);
 
         protected override IEnumerable<IAnimatable> GetAnimatables()
-            => [Size, RotationX, RotationY, RotationZ, Gloss, GlossSharpness, CameraSyncAnimation, .. Bones];
+            => [Size, RotationX, RotationY, RotationZ, Gloss, GlossSharpness, CameraSyncAnimation, .. Bones, .. Expressions];
 
         public override IEnumerable<string> CreateMaskExoFilter(
             int keyFrameIndex, ExoOutputDescription desc, ShapeMaskExoOutputDescription shapeMaskDesc) => [];

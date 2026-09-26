@@ -51,7 +51,7 @@ namespace YMM43D.Graphics.Models
                 }
             }
 
-            var vertexBuffer = source.HasBones
+            var vertexBuffer = source.IsDeformed
                 ? D3D11Buffers.Create(device, Skinned(vertices, source), BindFlags.VertexBuffer)
                 : D3D11Buffers.Create(device, vertices, BindFlags.VertexBuffer);
 
@@ -79,7 +79,7 @@ namespace YMM43D.Graphics.Models
                     vertexBuffer,
                     D3D11Buffers.Create(device, indices, BindFlags.IndexBuffer),
                     indices.Length,
-                    source.HasBones);
+                    source.IsDeformed);
                 disposer.Collect(mesh);
 
                 var texture = part.Material >= 0 && part.Material < replaced.Length ? replaced[part.Material] : null;
@@ -96,7 +96,8 @@ namespace YMM43D.Graphics.Models
 
             for (var i = 0; i < vertices.Length; i++)
             {
-                var influence = source.Influences[i];
+                // 骨のないモデル（表情だけ）でも同じ入れ物で描く。
+                var influence = source.HasBones ? source.Influences[i] : ModelInfluence.None;
 
                 skinned[i] = new SkinnedVertex(
                     vertices[i],
