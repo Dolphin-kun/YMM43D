@@ -19,6 +19,9 @@ namespace YMM43D.Project.Tachie
         // 見る位置。平行に見るので、遠さは見た目に影響しない。
         private const float Distance = 100f;
 
+        // 絵の大きさの上限。
+        private const int MaxSide = 4096;
+
         private readonly Renderer3DTo2D renderer = new();
         private readonly ModelPainter painter = new();
 
@@ -46,7 +49,8 @@ namespace YMM43D.Project.Tachie
 
             var look = new TachieLook(model, character, faceParameter as Model3DFaceParameter, tachieTime, kuchipaku);
 
-            var side = Math.Max(16, (int)(character.Size * Margin));
+            // 大きくしすぎると絵が作れなくなるので、上限で止める。
+            var side = Math.Clamp((int)(character.Size * Margin), 16, MaxSide);
             var half = WorldScale.ToWorld(side) / 2f;
 
             var view = Matrix4x4.CreateLookAt(new Vector3(0f, 0f, Distance), Vector3.Zero, Vector3.UnitY);
@@ -59,17 +63,25 @@ namespace YMM43D.Project.Tachie
                 Time = new FrameContext(0, 1, 60),
             };
 
-            output = renderer.Render(
-                devices,
-                side,
-                side,
-                view,
-                projection,
-                Vector2.Zero,
-                null,
-                [],
-                new Color4(0f, 0f, 0f, 0f),
-                render => painter.Draw(render, context, look));
+            // 立ち絵は設定画面からも描かれる。ここで例外を外に出すと本体の操作が止まるので、受け止める。
+            try
+            {
+                output = renderer.Render(
+                    devices,
+                    side,
+                    side,
+                    view,
+                    projection,
+                    Vector2.Zero,
+                    null,
+                    [],
+                    new Color4(0f, 0f, 0f, 0f),
+                    render => painter.Draw(render, context, look));
+            }
+            catch (Exception)
+            {
+                output = renderer.RenderEmpty(devices);
+            }
         }
 
         public void Dispose()

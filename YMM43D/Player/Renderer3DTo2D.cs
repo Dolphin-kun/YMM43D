@@ -132,8 +132,18 @@ namespace YMM43D.Player
                 deviceContext.Clear(null);
 
                 if (bitmap is not null)
+                {
                     deviceContext.DrawImage(
                         bitmap, offset, sourceRectangle, InterpolationMode.Linear, CompositeMode.SourceOver);
+                }
+                else
+                {
+                    // 何も描いていない絵は大きさが無限になり、受け取った側が絵を重ねるときに失敗する。
+                    // 透明な点をひとつ置いて、大きさの決まった絵にしておく。
+                    using var clear = deviceContext.CreateSolidColorBrush(new Color4(0f, 0f, 0f, 0f));
+
+                    deviceContext.FillRectangle(new RawRectF(offset.X, offset.Y, offset.X + 1f, offset.Y + 1f), clear);
+                }
 
                 deviceContext.EndDraw();
                 deviceContext.Target = null;
