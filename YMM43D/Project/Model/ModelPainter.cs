@@ -8,7 +8,6 @@ using YMM43D.Graphics.Models;
 
 namespace YMM43D.Project.Model
 {
-    // モデルを描くのに要る設定。図形（3Dモデル）からも立ち絵からも、同じ形で渡す。
     internal interface IModelLook
     {
         ModelData? Model { get; }
@@ -17,10 +16,9 @@ namespace YMM43D.Project.Model
 
         bool IsUnlit { get; }
 
-        // 陰影を何段に分けるか。0 ならなめらかに塗る。
-        float ToonSteps { get; }
-
         SurfaceGloss GetGloss(in FrameContext time);
+
+        ModelPaint GetPaint(in FrameContext time);
 
         Matrix4x4 GetLocalMatrix(ModelData model, in FrameContext time);
 
@@ -28,12 +26,12 @@ namespace YMM43D.Project.Model
 
         IReadOnlyList<(ModelBlend Blend, float Cutoff)?> GetBlends(ModelData model);
 
-        IReadOnlyList<Matrix4x4>? GetPose(ModelData model, in FrameContext time);
+        IReadOnlyList<Matrix4x4>? GetPose(
+            ModelData model, in FrameContext time, in Matrix4x4 world, bool advance);
 
         IReadOnlyList<float>? GetMorphWeights(ModelData model, in FrameContext time);
     }
 
-    // モデルを描く人。GPU 側の入れ物を持ち、図形と立ち絵の両方から使う。
     internal sealed class ModelPainter : IDisposable
     {
         private readonly DeviceResourceCache<ModelResources> resources = new(device => new ModelResources(device));
@@ -45,53 +43,79 @@ namespace YMM43D.Project.Model
 
             var world = look.GetLocalMatrix(model, item.Time) * item.World;
             var gloss = look.GetGloss(item.Time);
+            var paint = look.GetPaint(item.Time);
 
             var mesh = shared.GetMesh(render.Context, model, look.Tone, look.GetReplacements(model));
             var states = RenderStates.For(render.Device);
 
-            var bones = model.HasBones ? shared.WriteBones(render.Context, model, look.GetPose(model, item.Time)) : null;
+            var advance = render.IsOutput && !item.DepthOnly && !render.IsShadowPass;
+
+            var bones = model.HasBones
+                ? shared.WriteBones(render.Context, model, look.GetPose(model, item.Time, world, advance))
+                : null;
             var morphs = shared.WriteMorphs(render.Context, model, look.GetMorphWeights(model, item.Time));
             var pipeline = model.IsDeformed ? shared.SkinnedPipeline : shared.Pipeline;
 
             var blends = look.GetBlends(model);
 
-            foreach (var (shape, texture, part) in Ordered(mesh.Parts, blends, world, render.GetCameraPosition()))
+            var scene = render.Lighting?.Mirror ?? SceneMirror.None;
+            var wanted = scene.HasImage && (paint.Mirror > 0f || scene.Ambient > 0f);
+
+            var mirror = wanted
+                ? shared.GetMirror(render.Context, scene.Path)
+                : (View: (ID3D11ShaderResourceView?)null, Levels: 0f);
+
+            foreach (var (shape, textures, part) in Ordered(mesh.Parts, blends, world, render.GetCameraPosition()))
             {
                 var (blend, sharpness) = BlendOf(part, blends);
 
-                // 透かして重ねるところは、影や前後判定のための描画には出さない。
                 if (blend == ModelBlend.Blend && (item.DepthOnly || render.IsShadowPass))
                     continue;
 
                 var cutoff = blend == ModelBlend.Mask ? MathF.Max(sharpness, item.AlphaCutoff) : item.AlphaCutoff;
 
                 var constants = render.CreateConstants(
-                    world, item.Opacity, look.IsUnlit, cutoff, gloss, look.ToonSteps);
+                    world, item.Opacity, look.IsUnlit, cutoff, gloss, paint);
 
-                var settings = item.ToDrawSettings(FaceCulling.None, texture ?? shared.GetWhite(render.Context)) with
+                var surface = ModelConstants.Create(
+                    part.Surface,
+                    paint,
+                    new ModelConstants.Loaded(
+                        textures.Bump is not null,
+                        textures.Glow is not null,
+                        textures.Feel is not null,
+                        textures.Shade is not null,
+                        mirror.View is not null),
+                    mirror.Levels,
+                    scene.Ambient);
+
+                var settings = item.ToDrawSettings(
+                    FaceCulling.None, textures.Color ?? shared.GetWhite(render.Context)) with
                 {
                     Sampler = states.LinearWrapSampler,
                     Bones = bones,
                     Morphs = morphs,
+                    Bump = textures.Bump,
+                    Glow = textures.Glow,
+                    Feel = textures.Feel,
+                    Shade = textures.Shade,
+                    Mirror = mirror.View,
 
-                    // 透かして重ねるところは、奥行きを書き込むと後ろのものを消してしまう。
                     SkipDepthWrite = blend == ModelBlend.Blend,
                 };
 
-                pipeline.Draw(render.Context, constants, settings, shape);
+                pipeline.Draw(render.Context, constants, surface, settings, shape);
             }
         }
 
-        // モデルに書いてある透け方。パラメータの「材質」で決めていれば、そちらを使う。
         private static (ModelBlend Blend, float Cutoff) BlendOf(
             in ModelPart part, IReadOnlyList<(ModelBlend Blend, float Cutoff)?> chosen)
             => part.Material >= 0 && part.Material < chosen.Count && chosen[part.Material] is { } set
                 ? set
                 : (part.Blend, part.Cutoff);
 
-        // 透かして重ねるところだけ、奥にあるものから順に描く。ほかはモデルに書かれた順のまま。
-        private static IEnumerable<(IMesh Mesh, ID3D11ShaderResourceView? Texture, ModelPart Part)> Ordered(
-            IReadOnlyList<(IMesh Mesh, ID3D11ShaderResourceView? Texture, ModelPart Part)> parts,
+        private static IEnumerable<(IMesh Mesh, ModelTextures Textures, ModelPart Part)> Ordered(
+            IReadOnlyList<(IMesh Mesh, ModelTextures Textures, ModelPart Part)> parts,
             IReadOnlyList<(ModelBlend Blend, float Cutoff)?> chosen,
             Matrix4x4 world,
             Vector3 camera)
@@ -117,18 +141,22 @@ namespace YMM43D.Project.Model
             private ModelBoneBuffer? boneBuffer;
             private ModelMorphBuffer? morphBuffer;
 
+            private string mirrorPath = string.Empty;
+            private ID3D11Texture2D? mirrorTexture;
+            private ID3D11ShaderResourceView? mirror;
+            private float mirrorLevels;
+
             public RenderPipeline<TransformConstants> Pipeline { get; }
 
-            // 骨か表情のあるモデルのときだけ作る。
             public RenderPipeline<TransformConstants> SkinnedPipeline
                 => skinnedPipeline ??= new RenderPipeline<TransformConstants>(
-                    device, SkinnedVertex.InputElements, new SkinnedTextureMaterial(device));
+                    device, SkinnedVertex.InputElements, new SkinnedModelMaterial(device));
 
             public ModelResources(ID3D11Device device)
             {
                 this.device = device;
                 Pipeline = new RenderPipeline<TransformConstants>(
-                    device, Vertex.InputElements, new TextureMaterial(device));
+                    device, Vertex.InputElements, new ModelMaterial(device));
             }
 
             public ModelMesh GetMesh(
@@ -145,6 +173,29 @@ namespace YMM43D.Project.Model
                 mesh?.Dispose();
 
                 return mesh = new ModelMesh(device, context, model, tint, replacements);
+            }
+
+            public (ID3D11ShaderResourceView? View, float Levels) GetMirror(
+                ID3D11DeviceContext context, string path)
+            {
+                if (mirrorPath == path)
+                    return (mirror, mirrorLevels);
+
+                DropMirror();
+                mirrorPath = path;
+
+                if (path.Length == 0
+                    || ModelLibrary.FindImage(path) is not { } image
+                    || ModelTexture.Create(device, context, image) is not { } made)
+                {
+                    return (null, 0f);
+                }
+
+                mirrorTexture = made.Texture;
+                mirror = made.View;
+                mirrorLevels = made.Levels;
+
+                return (mirror, mirrorLevels);
             }
 
             public ID3D11ShaderResourceView? WriteBones(
@@ -189,6 +240,16 @@ namespace YMM43D.Project.Model
                 return white = device.CreateShaderResourceView(whiteTexture);
             }
 
+            private void DropMirror()
+            {
+                mirror?.Dispose();
+                mirror = null;
+                mirrorTexture?.Dispose();
+                mirrorTexture = null;
+                mirrorLevels = 0f;
+                mirrorPath = string.Empty;
+            }
+
             public void Dispose()
             {
                 mesh?.Dispose();
@@ -197,6 +258,7 @@ namespace YMM43D.Project.Model
                 white = null;
                 whiteTexture?.Dispose();
                 whiteTexture = null;
+                DropMirror();
                 skinnedPipeline?.Dispose();
                 skinnedPipeline = null;
                 boneBuffer?.Dispose();

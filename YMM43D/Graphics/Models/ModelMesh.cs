@@ -17,7 +17,7 @@ namespace YMM43D.Graphics.Models
 
         public IReadOnlyList<ModelImage?> Replacements { get; }
 
-        public IReadOnlyList<(IMesh Mesh, ID3D11ShaderResourceView? Texture, ModelPart Part)> Parts { get; }
+        public IReadOnlyList<(IMesh Mesh, ModelTextures Textures, ModelPart Part)> Parts { get; }
 
         public ModelMesh(
             ID3D11Device device,
@@ -70,7 +70,7 @@ namespace YMM43D.Graphics.Models
                     replaced[i] = CreateTexture(device, context, image);
             }
 
-            var parts = new List<(IMesh, ID3D11ShaderResourceView?, ModelPart)>();
+            var parts = new List<(IMesh, ModelTextures, ModelPart)>();
 
             foreach (var part in source.Parts)
             {
@@ -83,12 +83,24 @@ namespace YMM43D.Graphics.Models
                 disposer.Collect(mesh);
 
                 var texture = part.Material >= 0 && part.Material < replaced.Length ? replaced[part.Material] : null;
+                var surface = part.Surface;
 
-                parts.Add((mesh, texture ?? (part.Image >= 0 ? textures[part.Image] : null), part));
+                parts.Add((
+                    mesh,
+                    new ModelTextures(
+                        texture ?? At(textures, part.Image),
+                        At(textures, surface.BumpImage),
+                        At(textures, surface.GlowImage),
+                        At(textures, surface.FeelImage),
+                        At(textures, surface.ShadeImage)),
+                    part));
             }
 
             Parts = parts;
         }
+
+        private static ID3D11ShaderResourceView? At(ID3D11ShaderResourceView?[] views, int index)
+            => index >= 0 && index < views.Length ? views[index] : null;
 
         private static SkinnedVertex[] Skinned(Vertex[] vertices, ModelData source)
         {
@@ -96,7 +108,6 @@ namespace YMM43D.Graphics.Models
 
             for (var i = 0; i < vertices.Length; i++)
             {
-                // 骨のないモデル（表情だけ）でも同じ入れ物で描く。
                 var influence = source.HasBones ? source.Influences[i] : ModelInfluence.None;
 
                 skinned[i] = new SkinnedVertex(
@@ -110,31 +121,13 @@ namespace YMM43D.Graphics.Models
 
         private ID3D11ShaderResourceView? CreateTexture(ID3D11Device device, ID3D11DeviceContext context, ModelImage image)
         {
-            if (image.Width <= 0 || image.Height <= 0)
+            if (ModelTexture.Create(device, context, image) is not { } made)
                 return null;
 
-            var texture = device.CreateTexture2D(new Texture2DDescription
-            {
-                Width = image.Width,
-                Height = image.Height,
-                MipLevels = 0,
-                ArraySize = 1,
-                Format = Format.B8G8R8A8_UNorm,
-                SampleDescription = new SampleDescription(1, 0),
-                Usage = ResourceUsage.Default,
-                BindFlags = BindFlags.ShaderResource | BindFlags.RenderTarget,
-                MiscFlags = ResourceOptionFlags.GenerateMips,
-            });
-            disposer.Collect(texture);
+            disposer.Collect(made.Texture);
+            disposer.Collect(made.View);
 
-            context.UpdateSubresource(image.Pixels, texture, 0, image.Width * 4);
-
-            var view = device.CreateShaderResourceView(texture);
-            disposer.Collect(view);
-
-            context.GenerateMips(view);
-
-            return view;
+            return made.View;
         }
 
         public void Dispose() => disposer.Dispose();

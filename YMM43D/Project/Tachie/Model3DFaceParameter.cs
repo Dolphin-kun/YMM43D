@@ -5,7 +5,6 @@ using YukkuriMovieMaker.Plugin.Tachie;
 
 namespace YMM43D.Project.Tachie
 {
-    // 表情アイテムごとの設定。モデルに入っている表情の名前で選ぶ。
     public class Model3DFaceParameter : TachieFaceParameterBase
     {
         [Display(Name = "表情",

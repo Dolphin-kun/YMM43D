@@ -36,8 +36,9 @@ namespace YMM43D.Graphics
 
         public Vector4 Surface;
 
-        // 塗り方。x は陰影を何段に分けるか（0 か 1 でそのまま）。
         public Vector4 Shading;
+
+        public Vector4 Ground;
 
         public static TransformConstants CreateUnlit(in Matrix4x4 worldViewProjection, float opacity) => new()
         {

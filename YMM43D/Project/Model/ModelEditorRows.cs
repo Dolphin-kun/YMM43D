@@ -6,10 +6,8 @@ using YukkuriMovieMaker.Commons;
 
 namespace YMM43D.Project.Model
 {
-    // 骨や表情の一覧に、本体と同じ編集欄を並べるための部品。
     internal static class ModelEditorRows
     {
-        // 見出しの列の幅。本体のほかの編集欄とだいたい左端がそろう。
         public const double LabelWidth = 80;
 
         private static readonly PropertiesCache cache = new();
@@ -24,8 +22,7 @@ namespace YMM43D.Project.Model
             return grid;
         }
 
-        // 値 1 つぶんの行。作った編集欄を返すので、呼び出し側で片付けと編集の合図をつなぐ。
-        public static (PropertyEditorAttribute2 Attribute, FrameworkElement Control)? Add(
+        public static (PropertyEditorAttribute2 Attribute, FrameworkElement Control, FrameworkElement Caption)? Add(
             Grid grid,
             object item,
             object owner,
@@ -46,8 +43,6 @@ namespace YMM43D.Project.Model
             if (control is IPropertyEditorControl2 told && editorInfo is { } known)
                 told.SetEditorInfo(known);
 
-            // 編集欄は中間点を打つと縦に伸びるので、見出しは上詰めにする。
-            // 横は列の幅いっぱいに広げたうえで、文字を真ん中に寄せる。
             var caption = new TextBlock
             {
                 Text = label ?? cache.GetCustomAttribute<DisplayAttribute>(info)?.Name ?? property,
@@ -68,7 +63,7 @@ namespace YMM43D.Project.Model
             grid.Children.Add(caption);
             grid.Children.Add(control);
 
-            return (attribute, control);
+            return (attribute, control, caption);
         }
     }
 }

@@ -4,7 +4,6 @@ using YukkuriMovieMaker.Commons;
 
 namespace YMM43D.Project.Model
 {
-    // 「骨」の一覧に付ける編集欄。骨ごとに折りたためる形で出す。
     [AttributeUsage(AttributeTargets.Property)]
     internal sealed class BonePoseListAttribute : PropertyEditorAttribute
     {

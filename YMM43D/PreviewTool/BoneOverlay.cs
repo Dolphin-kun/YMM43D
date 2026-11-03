@@ -6,7 +6,6 @@ using YukkuriMovieMaker.Project.Items;
 
 namespace YMM43D.PreviewTool
 {
-    // 3Dプレビューに出す骨 1 本ぶん。掴んで回すのに要るものをまとめて持つ。
     internal readonly record struct PreviewBone(
         IVideoItem Item,
         Model3DParameter Parameter,
@@ -21,7 +20,6 @@ namespace YMM43D.PreviewTool
         bool HasChildren,
         Matrix4x4 Frame)
     {
-        // 回転X/Y/Z の各つまみが向いている先。オイラー角の順（X→Y→Z）に合わせる。
         public Matrix4x4 HandleOrientation(float x, float y, float z)
         {
             var second = Matrix4x4.CreateRotationX(float.DegreesToRadians(x)) * Frame;
@@ -60,7 +58,6 @@ namespace YMM43D.PreviewTool
         }
     }
 
-    // 選んでいる 3Dモデルの骨を、いまの姿勢のまま 3D 空間の位置に並べる。
     internal static class BoneOverlay
     {
         public static IReadOnlyList<PreviewBone> Resolve(
@@ -100,11 +97,8 @@ namespace YMM43D.PreviewTool
             return bones;
         }
 
-        // 骨の尻尾（先っぽ）を決める。Blender と同じように、
-        // 子が 1 本だけならその子まで、そうでなければ短い出っ張りにする。
         private static (Vector3 Tail, bool HasChildren)[] Tails(ModelBone[] bones, Vector3[] positions)
         {
-            // 同じ場所に重なっている骨（ねじれ用など）は、つなぎ先として数えない。
             var spread = Spread(positions);
             var same = MathF.Max(spread * 1e-4f, 1e-6f);
             var fallback = MathF.Max(spread * 0.05f, 1e-5f);
@@ -132,7 +126,6 @@ namespace YMM43D.PreviewTool
                 var parent = bones[i].Parent;
                 var hasParent = parent >= 0 && parent < bones.Length;
 
-                // 伸びる向き。親から自分へ流れてきた向きを引き継ぎ、無ければ親の向きを使う。
                 var flow = hasParent && Vector3.Distance(positions[i], positions[parent]) > same
                     ? Vector3.Normalize(positions[i] - positions[parent])
                     : hasParent && directions[parent].LengthSquared() > 0f

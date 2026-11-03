@@ -22,7 +22,7 @@ namespace LiquidGlass3D
         Sphere,
     }
 
-    public sealed class LiquidGlass3DParameter : ShapeParameter3DBase
+    public sealed class LiquidGlass3DParameter : ShapeParameter3DBase, ISceneRotation3D
     {
         private const string Form = "形";
         private const string Rotation = "3D回転";

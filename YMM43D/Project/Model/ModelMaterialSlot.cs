@@ -8,7 +8,6 @@ using YukkuriMovieMaker.Settings;
 
 namespace YMM43D.Project.Model
 {
-    // 材質の透け方。モデルに書いてあるとおりにするか、こちらで決めるか。
     public enum ModelSlotBlend
     {
         [Display(Name = "モデルのまま")]
@@ -77,7 +76,6 @@ namespace YMM43D.Project.Model
         [EditorBrowsable(EditorBrowsableState.Never)]
         public bool IsMask => Blend == ModelSlotBlend.Mask;
 
-        // モデルに書いてある透け方を、この欄で上書きする。
         internal (ModelBlend Blend, float Cutoff)? Override => Blend switch
         {
             ModelSlotBlend.Opaque => (ModelBlend.Opaque, 0f),

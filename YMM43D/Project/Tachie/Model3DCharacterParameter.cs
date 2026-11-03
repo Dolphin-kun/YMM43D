@@ -1,5 +1,7 @@
+using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Windows.Media;
+using YMM43D.Commons;
 using YMM43D.Project.Model;
 using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Controls;
@@ -9,12 +11,13 @@ using YukkuriMovieMaker.Settings;
 
 namespace YMM43D.Project.Tachie
 {
-    // 3Dモデルの立ち絵。キャラクターごとの設定。
     public class Model3DCharacterParameter : TachieCharacterParameterBase
     {
         private const string Body = "";
         private const string Rotation = "向き";
         private const string Paint = "色";
+        private const string Toon = "トーン";
+        private const string Feel = "質感";
         private const string Talk = "口パク";
         private const string Blink = "まばたき";
 
@@ -53,22 +56,26 @@ namespace YMM43D.Project.Tachie
         public Color Tint { get => tint; set => Set(ref tint, value); }
         private Color tint = Colors.White;
 
-        [Display(GroupName = Paint, Name = "陰影をつけない", Description = "光源を無視して、モデルの色のまま塗ります")]
+        [Display(GroupName = Paint, Name = "陰影", Description = "光源にしたがって陰影をつけます。切ると、モデルの色のまま塗ります")]
         [ToggleSlider]
+        public bool IsLit { get => !IsUnlit; set => IsUnlit = !value; }
+
+        [Browsable(false)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
         public bool IsUnlit
         {
             get => isUnlit;
             set
             {
                 Set(ref isUnlit, value);
+                OnPropertyChanged(nameof(IsLit));
                 OnPropertyChanged(nameof(IsShaded));
             }
         }
         private bool isUnlit;
 
-        [Display(GroupName = Paint, Name = "アニメ塗り", Description = "陰影を決まった段数に分けて塗ります")]
-        [ToggleSlider]
-        [ShowPropertyEditorWhen(nameof(IsUnlit), false)]
+        [Browsable(false)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
         public bool IsToon
         {
             get => isToon;
@@ -76,19 +83,110 @@ namespace YMM43D.Project.Tachie
             {
                 Set(ref isToon, value);
                 OnPropertyChanged(nameof(IsShaded));
+                OnPropertyChanged(nameof(ToonSteps));
             }
         }
         private bool isToon = true;
 
-        [Display(GroupName = Paint, Name = "塗りの段数")]
-        [TextBoxSlider("F0", "段", 2, 5)]
-        [ShowPropertyEditorWhen(nameof(IsShaded), true)]
-        public int ToonLevels { get => toonLevels; set => Set(ref toonLevels, Math.Clamp(value, 2, 8)); }
+        [Browsable(false)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public int ToonLevels
+        {
+            get => toonLevels;
+            set
+            {
+                Set(ref toonLevels, Math.Clamp(value, 2, 8));
+                OnPropertyChanged(nameof(ToonSteps));
+            }
+        }
         private int toonLevels = 2;
 
-        [System.ComponentModel.Browsable(false)]
-        [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
-        public bool IsShaded => !IsUnlit && IsToon;
+        [Browsable(false)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public bool IsShaded => !IsUnlit && ToonSteps >= 2;
+
+        [Display(GroupName = Toon, Name = "段数",
+            Description = "明るさを何段に分けて塗るか。1 なら段に分けず、なめらかに塗ります")]
+        [TextBoxSlider("F0", "段", 1, 5)]
+        [ShowPropertyEditorWhen(nameof(IsUnlit), false)]
+        public int ToonSteps
+        {
+            get => IsToon ? ToonLevels : 1;
+            set
+            {
+                var steps = Math.Clamp(value, 1, 8);
+
+                if (steps >= 2)
+                    ToonLevels = steps;
+
+                IsToon = steps >= 2;
+            }
+        }
+
+        [Display(GroupName = Toon, Name = "影の境目",
+            Description = "影のできる境目をずらします。上げると影が小さく、下げると大きくなります")]
+        [TextBoxSlider("F0", "%", -50, 50)]
+        [ShowPropertyEditorWhen(nameof(IsUnlit), false)]
+        public double ToonShift
+        {
+            get => toonShift;
+            set => Set(ref toonShift, Math.Clamp(value, -100, 100));
+        }
+        private double toonShift;
+
+        [Display(GroupName = Toon, Name = "境目のぼかし",
+            Description = "段の境目をどれだけぼかすか。0 にするときっぱり分かれます")]
+        [TextBoxSlider("F0", "%", 0, 100)]
+        [ShowPropertyEditorWhen(nameof(IsShaded), true)]
+        public double ToonFeather
+        {
+            get => toonFeather;
+            set => Set(ref toonFeather, Math.Clamp(value, 0, 100));
+        }
+        private double toonFeather = ModelPaint.DefaultFeather * FeatherSpan;
+
+        [Display(GroupName = Toon, Name = "影の色",
+            Description = "光の当たらないところの色に掛け合わせます。白ならモデルに書かれたまま")]
+        [ColorPicker]
+        [ShowPropertyEditorWhen(nameof(IsUnlit), false)]
+        public Color ShadeColor { get => shadeColor; set => Set(ref shadeColor, value); }
+        private Color shadeColor = Colors.White;
+
+        [Display(GroupName = Feel, Name = "凹凸",
+            Description = "モデルに入っている法線マップのでこぼこの強さ。入っていなければ効きません")]
+        [TextBoxSlider("F0", "%", 0, 200)]
+        [ShowPropertyEditorWhen(nameof(IsUnlit), false)]
+        public double Bump { get => bump; set => Set(ref bump, Math.Clamp(value, 0, 1000)); }
+        private double bump = 100;
+
+        [Display(GroupName = Feel, Name = "発光",
+            Description = "モデルに書かれている光り方の強さ。陰影を切っていても光ります")]
+        [TextBoxSlider("F0", "%", 0, 300)]
+        public double Glow { get => glow; set => Set(ref glow, Math.Clamp(value, 0, 10000)); }
+        private double glow = 100;
+
+        [Display(GroupName = Feel, Name = "金属",
+            Description = "上げるほど金属らしくなり、映り込みが地の色に染まります")]
+        [TextBoxSlider("F0", "%", 0, 100)]
+        [ShowPropertyEditorWhen(nameof(IsUnlit), false)]
+        public double Metallic { get => metallic; set => Set(ref metallic, Math.Clamp(value, 0, 100)); }
+        private double metallic;
+
+        [Display(GroupName = Feel, Name = "つるつる",
+            Description = "上げるほど表面がなめらかになり、映り込みがはっきりします")]
+        [TextBoxSlider("F0", "%", 0, 100)]
+        [ShowPropertyEditorWhen(nameof(IsUnlit), false)]
+        public double Smoothness { get => smoothness; set => Set(ref smoothness, Math.Clamp(value, 0, 100)); }
+        private double smoothness;
+
+        [Display(GroupName = Feel, Name = "映り込み",
+            Description = "「3D環境」のアイテムで選んだ風景の画像を映します。0 なら映しません")]
+        [TextBoxSlider("F0", "%", 0, 100)]
+        [ShowPropertyEditorWhen(nameof(IsUnlit), false)]
+        public double Mirror { get => mirror; set => Set(ref mirror, Math.Clamp(value, 0, 100)); }
+        private double mirror;
+
+        internal const float FeatherSpan = 400f;
 
         [Display(GroupName = Talk, Name = "口の表情",
             Description = "セリフに合わせて動かす表情の名前。VRM なら A（あ）が入っています")]

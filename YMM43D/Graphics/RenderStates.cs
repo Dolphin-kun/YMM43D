@@ -36,8 +36,6 @@ namespace YMM43D.Graphics
         private readonly ID3D11RasterizerState meshBack;
         private readonly ID3D11RasterizerState meshFront;
 
-        // 面を塗らずに線だけで描くかどうか。3Dプレビューで「網で出す」を入れている間だけ立てる。
-        // 描いているスレッドごとに持つので、書き出し側の描画には影響しない。
         [ThreadStatic]
         private static bool meshMode;
 

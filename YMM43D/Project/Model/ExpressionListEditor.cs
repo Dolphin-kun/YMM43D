@@ -7,11 +7,10 @@ using YukkuriMovieMaker.Commons;
 
 namespace YMM43D.Project.Model
 {
-    // 「表情」の一覧を、名前とスライダーの 1 行ずつで出す。
     internal sealed class ExpressionListEditor : ContentControl, IPropertyEditorControl, IPropertyEditorControl2
     {
         private readonly StackPanel panel = new();
-        private readonly List<(PropertyEditorAttribute2 Attribute, FrameworkElement Control)> editors = [];
+        private readonly List<(PropertyEditorAttribute2 Attribute, FrameworkElement Control, FrameworkElement Caption)> editors = [];
 
         private object? item;
         private object? target;
@@ -32,7 +31,7 @@ namespace YMM43D.Project.Model
         {
             editorInfo = info;
 
-            foreach (var (_, control) in editors)
+            foreach (var (_, control, _) in editors)
             {
                 if (control is IPropertyEditorControl2 told)
                     told.SetEditorInfo(info);
@@ -123,7 +122,7 @@ namespace YMM43D.Project.Model
 
         private void Clear()
         {
-            foreach (var (attribute, control) in editors)
+            foreach (var (attribute, control, _) in editors)
             {
                 if (control is IPropertyEditorControl edited)
                 {

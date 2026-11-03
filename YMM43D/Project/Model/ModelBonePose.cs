@@ -6,11 +6,9 @@ using YukkuriMovieMaker.Controls;
 
 namespace YMM43D.Project.Model
 {
-    // 骨 1 本の姿勢。モデルに書かれている骨の名前で結びつける。
     public class ModelBonePose : Animatable
     {
-        // 名前は折りたたみの見出しに出すので、編集欄は作らない。
-        internal const string Group = "骨";
+        internal const string Group = "ボーン";
 
         public string Name
         {
@@ -25,7 +23,7 @@ namespace YMM43D.Project.Model
         }
         private string name = string.Empty;
 
-        [Display(GroupName = Group, Name = "回転X", Description = "骨そのものを軸にして回します")]
+        [Display(GroupName = Group, Name = "回転X", Description = "ボーンそのものを軸にして回します")]
         [AnimationSlider("F1", "°", -180, 180)]
         public Animation RotationX { get; } = new(0, -100000, 100000);
 
@@ -37,19 +35,24 @@ namespace YMM43D.Project.Model
         [AnimationSlider("F1", "°", -180, 180)]
         public Animation RotationZ { get; } = new(0, -100000, 100000);
 
+        [Display(GroupName = Group, Name = "揺らす",
+            Description = "このボーンから下を揺らします。モデルに揺れものが書かれていないときに使います")]
+        [ToggleSlider]
+        public bool Swings { get => swings; set => Set(ref swings, value); }
+        private bool swings;
+
         public ModelBonePose()
         {
         }
 
         public ModelBonePose(string name) => this.name = name;
 
-        // 骨から見た回転。親から見た位置関係に、この回転を先に掛ける。
         internal Matrix4x4 GetRotation(in FrameContext time)
             => Rotation3D.ForObject(
                 RotationX.GetFloat(time), RotationY.GetFloat(time), RotationZ.GetFloat(time));
 
-        // 回転を一度も動かしていない骨。選んだだけで増えた骨を片付けるのに使う。
-        internal bool IsUntouched => Untouched(RotationX) && Untouched(RotationY) && Untouched(RotationZ);
+        internal bool IsUntouched
+            => !Swings && Untouched(RotationX) && Untouched(RotationY) && Untouched(RotationZ);
 
         private static bool Untouched(Animation animation)
             => animation.Values.Count == 1 && animation.Values[0].Value == 0;

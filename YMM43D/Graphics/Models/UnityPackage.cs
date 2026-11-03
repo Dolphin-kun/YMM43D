@@ -6,17 +6,10 @@ using System.Text.RegularExpressions;
 
 namespace YMM43D.Graphics.Models
 {
-    // Unity の unitypackage（tar を gzip で固めたもの）から、材質に貼る画像を取り出す。
-    // 画像をまったく指していない fbx が配られていることがあるので、その助けにする。
-    //
-    // 中は「GUID のフォルダ」ごとに、中身（asset）と元の置き場所（pathname）が入っている。
-    // 材質（.mat）は文字で書かれていて、貼る画像を GUID で指しているので、そこから辿る。
     internal sealed partial class UnityPackage
     {
-        // これより大きい中身は、いったん読み飛ばして後から取りに行く。
         private const long SmallAsset = 1 << 20;
 
-        // 読み飛ばさずに覚えておく中身の合計。大きな配布物で膨らまないようにする。
         private const long KeepAtMost = 32L << 20;
 
         private static readonly string[] MainTextureNames =
@@ -30,7 +23,6 @@ namespace YMM43D.Graphics.Models
 
         public bool IsEmpty => images.Count == 0;
 
-        // モデルのそばにある unitypackage から、材質に合う画像を集める。無ければ null。
         public static UnityPackage? Open(string directory, IReadOnlyList<string> materials)
         {
             if (materials.Count == 0)
@@ -59,7 +51,6 @@ namespace YMM43D.Graphics.Models
         {
             var at = directory;
 
-            // モデルのフォルダから 2 つ上まで見る。
             for (var depth = 0; depth < 3 && at.Length > 0 && Directory.Exists(at); depth++)
             {
                 foreach (var package in Directory.EnumerateFiles(at, "*.unitypackage"))
@@ -104,7 +95,6 @@ namespace YMM43D.Graphics.Models
             if (wanted.Count == 0)
                 return;
 
-            // 大きくて読み飛ばした画像を、もう一度たどって取り出す。
             Scan(package, (guid, _, read) => images[wanted[guid]] = read(),
                 (guid, kind, _) => kind == "asset" && wanted.ContainsKey(guid));
         }
@@ -142,8 +132,6 @@ namespace YMM43D.Graphics.Models
             }
         }
 
-        // 材質に貼る画像の GUID。材質（.mat）が指しているものを優先し、
-        // 見つからなければ材質と同じ名前で始まる画像を探す。
         private static string? TextureOf(
             Dictionary<string, string> paths, Dictionary<string, byte[]> kept, string material)
         {
@@ -168,7 +156,6 @@ namespace YMM43D.Graphics.Models
                     continue;
                 }
 
-                // 同じ名前で始まる画像が何枚もあるときは、基本の色のものを選ぶ。
                 var score = name.Contains("base", StringComparison.OrdinalIgnoreCase)
                     || name.Contains("albedo", StringComparison.OrdinalIgnoreCase)
                     || name.Contains("main", StringComparison.OrdinalIgnoreCase) ? 2 : 1;

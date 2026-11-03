@@ -12,26 +12,46 @@ namespace YMM43D.Commons
 
         MoveZ,
 
+        PlaneXY,
+
+        PlaneYZ,
+
+        PlaneZX,
+
         RotateX,
 
         RotateY,
 
         RotateZ,
 
+        ScaleAll,
+
         Free,
     }
 
-    // つまみの出し方。動かす矢印を出すか、回す輪を出すか。
     public enum GizmoStyle
     {
-        // 矢印だけ（マーカー）
         Move,
 
-        // 矢印と、画面に沿って回す輪（アイテム）
-        MoveAndTurn,
-
-        // 3 本の軸まわりに回す輪だけ（骨）
         Turn,
+
+        Scale,
+    }
+
+    public enum GizmoMode
+    {
+        Move,
+
+        Rotate,
+
+        Scale,
+    }
+
+    public enum GizmoSpace
+    {
+        World,
+
+        Local,
     }
 
     public readonly record struct TransformGizmo(Vector3 Origin, float Scale, Matrix4x4 Orientation)
@@ -44,21 +64,45 @@ namespace YMM43D.Commons
 
         public const float HeadLength = 0.18f;
 
-        private const float ScreenRatio = 0.13f;
+        public const float ScaleLength = 0.82f;
+
+        public const float ScaleBox = 0.09f;
+
+        public const float PlaneNear = 0.26f;
+
+        public const float PlaneFar = 0.5f;
+
+        public const int PlaneCorners = 4;
+
+        private const float ScreenRatio = 0.18f;
 
         public const float GrabThreshold = 9f;
 
-        // 骨のつまみはアイテムのものより小さく出す。体の中に埋もれない程度の大きさ。
-        public const float BoneRatio = 0.4f;
+        public const float BoneRatio = 0.6f;
 
         public static TransformGizmo Create(
             in Vector3 origin, in Vector3 cameraPosition, in Matrix4x4? orientation = null, float ratio = 1f)
-        {
-            var distance = Vector3.Distance(origin, cameraPosition);
+            => AtDistance(origin, Vector3.Distance(origin, cameraPosition), orientation, ratio);
 
-            return new TransformGizmo(
-                origin, MathF.Max(0.05f, distance * ScreenRatio * ratio), orientation ?? Matrix4x4.Identity);
-        }
+        public static TransformGizmo AtDistance(
+            in Vector3 origin, float distance, in Matrix4x4? orientation = null, float ratio = 1f)
+            => new(origin, MathF.Max(0.05f, distance * ScreenRatio * ratio), orientation ?? Matrix4x4.Identity);
+
+        public static bool IsAxis(GizmoHandle handle)
+            => handle is GizmoHandle.MoveX or GizmoHandle.MoveY or GizmoHandle.MoveZ;
+
+        public static bool IsPlane(GizmoHandle handle)
+            => handle is GizmoHandle.PlaneXY or GizmoHandle.PlaneYZ or GizmoHandle.PlaneZX;
+
+        public static bool IsTurn(GizmoHandle handle)
+            => handle is GizmoHandle.RotateX or GizmoHandle.RotateY or GizmoHandle.RotateZ;
+
+        public static GizmoStyle StyleOf(GizmoMode mode) => mode switch
+        {
+            GizmoMode.Rotate => GizmoStyle.Turn,
+            GizmoMode.Scale => GizmoStyle.Scale,
+            _ => GizmoStyle.Move,
+        };
 
         public static Vector3 AxisDirection(GizmoHandle handle) => handle switch
         {
@@ -68,16 +112,45 @@ namespace YMM43D.Commons
             _ => Vector3.Zero,
         };
 
-        // 傾けて出しているときの、その軸が向いている先。
-        public Vector3 Axis(GizmoHandle handle)
-        {
-            var axis = Vector3.TransformNormal(AxisDirection(handle), Orientation);
-
-            return axis.LengthSquared() > 1e-12f ? Vector3.Normalize(axis) : AxisDirection(handle);
-        }
+        public Vector3 Axis(GizmoHandle handle) => Along(AxisDirection(handle));
 
         public Vector3 AxisEnd(GizmoHandle handle)
             => Origin + Axis(handle) * (AxisLength * Scale);
+
+        public Vector3 ScaleEnd(GizmoHandle handle)
+            => Origin + Axis(handle) * (ScaleLength * Scale);
+
+        public static Vector3 PlaneNormalDirection(GizmoHandle handle) => handle switch
+        {
+            GizmoHandle.PlaneXY => Vector3.UnitZ,
+            GizmoHandle.PlaneYZ => Vector3.UnitX,
+            GizmoHandle.PlaneZX => Vector3.UnitY,
+            _ => Vector3.Zero,
+        };
+
+        public Vector3 PlaneNormal(GizmoHandle handle) => Along(PlaneNormalDirection(handle));
+
+        public static Vector3 PlaneCorner(GizmoHandle handle, int index)
+        {
+            var (first, second) = (index % PlaneCorners) switch
+            {
+                0 => (PlaneNear, PlaneNear),
+                1 => (PlaneFar, PlaneNear),
+                2 => (PlaneFar, PlaneFar),
+                _ => (PlaneNear, PlaneFar),
+            };
+
+            return handle switch
+            {
+                GizmoHandle.PlaneXY => new Vector3(first, second, 0f),
+                GizmoHandle.PlaneYZ => new Vector3(0f, first, second),
+                GizmoHandle.PlaneZX => new Vector3(second, 0f, first),
+                _ => Vector3.Zero,
+            };
+        }
+
+        public Vector3 PlanePoint(GizmoHandle handle, int index)
+            => Origin + Vector3.TransformNormal(PlaneCorner(handle, index) * Scale, Orientation);
 
         public static Vector3 TurnDirection(GizmoHandle handle) => handle switch
         {
@@ -87,15 +160,8 @@ namespace YMM43D.Commons
             _ => Vector3.Zero,
         };
 
-        // その輪を掴んだときに、まわりを回ることになる軸。
-        public Vector3 TurnAxis(GizmoHandle handle)
-        {
-            var axis = Vector3.TransformNormal(TurnDirection(handle), Orientation);
+        public Vector3 TurnAxis(GizmoHandle handle) => Along(TurnDirection(handle));
 
-            return axis.LengthSquared() > 1e-12f ? Vector3.Normalize(axis) : TurnDirection(handle);
-        }
-
-        // 回す輪の 1 点。輪は、その軸に垂直な面の上に描く。
         public static Vector3 RingOffset(GizmoHandle handle, int index)
         {
             var angle = MathF.Tau * index / RingSegments;
@@ -112,6 +178,25 @@ namespace YMM43D.Commons
         public Vector3 RingPoint(GizmoHandle handle, int index)
             => Origin + Vector3.TransformNormal(RingOffset(handle, index) * Scale, Orientation);
 
+        private Vector3 Along(in Vector3 direction)
+        {
+            if (direction == Vector3.Zero)
+                return direction;
+
+            var turned = Vector3.TransformNormal(direction, Orientation);
+
+            return turned.LengthSquared() > 1e-12f ? Vector3.Normalize(turned) : direction;
+        }
+
+        public static (Vector3 Right, Vector3 Up) PlaneBasis(in Vector3 axis)
+        {
+            var guess = MathF.Abs(axis.Y) < 0.9f ? Vector3.UnitY : Vector3.UnitZ;
+            var right = Vector3.Cross(guess, axis);
+
+            right = right.LengthSquared() > 1e-12f ? Vector3.Normalize(right) : Vector3.UnitX;
+
+            return (right, Vector3.Cross(axis, right));
+        }
 
         public static float? ClosestOnAxis(in PickRay ray, in Vector3 origin, in Vector3 axis)
         {

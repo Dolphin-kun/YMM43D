@@ -14,7 +14,7 @@ using YukkuriMovieMaker.Plugin.Effects;
 namespace PixelPoints3D
 {
     [VideoEffect("点群3D", ["3D"], [])]
-    public class PixelPoints3DEffect : VideoEffect3DBase
+    public class PixelPoints3DEffect : VideoEffect3DBase, ISceneRotation3D
     {
         public override string Label => "点群3D";
 
@@ -59,10 +59,21 @@ namespace PixelPoints3D
         public bool DrawFaces { get => drawFaces; set => Set(ref drawFaces, value); }
         private bool drawFaces;
 
-        [Display(GroupName = Shape, Name = "陰影をつけない",
-            Description = "光源を無視して、指定した色のまま塗ります")]
+        [Display(GroupName = Shape, Name = "陰影", Description = "光源にしたがって陰影をつけます。切ると、指定した色のまま塗ります")]
         [ToggleSlider]
-        public bool IsUnlit { get => isUnlit; set => Set(ref isUnlit, value); }
+        public bool IsLit { get => !IsUnlit; set => IsUnlit = !value; }
+
+        [Browsable(false)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public bool IsUnlit
+        {
+            get => isUnlit;
+            set
+            {
+                Set(ref isUnlit, value);
+                OnPropertyChanged(nameof(IsLit));
+            }
+        }
         private bool isUnlit;
 
         [Display(GroupName = Shape, Name = "つや",

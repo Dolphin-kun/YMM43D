@@ -11,7 +11,7 @@ using YukkuriMovieMaker.Project;
 
 namespace Noise3D
 {
-    public sealed class Noise3DParameter : ShapeParameter3DBase
+    public sealed class Noise3DParameter : ShapeParameter3DBase, ISceneRotation3D
     {
         public const int MinSlices = 8;
         public const int MaxSlices = 256;

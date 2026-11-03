@@ -4,8 +4,6 @@ using YukkuriMovieMaker.Plugin.Tachie;
 
 namespace YMM43D.Project.Tachie
 {
-    // 3Dモデルを立ち絵として使うためのプラグイン。
-    // セリフに合わせた口パクと、表情アイテムでの表情の切り替えが効く。
     public class Model3DTachiePlugin : ITachiePlugin
     {
         public string Name => "3Dモデル";

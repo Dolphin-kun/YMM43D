@@ -5,11 +5,9 @@ using YukkuriMovieMaker.Commons;
 
 namespace YMM43D.PreviewTool
 {
-    // 3Dプレビューで骨のつまみを掴んで回す。書き込む先はパラメータの「骨」と同じ値。
     internal sealed class BoneDragController
     {
         private ModelBonePose? pose;
-        private Animation? target;
         private EditScope scope;
         private GizmoHandle handle;
 
@@ -19,9 +17,16 @@ namespace YMM43D.PreviewTool
         private Vector3 up;
 
         private float lastAngle;
-        private float startValue;
         private float rawTurn;
         private float appliedTurn;
+
+        private Animation? turnX;
+        private Animation? turnY;
+        private Animation? turnZ;
+        private Matrix4x4 frame;
+        private Matrix4x4 inverseFrame;
+        private Matrix4x4 startRotation;
+        private Vector3 appliedAngles;
 
         public bool IsDragging => pose is not null;
 
@@ -37,8 +42,6 @@ namespace YMM43D.PreviewTool
             if (grabbed is not (GizmoHandle.RotateX or GizmoHandle.RotateY or GizmoHandle.RotateZ))
                 return false;
 
-            var found = bone.Parameter.BoneFor(bone.Name);
-
             axis = gizmo.TurnAxis(grabbed);
 
             if (axis.LengthSquared() < 1e-12f)
@@ -47,21 +50,10 @@ namespace YMM43D.PreviewTool
             origin = gizmo.Origin;
             (right, up) = Basis(axis);
 
-            if (GetAngle(ray) is not { } angle)
+            if (GetAngle(ray) is not { } angle || !Prepare(bone, edit))
                 return false;
 
-            pose = found;
             handle = grabbed;
-            scope = edit;
-
-            target = grabbed switch
-            {
-                GizmoHandle.RotateX => found.RotationX,
-                GizmoHandle.RotateY => found.RotationY,
-                _ => found.RotationZ,
-            };
-
-            startValue = target.GetFloat(bone.Time);
             lastAngle = angle;
             rawTurn = 0f;
             appliedTurn = 0f;
@@ -69,9 +61,33 @@ namespace YMM43D.PreviewTool
             return true;
         }
 
+        private bool Prepare(in PreviewBone bone, in EditScope edit)
+        {
+            frame = Orientation(bone.Frame);
+
+            if (!Matrix4x4.Invert(frame, out inverseFrame))
+                return false;
+
+            var found = bone.Parameter.BoneFor(bone.Name);
+
+            turnX = found.RotationX;
+            turnY = found.RotationY;
+            turnZ = found.RotationZ;
+
+            startRotation = Rotation3D.ForObject(
+                turnX.GetFloat(bone.Time), turnY.GetFloat(bone.Time), turnZ.GetFloat(bone.Time));
+
+            appliedAngles = Rotation3D.ToAngles(startRotation);
+
+            pose = found;
+            scope = edit;
+
+            return true;
+        }
+
         public bool Update(in PickRay ray, in SnapGrid snap)
         {
-            if (pose is null || target is null || GetAngle(ray) is not { } angle)
+            if (pose is null || GetAngle(ray) is not { } angle)
                 return false;
 
             var delta = angle - lastAngle;
@@ -80,22 +96,73 @@ namespace YMM43D.PreviewTool
 
             rawTurn += float.RadiansToDegrees(delta);
 
-            var wanted = snap.SnapTurn(startValue, rawTurn);
-            var change = wanted - appliedTurn;
+            var wanted = snap.SnapTurn(0f, rawTurn);
 
-            if (change == 0f)
+            if (wanted == appliedTurn)
                 return false;
 
             appliedTurn = wanted;
-            scope.Nudge(target, change);
+
+            return Apply(Matrix4x4.CreateFromAxisAngle(axis, float.DegreesToRadians(wanted)));
+        }
+
+        private bool Apply(in Matrix4x4 turn)
+        {
+            if (turnX is null || turnY is null || turnZ is null)
+                return false;
+
+            var angles = Rotation3D.ToAngles(startRotation * frame * turn * inverseFrame);
+
+            var change = new Vector3(
+                Rotation3D.Wrap(angles.X - appliedAngles.X),
+                Rotation3D.Wrap(angles.Y - appliedAngles.Y),
+                Rotation3D.Wrap(angles.Z - appliedAngles.Z));
+
+            if (MathF.Abs(change.X) < 1e-4f && MathF.Abs(change.Y) < 1e-4f && MathF.Abs(change.Z) < 1e-4f)
+                return false;
+
+            appliedAngles = angles;
+
+            scope.Nudge(turnX, change.X);
+            scope.Nudge(turnY, change.Y);
+            scope.Nudge(turnZ, change.Z);
 
             return true;
+        }
+
+        private static Matrix4x4 Orientation(in Matrix4x4 matrix)
+        {
+            var made = Matrix4x4.Identity;
+
+            var x = Row(matrix, 0);
+            var y = Row(matrix, 1);
+            var z = Row(matrix, 2);
+
+            made.M11 = x.X; made.M12 = x.Y; made.M13 = x.Z;
+            made.M21 = y.X; made.M22 = y.Y; made.M23 = y.Z;
+            made.M31 = z.X; made.M32 = z.Y; made.M33 = z.Z;
+
+            return made;
+        }
+
+        private static Vector3 Row(in Matrix4x4 matrix, int row)
+        {
+            var value = row switch
+            {
+                0 => new Vector3(matrix.M11, matrix.M12, matrix.M13),
+                1 => new Vector3(matrix.M21, matrix.M22, matrix.M23),
+                _ => new Vector3(matrix.M31, matrix.M32, matrix.M33),
+            };
+
+            return value.LengthSquared() > 1e-12f ? Vector3.Normalize(value) : value;
         }
 
         public void End()
         {
             pose = null;
-            target = null;
+            turnX = null;
+            turnY = null;
+            turnZ = null;
             handle = GizmoHandle.None;
         }
 

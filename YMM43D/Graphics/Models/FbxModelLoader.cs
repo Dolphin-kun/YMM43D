@@ -17,18 +17,22 @@ namespace YMM43D.Graphics.Models
         {
             private readonly ModelBuilder builder = new();
 
-            // id で引ける物の一覧と、つながり（子 → 親）。FBX は物とつながりが別々に書かれている。
             private readonly Dictionary<long, FbxNode> objects = [];
             private readonly Dictionary<long, List<long>> childrenOf = [];
             private readonly Dictionary<long, List<(long Child, string Property)>> propertiesOf = [];
             private readonly Dictionary<long, List<long>> parentsOf = [];
             private readonly Dictionary<long, int> images = [];
+            private readonly Dictionary<(long Material, string Slot), int> slotImages = [];
 
             private UnityPackage? unity;
             private bool searchedUnity;
             private readonly Dictionary<long, Matrix4x4> worlds = [];
             private readonly Dictionary<(long Skin, long Model), int> boneOfModel = [];
             private readonly List<(long Skin, long Model)> boneModels = [];
+
+            private readonly Dictionary<string, List<ModelMorphDelta>> shapes = [];
+            private readonly List<string> shapeOrder = [];
+            private HashSet<string>? shownShapes;
 
             public ModelData Read()
             {
@@ -50,12 +54,11 @@ namespace YMM43D.Graphics.Models
                 }
 
                 LinkBones();
+                FinishShapes();
 
                 return builder.Build();
             }
 
-            // 骨の親子は、骨になっているモデルどうしのあいだだけでつなぐ。
-            // あいだに骨でないもの（Armature など）が挟まっていたら、その変換は子の骨に入れる。
             private void LinkBones()
             {
                 for (var i = 0; i < boneModels.Count; i++)
@@ -106,14 +109,6 @@ namespace YMM43D.Graphics.Models
                 }
             }
 
-            // ファイルが決めている「上」と「前」を、このプラグインの向き（Y が上・Z が手前）に合わせる。
-            // ファイルに書かれた「上」の向きだけを見て、Y を上にそろえる。
-            //
-            // FBX には上のほかに「前」と「右」も書けますが、**中身と食い違っているものが出回っています**。
-            // 手元の 2 本でも、Y 上のものは前 +Z で中身どおり、Z 上のものは前 +Y と書いてあるのに
-            // 中身は -Y を向いていました。書いてあるとおりに直すと後ろ向きになります。
-            // Z を上にするのは Blender と 3ds Max で、どちらも -Y が前なので、
-            // ゲームエンジンと同じように「上」だけを信じて直します。
             private Matrix4x4 AxisMatrix()
             {
                 if (root.Child("GlobalSettings")?.Child("Properties70") is not { } settings)
@@ -122,25 +117,19 @@ namespace YMM43D.Graphics.Models
                 var up = (int)Value(settings, "UpAxis", 1);
                 var upward = Value(settings, "UpAxisSign", 1) < 0;
 
-                // 並びを入れ替えるだけ。鏡にはしない（裏返ると面の表裏が逆になるため）。
                 return (up, upward) switch
                 {
-                    // X が上
                     (0, false) => new Matrix4x4(0f, 1f, 0f, 0f, 0f, 0f, 1f, 0f, 1f, 0f, 0f, 0f, 0f, 0f, 0f, 1f),
                     (0, true) => new Matrix4x4(0f, -1f, 0f, 0f, 0f, 0f, 1f, 0f, -1f, 0f, 0f, 0f, 0f, 0f, 0f, 1f),
 
-                    // Z が上。前（-Y）が画面の手前（+Z）に来るようにする。
                     (2, false) => new Matrix4x4(1f, 0f, 0f, 0f, 0f, 0f, -1f, 0f, 0f, 1f, 0f, 0f, 0f, 0f, 0f, 1f),
                     (2, true) => new Matrix4x4(1f, 0f, 0f, 0f, 0f, 0f, 1f, 0f, 0f, -1f, 0f, 0f, 0f, 0f, 0f, 1f),
 
-                    // Y が上。そのまま。
                     (_, true) => new Matrix4x4(1f, 0f, 0f, 0f, 0f, -1f, 0f, 0f, 0f, 0f, -1f, 0f, 0f, 0f, 0f, 1f),
                     _ => Matrix4x4.Identity,
                 };
             }
 
-            // 置き場所の親になるのは、モデルであるものだけ。
-            // 骨のモデルはクラスターの子にもなっているので、そちらは親として数えない。
             private long ParentModelOf(long id)
             {
                 foreach (var parent in parentsOf.GetValueOrDefault(id) ?? [])
@@ -168,7 +157,6 @@ namespace YMM43D.Graphics.Models
                 return worlds[id] = world;
             }
 
-            // FBX の置き方は、回転や拡大の中心をずらす項目まで含めて決まっている。
             private static Matrix4x4 LocalMatrix(FbxNode node)
             {
                 if (node.Child("Properties70") is not { } properties)
@@ -202,7 +190,6 @@ namespace YMM43D.Graphics.Models
                      * Matrix4x4.CreateTranslation(translation);
             }
 
-            // メッシュだけに掛かり、子には伝わらない変換。
             private static Matrix4x4 GeometricMatrix(FbxNode node)
             {
                 if (node.Child("Properties70") is not { } properties)
@@ -282,7 +269,6 @@ namespace YMM43D.Graphics.Models
 
                 var pointCount = positions.Length / 3;
 
-                // 骨の付いたメッシュは、置き場所を骨の行列が決めるので、ここでは動かさない。
                 var influences = ReadSkin(geometry, pointCount, geometric);
                 var placed = influences is null ? world : Matrix4x4.Identity;
 
@@ -294,7 +280,6 @@ namespace YMM43D.Graphics.Models
                 var materials = MaterialLayer(geometry);
                 var slots = MaterialSlots(modelId);
 
-                // 材質ごとに三角形をまとめてから積む。FBX は多角形ごとに材質が変わる。
                 var corners = new List<(int Point, int Corner)>();
                 var groups = new Dictionary<int, List<(int Point, int Corner)[]>>();
                 var polygon = 0;
@@ -322,11 +307,13 @@ namespace YMM43D.Graphics.Models
                     polygon++;
                 }
 
+                var madeFrom = new Dictionary<int, List<uint>>();
+
                 foreach (var (slot, triangles) in groups)
                 {
                     var (color, image, key, name) = Material(slots, slot);
 
-                    builder.BeginPart(color, image, key, name);
+                    builder.BeginPart(color, image, key, name, surface: Surface(slots, slot));
 
                     var known = new Dictionary<(int Point, int Normal, int TexCoord), uint>();
 
@@ -364,6 +351,9 @@ namespace YMM43D.Graphics.Models
                                     influences is not null && point < influences.Length
                                         ? influences[point]
                                         : ModelInfluence.None);
+
+                                (madeFrom.TryGetValue(point, out var same) ? same : madeFrom[point] = [])
+                                    .Add(made[c]);
                             }
                         }
 
@@ -373,9 +363,117 @@ namespace YMM43D.Graphics.Models
                             FillFlatNormal(made[0], made[1], made[2]);
                     }
                 }
+
+                ReadShapes(geometry, madeFrom, placed);
             }
 
-            // 骨の割り当て。FBX では骨 1 本ごとに「どの頂点をどれだけ引っぱるか」が書かれている。
+            private void ReadShapes(FbxNode geometry, Dictionary<int, List<uint>> madeFrom, in Matrix4x4 placed)
+            {
+                Matrix4x4.Invert(placed, out var inverse);
+                var direction = Matrix4x4.Transpose(inverse);
+
+                foreach (var blendId in childrenOf.GetValueOrDefault(geometry.Number(0)) ?? [])
+                {
+                    if (objects.GetValueOrDefault(blendId) is not { Name: "Deformer" } blend
+                        || Subclass(blend) != "BlendShape")
+                    {
+                        continue;
+                    }
+
+                    foreach (var channelId in childrenOf.GetValueOrDefault(blendId) ?? [])
+                    {
+                        if (objects.GetValueOrDefault(channelId) is not { Name: "Deformer" } channel
+                            || Subclass(channel) != "BlendShapeChannel"
+                            || !Shown(NameOf(channel)))
+                        {
+                            continue;
+                        }
+
+                        foreach (var shapeId in childrenOf.GetValueOrDefault(channelId) ?? [])
+                        {
+                            if (objects.GetValueOrDefault(shapeId) is { Name: "Geometry" } shape
+                                && Subclass(shape) == "Shape")
+                            {
+                                AddShape(NameOf(channel), shape, madeFrom, direction);
+                            }
+                        }
+                    }
+                }
+            }
+
+            private bool Shown(string name)
+            {
+                if (shownShapes is null)
+                {
+                    var all = new List<string>();
+
+                    foreach (var (id, node) in objects)
+                    {
+                        if (node.Name == "Deformer" && Subclass(node) == "BlendShapeChannel")
+                            all.Add(NameOf(node));
+                    }
+
+                    var useful = all.Where(one => !IsDivider(one)).ToList();
+                    var shallow = useful.Count > 0 ? useful.Min(Depth) : 0;
+
+                    shownShapes = [.. useful.Where(one => Depth(one) == shallow)];
+                }
+
+                return shownShapes.Contains(name);
+            }
+
+            private static bool IsDivider(string name)
+                => name.Length > 2 && name.StartsWith('-') && name.EndsWith('-');
+
+            private static int Depth(string name) => name.Count(letter => letter is '.' or '_');
+
+            private void AddShape(
+                string name, FbxNode shape, Dictionary<int, List<uint>> madeFrom, in Matrix4x4 direction)
+            {
+                var points = shape.IntegersOf("Indexes");
+                var offsets = shape.DoublesOf("Vertices");
+
+                if (points.Length == 0 || offsets.Length < points.Length * 3)
+                    return;
+
+                if (!shapes.TryGetValue(name, out var deltas))
+                {
+                    shapes[name] = deltas = [];
+                    shapeOrder.Add(name);
+                }
+
+                for (var i = 0; i < points.Length; i++)
+                {
+                    if (!madeFrom.TryGetValue(points[i], out var vertices))
+                        continue;
+
+                    var offset = Vector3.TransformNormal(
+                        new Vector3(
+                            (float)offsets[i * 3], (float)offsets[i * 3 + 1], (float)offsets[i * 3 + 2]),
+                        direction);
+
+                    if (offset.LengthSquared() < ModelBuilder.MorphThreshold * ModelBuilder.MorphThreshold)
+                        continue;
+
+                    foreach (var vertex in vertices)
+                        deltas.Add(new ModelMorphDelta(vertex, offset));
+                }
+            }
+
+            private void FinishShapes()
+            {
+                foreach (var name in shapeOrder)
+                {
+                    if (shapes[name].Count == 0)
+                        continue;
+
+                    builder.Expressions.Add(
+                        new ModelExpression(name, string.Empty, [new ModelExpressionBind(builder.Morphs.Count, 1f)]));
+
+                    builder.Morphs.Add(new ModelMorph(name, [.. shapes[name]]));
+                }
+            }
+
             private ModelInfluence[]? ReadSkin(FbxNode geometry, int pointCount, Matrix4x4 geometric)
             {
                 List<(int Bone, float Weight)>[]? lists = null;
@@ -424,7 +522,6 @@ namespace YMM43D.Graphics.Models
                 return influences;
             }
 
-            // 引っぱる力の大きい順に 4 本まで使い、合計が 1 になるようにそろえる。
             private static ModelInfluence Pick(List<(int Bone, float Weight)>? list)
             {
                 if (list is null || list.Count == 0)
@@ -470,9 +567,6 @@ namespace YMM43D.Graphics.Models
                 if (boneOfModel.TryGetValue((skinId, model), out var known))
                     return known;
 
-                // 骨が動いていないときの、頂点と骨の関係。
-                // fbx の Transform は、すでに「メッシュの置き場所 × 骨の置き場所の逆」になっている。
-                // メッシュだけに掛かる変換は、頂点に焼いていないのでここで掛ける。
                 var bind = geometric * Matrix(cluster.DoublesOf("Transform"));
 
                 boneOfModel[(skinId, model)] = builder.Bones.Count;
@@ -519,7 +613,6 @@ namespace YMM43D.Graphics.Models
                 builder.SetNormal(c, normal);
             }
 
-            // 法線や UV は「角ごと」「頂点ごと」「多角形ごと」のどれかで並んでいる。
             private readonly record struct LayerValues(double[] Values, int[] Indices, bool PerPoint, int Width)
             {
                 public bool HasValues => Values.Length > 0;
@@ -618,8 +711,6 @@ namespace YMM43D.Graphics.Models
                 var image = ImageOf(id);
                 var color = Vector4.One;
 
-                // 画像があるときの色は、書き出し元によっては見た目用の暗い色が入っていて、
-                // 掛け合わせると真っ黒になる。画像があるならそのまま使う。
                 if (image < 0 && material.Child("Properties70") is { } properties)
                 {
                     var diffuse = Vector(properties, "DiffuseColor", Vector(properties, "Diffuse", Vector3.One));
@@ -627,6 +718,36 @@ namespace YMM43D.Graphics.Models
                 }
 
                 return (color, image, $"#{id}", NameOf(material));
+            }
+
+            private ModelSurface Surface(List<long> slots, int slot)
+            {
+                if (slot < 0 || slot >= slots.Count
+                    || objects.GetValueOrDefault(slots[slot]) is not { } material)
+                {
+                    return ModelSurface.Default;
+                }
+
+                var id = slots[slot];
+                var surface = ModelSurface.Default;
+                var bump = ImageOfSlot(id, "NormalMap", "Bump");
+
+                if (bump >= 0)
+                    surface = surface with { BumpImage = bump };
+
+                var glowImage = ImageOfSlot(id, "EmissiveColor", "Emissive");
+                var glow = Vector3.Zero;
+
+                if (material.Child("Properties70") is { } properties)
+                {
+                    glow = Vector(properties, "EmissiveColor", Vector(properties, "Emissive", Vector3.Zero))
+                         * (float)Value(properties, "EmissiveFactor", 1.0);
+                }
+
+                if (glowImage >= 0 && glow == Vector3.Zero)
+                    glow = Vector3.One;
+
+                return surface with { Glow = glow, GlowImage = glowImage };
             }
 
             private static string NameOf(FbxNode node)
@@ -650,8 +771,6 @@ namespace YMM43D.Graphics.Models
                     if (FindTexture(materialId) is { } texture && ImageBytes(texture) is { Length: > 0 } data)
                         return images[materialId] = builder.AddImage(ModelImageDecoder.Decode(data));
 
-                    // 画像をまったく指していない fbx が配られていることがある。
-                    // そばに unitypackage があれば、材質に合う画像をそこから取り出す。
                     if (objects.GetValueOrDefault(materialId) is { } material
                         && Unity?.Image(NameOf(material)) is { Length: > 0 } packed)
                     {
@@ -692,6 +811,47 @@ namespace YMM43D.Graphics.Models
                 return names;
             }
 
+            private int ImageOfSlot(long materialId, params string[] names)
+            {
+                var key = (materialId, names[0]);
+
+                if (slotImages.TryGetValue(key, out var known))
+                    return known;
+
+                slotImages[key] = -1;
+
+                try
+                {
+                    if (FindTexture(materialId, names) is { } texture
+                        && ImageBytes(texture) is { Length: > 0 } data)
+                    {
+                        return slotImages[key] = builder.AddImage(ModelImageDecoder.Decode(data));
+                    }
+                }
+                catch (Exception)
+                {
+                }
+
+                return -1;
+            }
+
+            private FbxNode? FindTexture(long materialId, string[] names)
+            {
+                foreach (var (child, property) in propertiesOf.GetValueOrDefault(materialId) ?? [])
+                {
+                    if (objects.GetValueOrDefault(child) is not { Name: "Texture" } texture)
+                        continue;
+
+                    foreach (var name in names)
+                    {
+                        if (property.Contains(name, StringComparison.OrdinalIgnoreCase))
+                            return texture;
+                    }
+                }
+
+                return null;
+            }
+
             private FbxNode? FindTexture(long materialId)
             {
                 FbxNode? fallback = null;
@@ -715,7 +875,6 @@ namespace YMM43D.Graphics.Models
 
             private byte[]? ImageBytes(FbxNode texture)
             {
-                // 画像がファイルに埋め込まれていることがある。あればそれを使う。
                 foreach (var child in childrenOf.GetValueOrDefault(texture.Number(0)) ?? [])
                 {
                     if (objects.GetValueOrDefault(child) is { Name: "Video" } video

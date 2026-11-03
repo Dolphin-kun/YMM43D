@@ -17,6 +17,8 @@ namespace YMM43D.Commons
 
         public bool IsCapturingScene { get; init; }
 
+        public bool IsOutput { get; init; }
+
         public IGraphicsDevicesAndContext? SourceDevices { get; init; }
 
         public bool IsShadowPass => Lighting is null;
@@ -32,8 +34,6 @@ namespace YMM43D.Commons
 
         public Matrix4x4 GetWorldViewProjection(in Matrix4x4 world) => world * View * Projection;
 
-        // 箱の 8 隅がすべて、描く範囲の上下左右のどれか 1 つの外、またはすべてカメラの後ろにあるとき true。
-        // 写るかもしれないときは false。
         public bool IsOutside(in WorldBounds bounds, in Matrix4x4 world)
         {
             if (bounds.IsEmpty)
@@ -73,9 +73,9 @@ namespace YMM43D.Commons
             bool unlit = false,
             float alphaCutoff = 0f,
             SurfaceGloss gloss = default,
-            float toonSteps = 0f)
+            ModelPaint? paint = null)
             => SceneConstants.Create(
-                world, View, Projection, opacity, Lighting, unlit, alphaCutoff, gloss, toonSteps);
+                world, View, Projection, opacity, Lighting, unlit, alphaCutoff, gloss, paint);
 
         public TransformConstants CreateConstants(
             in Matrix4x4 world, DrawContext3D item, bool unlit = false, SurfaceGloss gloss = default)

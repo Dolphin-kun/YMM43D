@@ -28,8 +28,6 @@ namespace YMM43D.Project.Effects.Flat3D
 
         public override bool ScalesToInputSize => false;
 
-        // グループ制御に付けたときは、中のアイテムが持つ 3D の中身をそのまま使い、
-        // 回転はグループ制御の中心を軸にして親として掛ける。
         protected override bool KeepsGroupMemberSolid => true;
 
         protected override bool ParentsGroupMembers => true;
@@ -69,7 +67,6 @@ namespace YMM43D.Project.Effects.Flat3D
 
         private Matrix4x4 GetLocalMatrix(in FrameContext time)
         {
-            // グループ制御に付けたときは、回転を親として別に掛けるので、ここでは板の大きさだけ。
             var rotation = IsGroupEffect ? Matrix4x4.Identity : GetRotation(time);
 
             if (!TryGetSize(out var size, out var offset))

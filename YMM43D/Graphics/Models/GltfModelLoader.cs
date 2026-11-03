@@ -68,11 +68,13 @@ namespace YMM43D.Graphics.Models
             private readonly Dictionary<int, byte[]> buffers = [];
             private readonly Dictionary<int, int> images = [];
 
-            // 表情で動く形。(メッシュ番号, 形の番号) で引く。
             private readonly Dictionary<(int Mesh, int Target), List<ModelMorphDelta>> morphs = [];
             private readonly List<(int Mesh, int Target)> morphOrder = [];
 
             private readonly Dictionary<int, int> boneOfNode = [];
+
+            private readonly HashSet<int> animated = [];
+            private readonly Dictionary<int, int> rigidBoneOfNode = [];
             private readonly List<int> boneOrder = [];
             private readonly Dictionary<int, int> parentOfNode = [];
 
@@ -87,16 +89,18 @@ namespace YMM43D.Graphics.Models
 
                 ReadBones();
 
+                CollectAnimated();
+
                 foreach (var node in RootNodes())
                     Visit(node, baseMatrix, 0);
 
                 FinishMorphs();
+                ReadAnimations();
+                ReadSprings();
 
                 return builder.Build();
             }
 
-            // 骨組みを読む。glTF では skins に骨（joints）の一覧と、
-            // 骨が動いていないときの頂点との関係（inverseBindMatrices）が入っている。
             private void ReadBones()
             {
                 if (!root.TryGetProperty("skins", out var skins) || skins.GetArrayLength() == 0)
@@ -126,14 +130,12 @@ namespace YMM43D.Graphics.Models
                         var node = root.GetProperty("nodes")[nodes[i]];
 
                         builder.Bones.Add(new ModelBone(
-                            node.TryGetProperty("name", out var name) ? name.GetString() ?? $"骨 {i + 1}" : $"骨 {i + 1}",
+                            node.TryGetProperty("name", out var name) ? name.GetString() ?? $"ボーン {i + 1}" : $"ボーン {i + 1}",
                             -1,
                             LocalMatrix(node),
                             inverseBinds is not null && i < inverseBinds.Length ? inverseBinds[i] : Matrix4x4.Identity));
                     }
 
-                    // 親子は、この skin に入っている骨のあいだだけでつなぐ。
-                    // あいだに骨でないノードが挟まっていたら、その変換は子の骨に入れる。
                     for (var i = start; i < builder.Bones.Count; i++)
                     {
                         var local = builder.Bones[i].Local;
@@ -195,8 +197,6 @@ namespace YMM43D.Graphics.Models
                 return matrices;
             }
 
-            // VRM 0.x の人は -Z を向いて作られているので、こちらを向くように半回転させる。
-            // VRM 1.0（VRMC_vrm）と、ふつうの glTF はそのまま。
             private bool FacesAway()
                 => root.TryGetProperty("extensions", out var extensions)
                 && extensions.TryGetProperty("VRM", out _)
@@ -220,12 +220,28 @@ namespace YMM43D.Graphics.Models
             {
                 if (root.TryGetProperty("scenes", out var scenes) && scenes.GetArrayLength() > 0)
                 {
-                    var index = root.TryGetProperty("scene", out var scene) ? scene.GetInt32() : 0;
+                    var first = root.TryGetProperty("scene", out var scene) ? scene.GetInt32() : 0;
 
-                    if (scenes[index].TryGetProperty("nodes", out var nodes))
-                        return nodes.EnumerateArray().Select(node => node.GetInt32()).ToArray();
+                    var order = Enumerable.Range(0, scenes.GetArrayLength())
+                        .OrderBy(index => index == first ? 0 : 1)
+                        .ThenBy(index => index);
 
-                    return [];
+                    var found = new List<int>();
+                    var seen = new HashSet<int>();
+
+                    foreach (var index in order)
+                    {
+                        if (!scenes[index].TryGetProperty("nodes", out var nodes))
+                            continue;
+
+                        foreach (var node in nodes.EnumerateArray())
+                        {
+                            if (seen.Add(node.GetInt32()))
+                                found.Add(node.GetInt32());
+                        }
+                    }
+
+                    return found;
                 }
 
                 if (!root.TryGetProperty("nodes", out var all))
@@ -245,33 +261,106 @@ namespace YMM43D.Graphics.Models
                 return Enumerable.Range(0, all.GetArrayLength()).Where(index => !children.Contains(index)).ToArray();
             }
 
-            private void Visit(int index, in Matrix4x4 parent, int depth)
+            private void Visit(
+                int index, in Matrix4x4 parent, int depth, int moving = -1, Matrix4x4? since = null)
             {
                 if (depth > 64)
                     throw new InvalidDataException("ノードの入れ子が深すぎます。");
 
                 var node = root.GetProperty("nodes")[index];
-                var world = LocalMatrix(node) * parent;
+                var local = LocalMatrix(node);
+                var world = local * parent;
+
+                var mine = local * (since ?? Matrix4x4.Identity);
+
+                var bone = moving;
+                var place = world;
+                var below = mine;
+
+                if (animated.Contains(index) && AddMovingBone(index, node, moving, mine, parent) is var made and >= 0)
+                {
+                    bone = made;
+                    place = parent;
+                    below = Matrix4x4.Identity;
+                }
 
                 if (node.TryGetProperty("mesh", out var mesh))
                 {
-                    // 骨に付いたメッシュは、置き場所を骨が決めるので、ノードの変換は使わない（glTF の決まり）。
-                    // 向き合わせは骨の行列側に入れるので、ここでは掛けない。
                     var skinned = node.TryGetProperty("skin", out var skin);
-                    var placed = skinned ? Matrix4x4.Identity : world;
+
+                    var held = skinned || bone < 0
+                        ? -1
+                        : place == parent ? bone : PlacementBone(bone, mine, world);
 
                     AddMesh(
                         root.GetProperty("meshes")[mesh.GetInt32()],
-                        placed,
+                        skinned ? Matrix4x4.Identity : place,
                         skinned ? skin.GetInt32() : -1,
-                        mesh.GetInt32());
+                        mesh.GetInt32(),
+                        held);
                 }
 
                 if (node.TryGetProperty("children", out var children))
                 {
                     foreach (var child in children.EnumerateArray())
-                        Visit(child.GetInt32(), world, depth + 1);
+                        Visit(child.GetInt32(), world, depth + 1, bone, below);
                 }
+            }
+
+            private void CollectAnimated()
+            {
+                if (!root.TryGetProperty("animations", out var animations))
+                    return;
+
+                foreach (var animation in animations.EnumerateArray())
+                {
+                    if (!animation.TryGetProperty("channels", out var channels))
+                        continue;
+
+                    foreach (var channel in channels.EnumerateArray())
+                    {
+                        if (channel.TryGetProperty("target", out var target)
+                            && target.TryGetProperty("node", out var node)
+                            && target.TryGetProperty("path", out var path)
+                            && path.GetString() is "translation" or "rotation" or "scale")
+                        {
+                            animated.Add(node.GetInt32());
+                        }
+                    }
+                }
+            }
+
+            private int AddMovingBone(
+                int index, JsonElement node, int parentBone, in Matrix4x4 local, in Matrix4x4 parentWorld)
+            {
+                if (rigidBoneOfNode.TryGetValue(index, out var known))
+                    return known;
+
+                if (boneOfNode.TryGetValue(index, out var already))
+                    return rigidBoneOfNode[index] = already;
+
+                if (!Matrix4x4.Invert(parentWorld, out var inverse))
+                    return -1;
+
+                builder.Bones.Add(new ModelBone(
+                    node.TryGetProperty("name", out var name) ? name.GetString() ?? $"もの {index}" : $"もの {index}",
+                    parentBone,
+                    local,
+                    inverse));
+
+                boneOfNode[index] = builder.Bones.Count - 1;
+
+                return rigidBoneOfNode[index] = builder.Bones.Count - 1;
+            }
+
+            private int PlacementBone(int parentBone, in Matrix4x4 local, in Matrix4x4 world)
+            {
+                if (!Matrix4x4.Invert(world, out var inverse))
+                    return -1;
+
+                builder.Bones.Add(new ModelBone("（付いているもの）", parentBone, local, inverse));
+
+                return builder.Bones.Count - 1;
             }
 
             private static Matrix4x4 LocalMatrix(JsonElement node)
@@ -296,7 +385,8 @@ namespace YMM43D.Graphics.Models
                      * Matrix4x4.CreateTranslation(translation[0], translation[1], translation[2]);
             }
 
-            private void AddMesh(JsonElement mesh, in Matrix4x4 world, int skinIndex = -1, int meshIndex = -1)
+            private void AddMesh(
+                JsonElement mesh, in Matrix4x4 world, int skinIndex = -1, int meshIndex = -1, int rigidBone = -1)
             {
                 Matrix4x4.Invert(world, out var inverse);
                 var normalMatrix = Matrix4x4.Transpose(inverse);
@@ -332,10 +422,10 @@ namespace YMM43D.Graphics.Models
                         ? ReadIndices(i.GetInt32())
                         : [.. Enumerable.Range(0, count).Select(index => (uint)index)];
 
-                    var (color, image, blend, cutoff) = ReadMaterial(primitive);
+                    var (color, image, blend, cutoff, unlit, surface) = ReadMaterial(primitive);
                     var (key, name) = MaterialName(primitive);
 
-                    builder.BeginPart(color, image, key, name, blend, cutoff);
+                    builder.BeginPart(color, image, key, name, blend, cutoff, unlit, surface);
 
                     var start = (uint)builder.VertexCount;
 
@@ -352,7 +442,9 @@ namespace YMM43D.Graphics.Models
                             normal.LengthSquared() > 1e-20f ? Vector3.Normalize(normal) : Vector3.Zero,
                             texCoords is null ? Vector2.Zero : new Vector2(texCoords[v * 2], texCoords[v * 2 + 1]),
                             colors?[v] ?? Vector4.One,
-                            Influence(joints, weights, skinJoints, v));
+                            rigidBone >= 0
+                                ? new ModelInfluence((ushort)rigidBone, 0, 0, 0, new Vector4(1f, 0f, 0f, 0f))
+                                : Influence(joints, weights, skinJoints, v));
                     }
 
                     AddMorphs(mesh, primitive, meshIndex, start, count, normalMatrix);
@@ -374,7 +466,6 @@ namespace YMM43D.Graphics.Models
                 }
             }
 
-            // 集めた動きを形ごとにまとめ、表情の組み合わせを読む。
             private void FinishMorphs()
             {
                 for (var i = 0; i < morphOrder.Count && i < builder.Morphs.Count; i++)
@@ -383,7 +474,6 @@ namespace YMM43D.Graphics.Models
                 if (ReadVrmExpressions() || ReadVrm1Expressions())
                     return;
 
-                // VRM でなければ、形ひとつひとつをそのまま表情として並べる。
                 for (var i = 0; i < builder.Morphs.Count; i++)
                 {
                     builder.Expressions.Add(
@@ -395,7 +485,6 @@ namespace YMM43D.Graphics.Models
                 => root.TryGetProperty("extensions", out var extensions)
                     && extensions.TryGetProperty(name, out var found) ? found : null;
 
-            // VRM 0.x の表情。「あ」「まばたき」などが、形の番号と強さの組で書かれている。
             private bool ReadVrmExpressions()
             {
                 if (Extension("VRM") is not { } vrm
@@ -432,7 +521,6 @@ namespace YMM43D.Graphics.Models
                 return builder.Expressions.Count > 0;
             }
 
-            // VRM 1.0 の表情。指しているのがメッシュではなくノードになっている。
             private bool ReadVrm1Expressions()
             {
                 if (Extension("VRMC_vrm") is not { } vrm || !vrm.TryGetProperty("expressions", out var expressions))
@@ -476,7 +564,6 @@ namespace YMM43D.Graphics.Models
                 return nodes[node].TryGetProperty("mesh", out var mesh) ? mesh.GetInt32() : -1;
             }
 
-            // 書き手によっては、メッシュの番号ではなくノードの番号で指してくる。両方で探す。
             private int? MorphIndex(int mesh, int target)
             {
                 var found = morphOrder.IndexOf((mesh, target));
@@ -487,8 +574,6 @@ namespace YMM43D.Graphics.Models
                 return found >= 0 ? found : null;
             }
 
-            // 表情で動く形（モーフターゲット）を読む。
-            // 1 つのメッシュが複数のかたまりに分かれていても、同じ番号の形は 1 つにまとめる。
             private void AddMorphs(
                 JsonElement mesh, JsonElement primitive, int meshIndex, uint start, int count, in Matrix4x4 normalMatrix)
             {
@@ -618,27 +703,151 @@ namespace YMM43D.Graphics.Models
                 return ($"#{number}", name);
             }
 
-            private (Vector4 Color, int Image, ModelBlend Blend, float Cutoff) ReadMaterial(JsonElement primitive)
+            private (Vector4 Color, int Image, ModelBlend Blend, float Cutoff, bool Unlit, ModelSurface Surface)
+                ReadMaterial(JsonElement primitive)
             {
                 if (!primitive.TryGetProperty("material", out var index) || !root.TryGetProperty("materials", out var materials))
-                    return (Vector4.One, -1, ModelBlend.Opaque, 0.5f);
+                    return (Vector4.One, -1, ModelBlend.Opaque, 0.5f, false, ModelSurface.Default);
 
-                var material = materials[index.GetInt32()];
+                var number = index.GetInt32();
+                var material = materials[number];
                 var (blend, cutoff) = ReadAlpha(material);
+                var unlit = IsUnlit(material);
+                var surface = ReadSurface(number, material);
 
                 if (!material.TryGetProperty("pbrMetallicRoughness", out var pbr))
-                    return (Vector4.One, -1, blend, cutoff);
+                    return (Vector4.One, -1, blend, cutoff, unlit, surface);
 
                 var factor = pbr.TryGetProperty("baseColorFactor", out var f) ? Floats(f, 4) : [1f, 1f, 1f, 1f];
                 var color = new Vector4(factor[0], factor[1], factor[2], factor[3]);
 
                 if (!pbr.TryGetProperty("baseColorTexture", out var texture))
-                    return (color, -1, blend, cutoff);
+                    return (color, -1, blend, cutoff, unlit, surface);
 
-                return (color, ImageOfTexture(texture.GetProperty("index").GetInt32()), blend, cutoff);
+                return (
+                    color,
+                    ImageOfTexture(texture.GetProperty("index").GetInt32()),
+                    blend,
+                    cutoff,
+                    unlit,
+                    WithUvTransform(texture, surface));
             }
 
-            // 材質の透け方。glTF の alphaMode と alphaCutoff をそのまま読む。
+            private ModelSurface ReadSurface(int number, JsonElement material)
+            {
+                var surface = ModelSurface.Default;
+
+                if (material.TryGetProperty("normalTexture", out var bump))
+                {
+                    surface = surface with
+                    {
+                        BumpImage = ImageOfRef(bump),
+                        BumpScale = bump.TryGetProperty("scale", out var scale) ? scale.GetSingle() : 1f,
+                    };
+                }
+
+                surface = surface with
+                {
+                    Glow = Triple(material, "emissiveFactor") * GlowStrength(material),
+                    GlowImage = material.TryGetProperty("emissiveTexture", out var glow) ? ImageOfRef(glow) : -1,
+                };
+
+                if (material.TryGetProperty("pbrMetallicRoughness", out var pbr))
+                {
+                    surface = surface with
+                    {
+                        Metallic = pbr.TryGetProperty("metallicFactor", out var metallic) ? metallic.GetSingle() : 1f,
+                        Roughness = pbr.TryGetProperty("roughnessFactor", out var rough) ? rough.GetSingle() : 1f,
+                        FeelImage = pbr.TryGetProperty("metallicRoughnessTexture", out var feel)
+                            ? ImageOfRef(feel)
+                            : -1,
+                    };
+                }
+
+                return ReadToon(number, material, surface);
+            }
+
+            private static float GlowStrength(JsonElement material)
+                => material.TryGetProperty("extensions", out var extensions)
+                    && extensions.TryGetProperty("KHR_materials_emissive_strength", out var found)
+                    && found.TryGetProperty("emissiveStrength", out var value)
+                        ? value.GetSingle()
+                        : 1f;
+
+            private ModelSurface ReadToon(int number, JsonElement material, ModelSurface surface)
+            {
+                if (material.TryGetProperty("extensions", out var extensions)
+                    && extensions.TryGetProperty("VRMC_materials_mtoon", out var mtoon))
+                {
+                    var shade = mtoon.TryGetProperty("shadeColorFactor", out _)
+                        ? Triple(mtoon, "shadeColorFactor")
+                        : Vector3.One;
+
+                    return surface with
+                    {
+                        Shade = shade,
+                        ShadeImage = mtoon.TryGetProperty("shadeMultiplyTexture", out var texture)
+                            ? ImageOfRef(texture)
+                            : -1,
+                    };
+                }
+
+                if (Extension("VRM") is not { } vrm
+                    || !vrm.TryGetProperty("materialProperties", out var list)
+                    || number < 0
+                    || number >= list.GetArrayLength())
+                {
+                    return surface;
+                }
+
+                var properties = list[number];
+                var color = Vector3.One;
+
+                if (properties.TryGetProperty("vectorProperties", out var vectors)
+                    && vectors.TryGetProperty("_ShadeColor", out var written)
+                    && written.GetArrayLength() >= 3)
+                {
+                    color = new Vector3(
+                        written[0].GetSingle(), written[1].GetSingle(), written[2].GetSingle());
+                }
+
+                var image = -1;
+
+                if (properties.TryGetProperty("textureProperties", out var textures)
+                    && textures.TryGetProperty("_ShadeTexture", out var shadeTexture))
+                {
+                    image = ImageOfTexture(shadeTexture.GetInt32());
+                }
+
+                return surface with { Shade = color, ShadeImage = image };
+            }
+
+            private static ModelSurface WithUvTransform(JsonElement texture, ModelSurface surface)
+            {
+                if (!texture.TryGetProperty("extensions", out var extensions)
+                    || !extensions.TryGetProperty("KHR_texture_transform", out var transform))
+                {
+                    return surface;
+                }
+
+                var scale = transform.TryGetProperty("scale", out var s) ? Floats(s, 2) : [1f, 1f];
+                var offset = transform.TryGetProperty("offset", out var o) ? Floats(o, 2) : [0f, 0f];
+
+                return surface with
+                {
+                    UvScale = new Vector2(scale[0], scale[1]),
+                    UvOffset = new Vector2(offset[0], offset[1]),
+                    UvRotation = transform.TryGetProperty("rotation", out var r) ? r.GetSingle() : 0f,
+                };
+            }
+
+            private int ImageOfRef(JsonElement reference)
+                => reference.TryGetProperty("index", out var index) ? ImageOfTexture(index.GetInt32()) : -1;
+
+            private static bool IsUnlit(JsonElement material)
+                => material.TryGetProperty("extensions", out var extensions)
+                    && extensions.TryGetProperty("KHR_materials_unlit", out _);
+
             private static (ModelBlend Blend, float Cutoff) ReadAlpha(JsonElement material)
             {
                 var cutoff = material.TryGetProperty("alphaCutoff", out var given) ? given.GetSingle() : 0.5f;
@@ -683,6 +892,428 @@ namespace YMM43D.Graphics.Models
                     return images[imageIndex] = -1;
                 }
             }
+
+            private void ReadAnimations()
+            {
+                if (!root.TryGetProperty("animations", out var animations))
+                    return;
+
+                var number = 0;
+
+                foreach (var animation in animations.EnumerateArray())
+                {
+                    number++;
+
+                    if (!animation.TryGetProperty("channels", out var channels)
+                        || !animation.TryGetProperty("samplers", out var samplers))
+                    {
+                        continue;
+                    }
+
+                    var tracks = new List<ModelTrack>();
+                    var moved = new Dictionary<int, ModelAnimatedBone>();
+                    var duration = 0f;
+
+                    foreach (var channel in channels.EnumerateArray())
+                    {
+                        if (!channel.TryGetProperty("target", out var target)
+                            || !target.TryGetProperty("node", out var nodeAt)
+                            || !target.TryGetProperty("path", out var path)
+                            || !channel.TryGetProperty("sampler", out var samplerAt))
+                        {
+                            continue;
+                        }
+
+                        var sampler = samplers[samplerAt.GetInt32()];
+
+                        if (!sampler.TryGetProperty("input", out var input)
+                            || !sampler.TryGetProperty("output", out var output))
+                        {
+                            continue;
+                        }
+
+                        var times = ReadVectors(input.GetInt32(), 1);
+
+                        if (times.Length == 0)
+                            continue;
+
+                        duration = MathF.Max(duration, times[^1]);
+
+                        var shape = sampler.TryGetProperty("interpolation", out var how)
+                            ? how.GetString() ?? "LINEAR"
+                            : "LINEAR";
+
+                        var node = nodeAt.GetInt32();
+                        var kind = path.GetString() switch
+                        {
+                            "translation" => ModelTrackKind.Translation,
+                            "scale" => ModelTrackKind.Scale,
+                            "rotation" => ModelTrackKind.Rotation,
+                            "weights" => ModelTrackKind.Weight,
+                            _ => (ModelTrackKind?)null,
+                        };
+
+                        if (kind is not { } what)
+                            continue;
+
+                        if (what == ModelTrackKind.Weight)
+                        {
+                            AddWeightTracks(tracks, node, times, ReadAccessorValues(output.GetInt32()), shape);
+
+                            continue;
+                        }
+
+                        if (!boneOfNode.TryGetValue(node, out var bone))
+                            continue;
+
+                        var width = what == ModelTrackKind.Rotation ? 4 : 3;
+                        var values = Straighten(ReadAccessorValues(output.GetInt32()), times.Length, width, shape);
+
+                        if (values.Length < times.Length * width)
+                            continue;
+
+                        if (!moved.ContainsKey(bone) && RestOf(node, bone) is { } rest)
+                            moved[bone] = rest;
+
+                        if (moved.ContainsKey(bone))
+                            tracks.Add(new ModelTrack(bone, -1, what, times, values, shape == "STEP"));
+                    }
+
+                    if (tracks.Count == 0)
+                        continue;
+
+                    var name = animation.TryGetProperty("name", out var given) && given.GetString() is { Length: > 0 } text
+                        ? text
+                        : $"動き {number}";
+
+                    builder.Animations.Add(new ModelAnimation(name, duration, [.. tracks], [.. moved.Values]));
+                }
+            }
+
+            private void AddWeightTracks(
+                List<ModelTrack> tracks, int node, float[] times, float[] values, string shape)
+            {
+                var mesh = MeshOfNode(node);
+
+                if (mesh < 0)
+                    return;
+
+                var straight = Straighten(values, times.Length, values.Length / Math.Max(times.Length, 1), shape);
+                var width = straight.Length / Math.Max(times.Length, 1);
+
+                for (var target = 0; target < width; target++)
+                {
+                    if (MorphIndex(mesh, target) is not { } morph)
+                        continue;
+
+                    var one = new float[times.Length];
+
+                    for (var i = 0; i < times.Length; i++)
+                        one[i] = straight[i * width + target];
+
+                    tracks.Add(new ModelTrack(-1, morph, ModelTrackKind.Weight, times, one, shape == "STEP"));
+                }
+            }
+
+            private static float[] Straighten(float[] values, int count, int width, string shape)
+            {
+                if (shape != "CUBICSPLINE" || count <= 0 || width <= 0)
+                    return values;
+
+                var each = width / 3;
+
+                if (each <= 0 || values.Length < count * width)
+                    return values;
+
+                var made = new float[count * each];
+
+                for (var i = 0; i < count; i++)
+                {
+                    for (var k = 0; k < each; k++)
+                        made[i * each + k] = values[i * width + each + k];
+                }
+
+                return made;
+            }
+
+            private ModelAnimatedBone? RestOf(int node, int bone)
+            {
+                var found = root.GetProperty("nodes")[node];
+
+                if (!Matrix4x4.Invert(LocalMatrix(found), out var inverse))
+                    return null;
+
+                var scale = found.TryGetProperty("scale", out var s) ? Floats(s, 3) : [1f, 1f, 1f];
+                var turn = found.TryGetProperty("rotation", out var r) ? Floats(r, 4) : [0f, 0f, 0f, 1f];
+                var shift = found.TryGetProperty("translation", out var t) ? Floats(t, 3) : [0f, 0f, 0f];
+
+                return new ModelAnimatedBone(
+                    bone,
+                    new Vector3(shift[0], shift[1], shift[2]),
+                    Quaternion.Normalize(new Quaternion(turn[0], turn[1], turn[2], turn[3])),
+                    new Vector3(scale[0], scale[1], scale[2]),
+                    inverse);
+            }
+
+            private float[] ReadAccessorValues(int accessorIndex)
+                => ReadAccessor(root.GetProperty("accessors")[accessorIndex], out _);
+
+            private void ReadSprings()
+            {
+                if (builder.Bones.Count == 0)
+                    return;
+
+                if (!ReadVrm1Springs())
+                    ReadVrmSprings();
+            }
+
+            private void ReadVrmSprings()
+            {
+                if (Extension("VRM") is not { } vrm
+                    || !vrm.TryGetProperty("secondaryAnimation", out var secondary)
+                    || !secondary.TryGetProperty("boneGroups", out var groups))
+                {
+                    return;
+                }
+
+                var hits = ReadVrmColliderGroups(secondary);
+
+                foreach (var group in groups.EnumerateArray())
+                {
+                    if (!group.TryGetProperty("bones", out var bones))
+                        continue;
+
+                    var stiffness = Number(group, "stiffiness", 1f);
+                    var drag = Number(group, "dragForce", 0.4f);
+                    var power = Number(group, "gravityPower", 0f);
+                    var direction = group.TryGetProperty("gravityDir", out var dir)
+                        ? new Vector3(Number(dir, "x", 0f), Number(dir, "y", -1f), Number(dir, "z", 0f))
+                        : new Vector3(0f, -1f, 0f);
+
+                    var thickness = Number(group, "hitRadius", 0f);
+                    var touching = Gather(hits, group, "colliderGroups");
+
+                    foreach (var node in bones.EnumerateArray())
+                    {
+                        if (boneOfNode.TryGetValue(node.GetInt32(), out var bone))
+                            AddSpring(bone, stiffness, drag, power * direction, thickness, touching);
+                    }
+                }
+            }
+
+            private List<ModelSpringCollider[]> ReadVrmColliderGroups(JsonElement secondary)
+            {
+                var groups = new List<ModelSpringCollider[]>();
+
+                if (!secondary.TryGetProperty("colliderGroups", out var found))
+                    return groups;
+
+                foreach (var group in found.EnumerateArray())
+                {
+                    var made = new List<ModelSpringCollider>();
+
+                    if (group.TryGetProperty("node", out var node)
+                        && boneOfNode.TryGetValue(node.GetInt32(), out var bone)
+                        && group.TryGetProperty("colliders", out var shapes))
+                    {
+                        foreach (var shape in shapes.EnumerateArray())
+                        {
+                            var offset = shape.TryGetProperty("offset", out var at)
+                                ? new Vector3(Number(at, "x", 0f), Number(at, "y", 0f), Number(at, "z", 0f))
+                                : Vector3.Zero;
+
+                            var radius = Number(shape, "radius", 0f);
+
+                            if (radius > 0f)
+                                made.Add(new ModelSpringCollider(bone, offset, radius, Vector3.Zero, false));
+                        }
+                    }
+
+                    groups.Add([.. made]);
+                    builder.Colliders.AddRange(made);
+                }
+
+                return groups;
+            }
+
+            private static ModelSpringCollider[] Gather(
+                List<ModelSpringCollider[]> groups, JsonElement owner, string name)
+            {
+                if (!owner.TryGetProperty(name, out var chosen))
+                    return [];
+
+                var made = new List<ModelSpringCollider>();
+
+                foreach (var index in chosen.EnumerateArray())
+                {
+                    if (index.TryGetInt32(out var at) && at >= 0 && at < groups.Count)
+                        made.AddRange(groups[at]);
+                }
+
+                return [.. made];
+            }
+
+            private bool ReadVrm1Springs()
+            {
+                if (Extension("VRMC_springBone") is not { } spring
+                    || !spring.TryGetProperty("springs", out var springs))
+                {
+                    return false;
+                }
+
+                var found = false;
+                var hits = ReadVrm1ColliderGroups(spring);
+
+                foreach (var one in springs.EnumerateArray())
+                {
+                    if (!one.TryGetProperty("joints", out var joints))
+                        continue;
+
+                    var made = new List<ModelSpringJoint>();
+
+                    foreach (var joint in joints.EnumerateArray())
+                    {
+                        if (!joint.TryGetProperty("node", out var node)
+                            || !boneOfNode.TryGetValue(node.GetInt32(), out var bone))
+                        {
+                            continue;
+                        }
+
+                        var power = Number(joint, "gravityPower", 0f);
+                        var direction = joint.TryGetProperty("gravityDir", out var dir)
+                            ? new Vector3(Number(dir, "x", 0f), Number(dir, "y", -1f), Number(dir, "z", 0f))
+                            : new Vector3(0f, -1f, 0f);
+
+                        if (Reach(bone) is not { } reach)
+                            continue;
+
+                        made.Add(new ModelSpringJoint(
+                            bone,
+                            reach.Axis,
+                            reach.Length,
+                            Number(joint, "stiffness", 1f),
+                            Number(joint, "dragForce", 0.4f),
+                            power * direction,
+                            Number(joint, "hitRadius", 0f)));
+                    }
+
+                    if (made.Count == 0)
+                        continue;
+
+                    builder.Springs.Add(ModelSpring.Allowing(
+                        new ModelSpring([.. made]) { Colliders = Gather(hits, one, "colliderGroups") },
+                        [.. builder.Bones]));
+
+                    found = true;
+                }
+
+                return found;
+            }
+
+            private List<ModelSpringCollider[]> ReadVrm1ColliderGroups(JsonElement spring)
+            {
+                var all = new List<ModelSpringCollider>();
+
+                if (spring.TryGetProperty("colliders", out var colliders))
+                {
+                    foreach (var collider in colliders.EnumerateArray())
+                    {
+                        all.Add(ReadVrm1Collider(collider));
+                        builder.Colliders.Add(all[^1]);
+                    }
+                }
+
+                var groups = new List<ModelSpringCollider[]>();
+
+                if (!spring.TryGetProperty("colliderGroups", out var found))
+                    return groups;
+
+                foreach (var group in found.EnumerateArray())
+                {
+                    var made = new List<ModelSpringCollider>();
+
+                    if (group.TryGetProperty("colliders", out var chosen))
+                    {
+                        foreach (var index in chosen.EnumerateArray())
+                        {
+                            if (index.TryGetInt32(out var at) && at >= 0 && at < all.Count
+                                && all[at].Radius > 0f)
+                            {
+                                made.Add(all[at]);
+                            }
+                        }
+                    }
+
+                    groups.Add([.. made]);
+                }
+
+                return groups;
+            }
+
+            private ModelSpringCollider ReadVrm1Collider(JsonElement collider)
+            {
+                var bone = collider.TryGetProperty("node", out var node)
+                    && boneOfNode.TryGetValue(node.GetInt32(), out var found)
+                        ? found
+                        : -1;
+
+                if (bone < 0 || !collider.TryGetProperty("shape", out var shape))
+                    return new ModelSpringCollider(-1, Vector3.Zero, 0f, Vector3.Zero, false);
+
+                if (shape.TryGetProperty("capsule", out var capsule))
+                {
+                    return new ModelSpringCollider(
+                        bone,
+                        Triple(capsule, "offset"),
+                        Number(capsule, "radius", 0f),
+                        Triple(capsule, "tail"),
+                        true);
+                }
+
+                if (shape.TryGetProperty("sphere", out var sphere))
+                {
+                    return new ModelSpringCollider(
+                        bone,
+                        Triple(sphere, "offset"),
+                        Number(sphere, "radius", 0f),
+                        Vector3.Zero,
+                        false);
+                }
+
+                return new ModelSpringCollider(-1, Vector3.Zero, 0f, Vector3.Zero, false);
+            }
+
+            private static Vector3 Triple(JsonElement owner, string name)
+            {
+                if (!owner.TryGetProperty(name, out var found) || found.GetArrayLength() < 3)
+                    return Vector3.Zero;
+
+                return new Vector3(
+                    found[0].GetSingle(), found[1].GetSingle(), found[2].GetSingle());
+            }
+
+            private void AddSpring(
+                int root,
+                float stiffness,
+                float drag,
+                in Vector3 gravity,
+                float hitRadius,
+                ModelSpringCollider[] colliders)
+            {
+                if (ModelSpring.From(
+                        [.. builder.Bones], root, stiffness, drag, gravity, hitRadius, colliders) is { } made)
+                {
+                    builder.Springs.Add(made);
+                }
+            }
+
+            private (Vector3 Axis, float Length)? Reach(int bone)
+                => ModelSpring.Reach([.. builder.Bones], bone);
+
+            private static float Number(JsonElement element, string name, float fallback)
+                => element.TryGetProperty(name, out var found) && found.TryGetSingle(out var value)
+                    ? value
+                    : fallback;
 
             private float[] ReadVectors(int accessorIndex, int width)
             {

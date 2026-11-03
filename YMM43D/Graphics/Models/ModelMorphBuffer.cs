@@ -5,8 +5,6 @@ using Vortice.Mathematics;
 
 namespace YMM43D.Graphics.Models
 {
-    // 表情で頂点をずらす量を GPU に渡す入れ物。モデル 1 つにつき 1 つ持つ。
-    // 動く頂点だけを書き換え、書き込みも動いた範囲だけに絞る。
     public sealed class ModelMorphBuffer(ID3D11Device device) : IDisposable
     {
         public const int Slot = 4;
@@ -17,7 +15,6 @@ namespace YMM43D.Graphics.Models
         private ID3D11ShaderResourceView? view;
         private Vector4[] offsets = [];
 
-        // 前に動かした頂点の範囲。次に書くときはここも元に戻す。
         private int touchedFrom = int.MaxValue;
         private int touchedTo = -1;
 
@@ -37,7 +34,6 @@ namespace YMM43D.Graphics.Models
             var from = int.MaxValue;
             var to = -1;
 
-            // 前に動かしたところを元に戻す。
             for (var i = touchedFrom; i <= touchedTo; i++)
                 offsets[i] = Vector4.Zero;
 

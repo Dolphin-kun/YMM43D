@@ -30,23 +30,16 @@ namespace YMM43D.Plugin
 
         protected IGraphicsDevicesAndContext Devices { get; } = devices;
 
-        // グループ制御に付けたエフェクトは、中のアイテム 1 つずつに掛かる。
-        // そのとき中のアイテムが 3D を持っているなら、絵を板にせずその 3D をそのまま使う。
         protected virtual bool KeepsGroupMemberSolid => false;
 
-        // 中に 3D が無いときも、グループ制御の中心を軸にした親として掛けるか。
         protected virtual bool ParentsGroupMembers => false;
 
-        // グループ制御の中心を軸にして掛ける親の行列。
         protected virtual Matrix4x4 GetGroupParentMatrix(in FrameContext time) => Matrix4x4.Identity;
 
-        // グループ制御に付けたエフェクトか。
         protected bool IsGroupEffect { get; private set; }
 
-        // グループ制御の中のアイテムが持っている 3D の中身。
         protected I3DProvider? GroupMemberSolid { get; private set; }
 
-        // その中身がこのプラグインのエフェクトなら、その処理側。配置を引き継ぐのに使う。
         protected VideoEffect3DProcessorBase? GroupMemberProcessor => groupMemberProcessor;
 
         internal IGraphicsDevicesAndContext SourceDevices => Devices;
@@ -68,8 +61,6 @@ namespace YMM43D.Plugin
 
         WorldBounds I3DBounds.GetLocalBounds(in FrameContext itemTime) => Bounds(itemTime);
 
-        // 中の 3D をそのまま描くときは、占める範囲もその中身に合わせる。
-        // 複製してばらまくように自分で範囲を決めるものは、false にして GetLocalBounds を使う。
         protected virtual bool UsesGroupMemberBounds => true;
 
         private WorldBounds Bounds(in FrameContext itemTime)
@@ -168,7 +159,6 @@ namespace YMM43D.Plugin
             groupMemberProcessor = GroupMemberSolid as VideoEffect3DProcessorBase;
         }
 
-        // グループ制御の中のアイテムが持つ 3D を、そのまま描く。
         protected bool TryDrawGroupMemberSolid(in Render3DContext render, in DrawContext3D item)
         {
             if (GroupMemberSolid is not { } source)

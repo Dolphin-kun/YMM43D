@@ -84,7 +84,12 @@ namespace YMM43D.Player
 
                     context.RSSetViewport(new Viewport(0, 0, width, height));
 
-                    draw(new Render3DContext(lease.Device, context, view, projection, lit) { Scene = shadowCasters, SourceDevices = ymmDevices }.BindLights());
+                    draw(new Render3DContext(lease.Device, context, view, projection, lit)
+                    {
+                        Scene = shadowCasters,
+                        SourceDevices = ymmDevices,
+                        IsOutput = true,
+                    }.BindLights());
 
                     context.Flush();
                 }
@@ -138,8 +143,6 @@ namespace YMM43D.Player
                 }
                 else
                 {
-                    // 何も描いていない絵は大きさが無限になり、受け取った側が絵を重ねるときに失敗する。
-                    // 透明な点をひとつ置いて、大きさの決まった絵にしておく。
                     using var clear = deviceContext.CreateSolidColorBrush(new Color4(0f, 0f, 0f, 0f));
 
                     deviceContext.FillRectangle(new RawRectF(offset.X, offset.Y, offset.X + 1f, offset.Y + 1f), clear);

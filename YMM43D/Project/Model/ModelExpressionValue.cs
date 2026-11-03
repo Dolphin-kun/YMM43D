@@ -5,10 +5,8 @@ using YukkuriMovieMaker.Controls;
 
 namespace YMM43D.Project.Model
 {
-    // 表情 1 つぶんの強さ。モデルに書かれている表情の名前で結びつける。
     public class ModelExpressionValue : Animatable
     {
-        // 名前は一覧の見出しに出すので、編集欄は作らない。
         public string Name
         {
             get => name;

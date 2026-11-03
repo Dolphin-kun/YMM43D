@@ -15,10 +15,11 @@ namespace YMM43D.Commons
             bool unlit = false,
             float alphaCutoff = 0f,
             SurfaceGloss gloss = default,
-            float toonSteps = 0f)
+            ModelPaint? paint = null)
         {
             var scene = lighting ?? SceneLighting.Default;
             var fog = scene.Fog;
+            var look = paint ?? ModelPaint.Default;
 
             var constants = TransformConstants.Create(world, view, projection, opacity, unlit, alphaCutoff);
 
@@ -29,7 +30,13 @@ namespace YMM43D.Commons
             constants.Surface.Y = scene.Lights.Count;
             constants.Surface.Z = gloss.Strength;
             constants.Surface.W = gloss.Power;
-            constants.Shading.X = toonSteps;
+            constants.Shading.X = look.ToonSteps;
+            constants.Shading.Y = look.ToonShift;
+            constants.Shading.Z = look.ToonFeather;
+
+            constants.Ground = scene.Ground is { } ground
+                ? new Vector4(ground, 1f)
+                : new Vector4(scene.Ambient, 0f);
 
             return constants;
         }
@@ -164,6 +171,15 @@ namespace YMM43D.Commons
             => value.LengthSquared() > 1e-12f ? Vector3.Normalize(value) : new Vector3(0f, 0f, 1f);
     }
 
+    public readonly record struct SceneMirror(string Image, float Ambient)
+    {
+        public static SceneMirror None => new(string.Empty, 0f);
+
+        public string Path => Image ?? string.Empty;
+
+        public bool HasImage => !string.IsNullOrEmpty(Image);
+    }
+
     public readonly record struct SceneFog(Vector3 Color, float Density, float Start, float End)
     {
         public static SceneFog None => new(Vector3.Zero, 0f, 0f, 1f);
@@ -175,7 +191,9 @@ namespace YMM43D.Commons
         IReadOnlyList<SceneLight> lights,
         Vector3 ambient,
         SceneFog fog,
-        int shadowResolution = ShadowMapArray.DefaultSize)
+        int shadowResolution = ShadowMapArray.DefaultSize,
+        Vector3? ground = null,
+        SceneMirror mirror = default)
     {
         public const float DefaultYaw = 20f;
 
@@ -196,6 +214,10 @@ namespace YMM43D.Commons
 
         public SceneFog Fog { get; } = fog;
 
+        public Vector3? Ground { get; } = ground;
+
+        public SceneMirror Mirror { get; } = mirror.HasImage ? mirror : SceneMirror.None;
+
         public int ShadowResolution { get; } = ShadowMapArray.ClampSize(shadowResolution);
 
         public IReadOnlyList<LightConstants> LightBuffer
@@ -210,6 +232,8 @@ namespace YMM43D.Commons
             if (Lights.Count != other.Lights.Count
                 || Ambient != other.Ambient
                 || Fog != other.Fog
+                || Ground != other.Ground
+                || Mirror != other.Mirror
                 || ShadowResolution != other.ShadowResolution)
             {
                 return false;

@@ -5,16 +5,12 @@ using YMM43D.Commons;
 
 namespace YMM43D.Graphics.Models
 {
-    // 材質の透け方。glTF の alphaMode に合わせる。
     public enum ModelBlend
     {
-        // そのまま描く。
         Opaque,
 
-        // 薄いところを切り抜く（髪の毛先やまつ毛など）。
         Mask,
 
-        // 透かして重ねる。奥から順に描き、奥行きは書き込まない。
         Blend,
     }
 
@@ -26,26 +22,30 @@ namespace YMM43D.Graphics.Models
         int Material,
         ModelBlend Blend,
         float Cutoff,
-        Vector3 Center);
+        Vector3 Center,
+        bool Unlit = false)
+    {
+        private readonly ModelSurface? surface;
+
+        public ModelSurface Surface
+        {
+            get => surface ?? ModelSurface.Default;
+            init => surface = value;
+        }
+    }
 
     public sealed record ModelImage(int Width, int Height, byte[] Pixels);
 
-    // 表情で動く頂点 1 つぶん。動かない頂点は持たない。
     public readonly record struct ModelMorphDelta(uint Vertex, Vector3 Offset);
 
-    // 表情の形 1 つ（「あ」の口、閉じた目など）。
     public sealed record ModelMorph(string Name, ModelMorphDelta[] Deltas);
 
-    // 表情がどの形をどれだけ使うか。
     public readonly record struct ModelExpressionBind(int Morph, float Weight);
 
-    // 表情 1 つ。VRM では「あ」「まばたき」「喜」などが決まった名前で入っている。
     public sealed record ModelExpression(string Name, string Preset, ModelExpressionBind[] Binds);
 
-    // 骨。親からの位置関係（Local）と、骨が動いていないときの頂点との関係（InverseBind）を持つ。
     public readonly record struct ModelBone(string Name, int Parent, Matrix4x4 Local, Matrix4x4 InverseBind);
 
-    // 1 つの頂点が、どの骨にどれだけ引っぱられるか。
     public readonly record struct ModelInfluence(ushort Bone0, ushort Bone1, ushort Bone2, ushort Bone3, Vector4 Weights)
     {
         public static ModelInfluence None => new(0, 0, 0, 0, Vector4.Zero);
@@ -63,7 +63,9 @@ namespace YMM43D.Graphics.Models
         ModelInfluence[]? influences = null,
         Matrix4x4? root = null,
         ModelMorph[]? morphs = null,
-        ModelExpression[]? expressions = null)
+        ModelExpression[]? expressions = null,
+        ModelAnimation[]? animations = null,
+        ModelSpring[]? springs = null)
     {
         public const string NoMaterial = "（材質なし）";
 
@@ -71,22 +73,30 @@ namespace YMM43D.Graphics.Models
 
         public ModelBone[] Bones { get; } = bones ?? [];
 
-        // 頂点と同じ並び。骨が無いモデルでは空。
         public ModelInfluence[] Influences { get; } = influences ?? [];
 
-        // 骨で動かした結果に最後に掛ける、モデル全体の向き合わせ。
         public Matrix4x4 Root { get; } = root ?? Matrix4x4.Identity;
 
         public bool HasBones => Bones.Length > 0 && Influences.Length == vertices.Length;
 
-        // 表情で動かす形と、その組み合わせ。
         public ModelMorph[] Morphs { get; } = morphs ?? [];
 
         public ModelExpression[] Expressions { get; } = expressions ?? [];
 
+        public ModelAnimation[] Animations { get; } = animations ?? [];
+
+        public bool HasAnimations => Animations.Length > 0;
+
+        public bool PrefersUnlit { get; } = parts.Length > 0 && parts.All(part => part.Unlit);
+
+        public ModelSpring[] Springs { get; } = springs ?? [];
+
+        public ModelSpringCollider[] Colliders { get; init; } = [];
+
+        public bool HasSprings => Springs.Length > 0;
+
         public bool HasMorphs => Morphs.Length > 0;
 
-        // 骨か表情があるときは、頂点を GPU で動かす描き方に切り替える。
         public bool IsDeformed => HasBones || HasMorphs;
 
         public Vertex[] Vertices { get; } = vertices;
@@ -97,10 +107,8 @@ namespace YMM43D.Graphics.Models
 
         public ModelImage[] Images { get; } = images;
 
-        // 骨ごとに、その骨が主に動かす頂点の範囲。姿勢を変えたときの範囲を出すのに使う。
         public WorldBounds[] BoneBounds { get; } = MeasureBones(vertices, bones, influences);
 
-        // 骨のあるモデルは、頂点が骨の座標系のままなので、骨を掛けたあと（基本の姿勢）で測る。
         public WorldBounds Bounds { get; } = Measure(
             vertices,
             bones is { Length: > 0 } && influences is { Length: > 0 } && influences.Length == vertices.Length
@@ -109,7 +117,6 @@ namespace YMM43D.Graphics.Models
             influences,
             root ?? Matrix4x4.Identity);
 
-        // 骨で動かしたあとの頂点の位置。骨が無いモデルではそのままの位置。
         public static Vector3 Place(
             in Vector3 position, in ModelInfluence influence, IReadOnlyList<Matrix4x4> skin)
         {
@@ -121,7 +128,6 @@ namespace YMM43D.Graphics.Models
                  + weights.W * Vector3.Transform(position, skin[influence.Bone3]);
         }
 
-        // 今の姿勢で占める範囲。骨ごとの範囲を動かして囲み直す。
         public WorldBounds PosedBounds(IReadOnlyList<Matrix4x4> skin)
         {
             if (BoneBounds.Length == 0)
@@ -146,7 +152,6 @@ namespace YMM43D.Graphics.Models
             return found ? new WorldBounds(min, max) : Bounds;
         }
 
-        // 頂点を、いちばん強く引っぱる骨に割り当てて範囲を測る。
         private static WorldBounds[] MeasureBones(
             Vertex[] vertices, ModelBone[]? bones, ModelInfluence[]? influences)
         {
@@ -237,15 +242,21 @@ namespace YMM43D.Graphics.Models
         private int partMaterial = -1;
         private ModelBlend partBlend = ModelBlend.Opaque;
         private float partCutoff = 0.5f;
+        private bool partUnlit;
+        private ModelSurface partSurface = ModelSurface.Default;
 
         public List<ModelBone> Bones { get; } = [];
 
-        // 表情で動く形。名前で引けるようにしておく（VRM の表情が番号で指してくる）。
         public List<ModelMorph> Morphs { get; } = [];
 
         public List<ModelExpression> Expressions { get; } = [];
 
-        // 動かす量が小さすぎる頂点は持たない。
+        public List<ModelAnimation> Animations { get; } = [];
+
+        public List<ModelSpring> Springs { get; } = [];
+
+        public List<ModelSpringCollider> Colliders { get; } = [];
+
         public const float MorphThreshold = 1e-5f;
 
         public Matrix4x4 Root { get; set; } = Matrix4x4.Identity;
@@ -264,13 +275,17 @@ namespace YMM43D.Graphics.Models
             string key,
             string name,
             ModelBlend blend = ModelBlend.Opaque,
-            float cutoff = 0.5f)
+            float cutoff = 0.5f,
+            bool unlit = false,
+            ModelSurface? surface = null)
         {
             EndPart();
             partColor = color;
             partImage = image;
             partBlend = blend;
             partCutoff = cutoff;
+            partUnlit = unlit;
+            partSurface = surface ?? ModelSurface.Default;
 
             if (!materialKeys.TryGetValue(key, out partMaterial))
             {
@@ -320,6 +335,12 @@ namespace YMM43D.Graphics.Models
 
             var skinned = Bones.Count > 0 && influences.Any(influence => !influence.IsEmpty);
 
+            if (skinned)
+                HoldStillVertices();
+
+            if (parts.Any(part => part.Surface.HasBump))
+                FillTangents();
+
             return new ModelData(
                 [.. vertices],
                 [.. indices],
@@ -330,7 +351,31 @@ namespace YMM43D.Graphics.Models
                 skinned ? [.. influences] : null,
                 Root,
                 [.. Morphs],
-                [.. Expressions]);
+                [.. Expressions],
+                [.. Animations],
+                [.. Springs])
+            {
+                Colliders = [.. Colliders],
+            };
+        }
+
+        private void HoldStillVertices()
+        {
+            var rest = -1;
+
+            for (var i = 0; i < influences.Count; i++)
+            {
+                if (!influences[i].IsEmpty)
+                    continue;
+
+                if (rest < 0)
+                {
+                    Bones.Add(new ModelBone("（動かないところ）", -1, Matrix4x4.Identity, Matrix4x4.Identity));
+                    rest = Bones.Count - 1;
+                }
+
+                influences[i] = new ModelInfluence((ushort)rest, 0, 0, 0, new Vector4(1f, 0f, 0f, 0f));
+            }
         }
 
         private void EndPart()
@@ -345,13 +390,78 @@ namespace YMM43D.Graphics.Models
                     partMaterial,
                     partBlend,
                     partCutoff,
-                    CenterOf(partStart, indices.Count - partStart)));
+                    CenterOf(partStart, indices.Count - partStart),
+                    partUnlit)
+                {
+                    Surface = partSurface,
+                });
             }
 
             partStart = indices.Count;
         }
 
-        // 透かして重ねるところを奥から順に描くための、そのかたまりの真ん中。
+        private void FillTangents()
+        {
+            var along = new Vector3[vertices.Count];
+            var across = new Vector3[vertices.Count];
+
+            for (var i = 0; i + 2 < indices.Count; i += 3)
+            {
+                var ia = (int)indices[i];
+                var ib = (int)indices[i + 1];
+                var ic = (int)indices[i + 2];
+
+                var a = vertices[ia];
+                var b = vertices[ib];
+                var c = vertices[ic];
+
+                var edge1 = b.Position - a.Position;
+                var edge2 = c.Position - a.Position;
+
+                var uv1 = b.TexCoord - a.TexCoord;
+                var uv2 = c.TexCoord - a.TexCoord;
+
+                var area = uv1.X * uv2.Y - uv2.X * uv1.Y;
+
+                if (MathF.Abs(area) < 1e-12f)
+                    continue;
+
+                var scale = 1f / area;
+                var tangent = (edge1 * uv2.Y - edge2 * uv1.Y) * scale;
+                var other = (edge2 * uv1.X - edge1 * uv2.X) * scale;
+
+                along[ia] += tangent;
+                along[ib] += tangent;
+                along[ic] += tangent;
+
+                across[ia] += other;
+                across[ib] += other;
+                across[ic] += other;
+            }
+
+            for (var i = 0; i < vertices.Count; i++)
+            {
+                var vertex = vertices[i];
+
+                if (along[i].LengthSquared() < 1e-20f || vertex.Normal.LengthSquared() < 1e-20f)
+                    continue;
+
+                var normal = Vector3.Normalize(vertex.Normal);
+
+                var tangent = along[i] - normal * Vector3.Dot(normal, along[i]);
+
+                if (tangent.LengthSquared() < 1e-20f)
+                    continue;
+
+                tangent = Vector3.Normalize(tangent);
+
+                var hand = Vector3.Dot(Vector3.Cross(normal, tangent), across[i]) < 0f ? -1f : 1f;
+
+                vertex.Tangent = new Vector4(tangent, hand);
+                vertices[i] = vertex;
+            }
+        }
+
         private Vector3 CenterOf(int start, int count)
         {
             if (count == 0)

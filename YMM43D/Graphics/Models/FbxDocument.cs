@@ -4,8 +4,6 @@ using System.Text;
 
 namespace YMM43D.Graphics.Models
 {
-    // FBX のファイルは、名前と値と子を持つ入れ子の記録でできている。
-    // ここではその形をそのまま読み取るだけで、中身の意味づけは FbxModelLoader が行う。
     internal sealed class FbxNode(string name, object?[] properties)
     {
         public string Name { get; } = name;
@@ -59,7 +57,6 @@ namespace YMM43D.Graphics.Models
         public int[] Integers(int index)
             => index < Properties.Length && Properties[index] is int[] values ? values : [];
 
-        // 子の名前で数値の並びを取り出す。無ければ空。
         public double[] DoublesOf(string name) => Child(name)?.Doubles(0) ?? [];
 
         public int[] IntegersOf(string name) => Child(name)?.Integers(0) ?? [];
@@ -125,7 +122,6 @@ namespace YMM43D.Graphics.Models
             var nameLength = bytes[at];
             at += 1;
 
-            // すべて 0 の記録は、並びの終わりを表す。
             if (end == 0 && propertyCount == 0 && propertyLength == 0 && nameLength == 0)
                 return null;
 

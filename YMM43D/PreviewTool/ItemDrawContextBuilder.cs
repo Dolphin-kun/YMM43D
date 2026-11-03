@@ -32,8 +32,6 @@ namespace YMM43D.PreviewTool
         {
             var needsImage = provider.RequiresMappedTexture && GetProviderTexture(provider, environment) is null;
 
-            // アイテムの絵をそのまま板に貼るときだけ、文字ごとに分割したテキストなどを
-            // 一つずつ別の物として並べる。3D エフェクトのプロセッサは入力ごとに別に居るので、そちらに任せる。
             var rendered = pipeline.Render(
                 item, itemTime, environment, needsImage, allParts: needsImage, provider, effects,
                 ItemPlacement.ToDrawDescription(item, itemTime));

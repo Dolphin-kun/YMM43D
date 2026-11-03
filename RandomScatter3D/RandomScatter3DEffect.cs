@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Numerics;
 using YMM43D.Commons;
@@ -70,9 +71,21 @@ namespace RandomScatter3D
         [AnimationSlider("F1", "°/f", 0, 20)]
         public Animation MaxSpin { get; } = new(0, 0, 10000);
 
-        [Display(GroupName = Look, Name = "陰影をつけない", Description = "光源を無視して、元の絵のまま置きます", Order = 100)]
+        [Display(GroupName = Look, Name = "陰影", Description = "光源にしたがって陰影をつけます。切ると、元の絵のまま置きます", Order = 100)]
         [ToggleSlider]
-        public bool IsUnlit { get => isUnlit; set => Set(ref isUnlit, value); }
+        public bool IsLit { get => !IsUnlit; set => IsUnlit = !value; }
+
+        [Browsable(false)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public bool IsUnlit
+        {
+            get => isUnlit;
+            set
+            {
+                Set(ref isUnlit, value);
+                OnPropertyChanged(nameof(IsLit));
+            }
+        }
         private bool isUnlit;
 
         [Display(GroupName = Look, Name = "つや", Description = "光が映り込んだ明るい点の強さ。0 でつやなし", Order = 200)]

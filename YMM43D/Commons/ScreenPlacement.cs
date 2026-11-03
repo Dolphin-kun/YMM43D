@@ -28,7 +28,6 @@ namespace YMM43D.Commons
 
         public static ScreenPlacement None => new(Vector2.Zero, 1f, 0f, 0f);
 
-        // この配置の後に、親（グループ制御など）の配置が掛かるときの、合わせた配置。
         public ScreenPlacement Then(in ScreenPlacement parent)
         {
             var parentZoom = float.IsFinite(parent.Zoom) && parent.Zoom > 0f ? parent.Zoom : 1f;

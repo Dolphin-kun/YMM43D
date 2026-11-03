@@ -10,16 +10,12 @@ using YukkuriMovieMaker.Plugin.Tachie;
 
 namespace YMM43D.Project.Tachie
 {
-    // 3Dモデルを立ち絵として描く。口パクと表情は YMM4 から渡ってくる。
     internal sealed class Model3DTachieSource(IGraphicsDevicesAndContext devices) : ITachieSource
     {
-        // 立ち絵の絵の余白。腕を広げたり口を開けたりしてもはみ出さないだけ広げておく。
         private const float Margin = 1.4f;
 
-        // 見る位置。平行に見るので、遠さは見た目に影響しない。
         private const float Distance = 100f;
 
-        // 絵の大きさの上限。
         private const int MaxSide = 4096;
 
         private readonly Renderer3DTo2D renderer = new();
@@ -49,7 +45,6 @@ namespace YMM43D.Project.Tachie
 
             var look = new TachieLook(model, character, faceParameter as Model3DFaceParameter, tachieTime, kuchipaku);
 
-            // 大きくしすぎると絵が作れなくなるので、上限で止める。
             var side = Math.Clamp((int)(character.Size * Margin), 16, MaxSide);
             var half = WorldScale.ToWorld(side) / 2f;
 
@@ -63,7 +58,6 @@ namespace YMM43D.Project.Tachie
                 Time = new FrameContext(0, 1, 60),
             };
 
-            // 立ち絵は設定画面からも描かれる。ここで例外を外に出すと本体の操作が止まるので、受け止める。
             try
             {
                 output = renderer.Render(

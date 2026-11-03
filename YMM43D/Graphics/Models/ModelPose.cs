@@ -2,11 +2,8 @@ using System.Numerics;
 
 namespace YMM43D.Graphics.Models
 {
-    // 骨の姿勢から、頂点を動かすための行列を作る。
-    // 何も指定しなければ基本の姿勢（骨を動かしていない状態）になる。
     public static class ModelPose
     {
-        // Frames は回転を掛ける前の骨の置き場所、Globals は回転まで掛けたあとの置き場所。
         public readonly record struct PoseFrames(Matrix4x4[] Frames, Matrix4x4[] Globals);
 
         public static Matrix4x4[] Skin(ModelData model, IReadOnlyList<Matrix4x4>? localRotations = null)
@@ -48,7 +45,6 @@ namespace YMM43D.Graphics.Models
             if (done[index])
                 return globals[index];
 
-            // 親をたどる途中で輪になっていたら、そこで打ち切る。
             done[index] = true;
             frames[index] = Matrix4x4.Identity;
             globals[index] = Matrix4x4.Identity;

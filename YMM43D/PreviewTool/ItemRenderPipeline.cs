@@ -27,8 +27,6 @@ namespace YMM43D.PreviewTool
 
         private const long RetryDelayMs = 500;
 
-        // allParts が true のときは、文字ごとに分割したテキストのように
-        // ひとつのアイテムが返す複数の絵を、YMM4 と同じく一つずつ別の物として扱う。
         public IReadOnlyList<ItemRenderResult> Render(
             IVideoItem item,
             in FrameContext time,

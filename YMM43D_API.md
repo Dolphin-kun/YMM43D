@@ -405,6 +405,10 @@ pipeline.Draw(context, constants, new DrawSettings
 | `SkipDepthWrite` | 深度テストは行うが書き込まない。半透明な板を描くときに使う |
 | `Texture` | ピクセルシェーダーのスロット 0 に設定するテクスチャ |
 | `Sampler` | 省略時はリニア補間のサンプラー |
+| `Bump` / `Glow` / `Feel` / `Shade` | 3Dモデルの材質ごとの画像（凹凸・発光・質感・影の色）。t5〜t8 に入る |
+| `Mirror` | 映り込みに使う風景の画像。t9 に入る |
+
+`Bump` 以下はモデル描画が使うもので、自作のマテリアルでは渡す必要はありません。入れたものだけが割り当てられます。
 
 `DrawContext3D.ToDrawSettings()` を使うと、アイテムの合成モードと「最前面に表示」が反映された `DrawSettings` が得られます。カリングとテクスチャだけを足してください。
 
@@ -491,6 +495,7 @@ YMM43D が持っている部品です。**どれも単体で完結している**
 | `Lighting.hlsli` | `ApplyLight` と `ApplyFog` |
 | `Texture.hlsli` | 乗算済みアルファを割り戻す `Unpremultiply` |
 | `Light.hlsli` | 光 1 つぶんの `struct Light` と、その並び `Lights`（register **t1**） |
+| `Model.hlsli` | 3Dモデル専用。材質ごとの `cbuffer`（register **b1**）と画像（t5〜t9）、それらをまとめて塗る `ShadeModel` |
 
 `Standard.hlsli` を取り込むと、場の `cbuffer`、頂点入力 `VS_IN`（`Pos` / `Col` / `Tex` / `Nrm`）、ピクセル入力 `PS_IN`（`Pos` / `Col` / `Tex` / `Nrm` / `World`）、座標変換と法線変換を行う `VSMain`、陰影と霧と不透明度をまとめた `Shade` が揃います。
 
@@ -510,6 +515,8 @@ float4 PSMain(PS_IN input) : SV_TARGET
 **b0 は場のもの、b1 はあなたのもの**です。自前の値は `register(b1)` に置いてください。b0 には触らなくてよく、並び順を合わせる必要もありません（「立体化3D」と「点群3D」がこの形です）。
 
 同じように、**テクスチャの t0 はアイテムの絵、t1 は光の並び、t2 は影の板**です。自前のテクスチャは `t3` から、サンプラーは `s2` から使ってください（s0 は絵、s1 は影の比較用）。t1 と t2 は描画の頭でまとめて割り当てられるので、あなたが渡す必要はありません。
+
+なお 3Dモデルの描画は t3〜t9 まで使います（骨・表情・凹凸・発光・質感・影の色・風景）。これはモデル専用のシェーダーの中だけの取り決めなので、**自前のシェーダーが t3 から使うのは変わりません。**
 
 ```hlsl
 #include "Standard.hlsli"
@@ -635,6 +642,37 @@ var pipeline = pipelines.Get(render.Device);
 | `ShadowPlacement` | struct | 影の濃さと、その光に割り当てられた板の番号・行列 |
 | `SceneShadows` | static class | 光源から場を描き直して影の板を作る |
 
+#### 3Dプレビューの回転の輪に乗る
+
+パラメータや映像エフェクトに `ISceneRotation3D` を付けると、3Dプレビューの軸ハンドルに**回転の輪が 3 本**出て、そのまま 3D で回せるようになります。実装するのは 3 つの `Animation` を返すだけで、**すでに `RotationX` / `RotationY` / `RotationZ` という名前で持っているなら、宣言に足すだけです**。
+
+```csharp
+public class MyEffect : VideoEffect3DBase, ISceneRotation3D
+{
+    public Animation RotationX { get; } = new(0, -100000, 100000);
+    public Animation RotationY { get; } = new(0, -100000, 100000);
+    public Animation RotationZ { get; } = new(0, -100000, 100000);
+}
+```
+
+回したぶんは**掴んだ輪の軸まわりの回転として向きに掛け、オイラー角に分解し直して 3 つの `Animation` に書き戻します**。軸がどの向きでも、角度の組み合わせがどうなっていても、掴んだところがカーソルについてきます。
+
+**角度を反転して使っているときは、そのことを宣言してください。** 既定では `Rotation3D.ForObject(x, y, z)` で向きを作るものとして扱います。`ForObject(-x, -y, -z)` のように使っているなら、2 つを上書きします。これを忘れると、回る向きが逆になります。
+
+```csharp
+Matrix4x4 ISceneRotation3D.ToOrientation(float x, float y, float z)
+    => Rotation3D.ForObject(-x, -y, -z);
+
+Vector3 ISceneRotation3D.ToAngles(in Matrix4x4 orientation)
+    => -Rotation3D.ToAngles(orientation);
+```
+
+輪が 3 本出るのは、**それを持つものを 1 つだけ選んでいるとき**かつ**「回す」モードのとき**です。複数選んでいるときは、これまでどおりアイテムの「回転」だけが輪になります。
+
+ハンドルは `GizmoMode`（動かす / 回す / 大きさ）で出し分けます。`TransformGizmo.StyleOf(mode)` が、そのモードで出す `GizmoStyle` を返します。
+
+`,`（ローカル軸）を入れると、輪と矢がそのものの向きに沿います。このとき回転は**そのもの自身の軸**まわり、外しているときは**世界の軸**まわりです。
+
 #### 3Dプレビューで掴む
 
 | 型 | 種別 | 説明 |
@@ -727,6 +765,14 @@ var constants = render.CreateConstants(world, item, unlit: false, gloss: Surface
 
 `ApplyLight` を通していれば、自作のマテリアルでもそのまま効きます。`SurfaceGloss.None`（既定）なら、これまでどおり映り込みは乗りません。
 
+#### 回り込む光と、まわりの景色
+
+回り込む光（環境光）は、既定では一色です。`SceneLighting` に `ground` を渡すと、**上から当たる色と下から当たる色を面の向きで混ぜます**。地面の照り返しを入れたいときに使います。`null`（既定）なら一色のままで、見た目は変わりません。
+
+`SceneMirror(画像のパス, 回り込む光に混ぜる強さ)` を渡すと、その画像を**まわりの景色**として扱えます。左右ぐるり 360 度・上下 180 度に引き伸ばした横長の 1 枚絵として読み、反射の向きで引きます。粗い面ほどぼけた段（ミップマップ）を読むので、「つるつる」の度合いで映り方が変わります。
+
+どちらも 3D環境のアイテムから `SceneLightingResolver` が集めます。**いまのところ景色を映すのは 3Dモデルだけ**で、自作のマテリアルで使うには `Model.hlsli` と同じように t9 を自分で引く必要があります。
+
 #### 影
 
 `SceneLight.WithShadow(濃さ, ぼかし)` を付けた光は、**さえぎった物の後ろを暗くします**。濃さは 0〜1 で、1 ならその光がまったく届かなくなります。ぼかしも 0〜1 で、大きいほど影のふちがやわらかくなります（板の上で 1.5〜12 画素ぶんの範囲を混ぜます）。
@@ -794,12 +840,13 @@ public void MoveMarker(in Vector3 shift, in FrameContext itemTime, in EditScope 
 | `DrawSettings` | struct | 1 回の描画ごとに変わる設定 |
 | `RenderStates` | class | デバイス上で共有される描画ステート一式 |
 | `IMesh` / `IMaterial` | interface | 形状とシェーダー。頂点が 65536 個を超える形状は `IndexFormat` に `R32_UInt` を返す |
-| `Vertex` | struct | 位置・色・UV・法線を持つ標準頂点。法線が 0 の頂点は陰影を付けない |
+| `Vertex` | struct | 位置・色・UV・法線・接線を持つ標準頂点。法線が 0 の頂点は陰影を付けない。接線は法線マップ用で、長さ 0 なら凹凸を付けない |
+| `ISceneRotation3D` | interface | `RotationX` / `RotationY` / `RotationZ` を持つことの宣言。付けると 3Dプレビューの回転の輪から 3D で回せる |
 | `SurfaceGeometry` | record | 面の並びで表した形。頂点・法線・面・面グループ数 |
 | `SurfaceFace` | struct | 面 1 枚。頂点の並び・色を塗るグループ番号・なめらかに繋ぐかどうか |
 | `Primitives` | static class | 基本の形を作る。平面・正多面体5種・球・円柱・円錐・ドーナツ |
 | `SurfaceMesh` | class | `SurfaceGeometry` を GPU の頂点バッファにする |
-| `TransformConstants` | struct | 変換行列・不透明度・光・霧を持つ標準定数バッファ |
+| `TransformConstants` | struct | 変換行列・不透明度・光・霧・環境光（上下）・塗り方を持つ標準定数バッファ |
 | `ShaderLibrary` | static class | 埋め込んだ hlsl の読み出しと `#include` の展開 |
 | `ShaderCompiler` | static class | HLSL の実行時コンパイル |
 | `ShaderMaterial` | class | 自分のアセンブリに埋め込んだ hlsl から作るマテリアル。1つのファイルの `VSMain` / `PSMain` からでも、別々のファイルと入口からでも作れる |
@@ -809,8 +856,11 @@ public void MoveMarker(in Vector3 shift, in FrameContext itemTime, in EditScope 
 | `BlendMode` / `FaceCulling` | enum | 合成方法とカリング。`Accumulate` は乗算済みアルファのまま足し込む |
 | `SceneLightBuffer` | class | 光の並びを t1 に置く。`Render3DContext.BindLights` から使われる |
 | `ShadowMapArray` | class | 影の板。t2 に置く。解像度と枚数は場に合わせて作り直す |
-| `ModelLibrary` / `ObjModelLoader` / `GltfModelLoader` | static class | `.obj` / `.gltf` / `.glb` の読み込みと、読んだ結果の使い回し |
+| `ModelLibrary` / `ObjModelLoader` / `GltfModelLoader` / `FbxModelLoader` | static class | `.obj` / `.gltf` / `.glb` / `.vrm` / `.fbx` の読み込みと、読んだ結果の使い回し |
 | `ModelMesh` | class | 読んだモデルを GPU へ載せたもの。材質ごとの部品と画像を持つ |
+| `ModelSurface` | record | 材質 1 つの表面の性質。凹凸・発光・質感・影の色・模様のずらし |
+| `ModelConstants` | struct | `ModelSurface` と `ModelPaint` をシェーダーの b1 の形にしたもの |
+| `ModelTextures` | struct | 材質 1 つに貼る画像のひとまとめ |
 
 ### FrameContext と Animation
 

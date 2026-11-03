@@ -1,10 +1,5 @@
-#define YMM43D_CUSTOM_VERTEX_SHADER
-#include "Standard.hlsli"
+#include "Model.hlsli"
 
-Texture2D    tex  : register(t0);
-SamplerState samp : register(s0);
-
-// 骨ごとの行列。行を4つ並べた形で持つ（CPU 側の並びに合わせるため）。
 struct BoneMatrix
 {
     float4 Row0;
@@ -15,15 +10,15 @@ struct BoneMatrix
 
 StructuredBuffer<BoneMatrix> Bones : register(t3);
 
-// 表情で頂点をずらす量。つないでいないときは 0 が返る。
 StructuredBuffer<float4> Morphs : register(t4);
 
-struct VS_IN_SKINNED
+struct MODEL_IN_SKINNED
 {
     float3 Pos : POSITION;
     float4 Col : COLOR;
     float2 Tex : TEXCOORD0;
     float3 Nrm : NORMAL;
+    float4 Tan : TANGENT;
     uint4  Idx : BLENDINDICES;
     float4 Wgt : BLENDWEIGHT;
     uint   Id  : SV_VertexID;
@@ -42,24 +37,24 @@ float4 Blend(float4 value, uint4 indices, float4 weights)
          + weights.w * ApplyBone(value, Bones[indices.w]);
 }
 
-PS_IN VSMain(VS_IN_SKINNED input)
+MODEL_PS VSMain(MODEL_IN_SKINNED input)
 {
-    // 表情のぶんだけ先にずらしてから、骨で動かす。
     float3 shaped = input.Pos + Morphs[input.Id].xyz;
 
     float total = input.Wgt.x + input.Wgt.y + input.Wgt.z + input.Wgt.w;
 
-    // 骨に結びついていない頂点は、そのままの場所に置く。
     if (total <= 0.0001)
-        return MakeVertex(shaped, input.Col, input.Tex, input.Nrm);
+        return MakeModelVertex(shaped, input.Col, input.Tex, input.Nrm, input.Tan);
 
     float3 position = Blend(float4(shaped, 1.0), input.Idx, input.Wgt).xyz;
     float3 normal = Blend(float4(input.Nrm, 0.0), input.Idx, input.Wgt).xyz;
+    float3 tangent = Blend(float4(input.Tan.xyz, 0.0), input.Idx, input.Wgt).xyz;
 
-    return MakeVertex(position, input.Col, input.Tex, normal);
+    return MakeModelVertex(
+        position, input.Col, input.Tex, normal, float4(tangent, input.Tan.w));
 }
 
-float4 PSMain(PS_IN input) : SV_TARGET
+float4 PSMain(MODEL_PS input) : SV_TARGET
 {
-    return Shade(input.Col * Unpremultiply(tex.Sample(samp, input.Tex)), input);
+    return ShadeModel(input);
 }

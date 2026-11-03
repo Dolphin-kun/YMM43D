@@ -21,10 +21,8 @@ namespace RandomScatter3D
 
         public override bool ScalesToInputSize => false;
 
-        // グループ制御に付けたときは、中のアイテムが持つ 3D を板に潰さず、その立体を複製する。
         protected override bool KeepsGroupMemberSolid => true;
 
-        // 範囲は複製をばらまく広さで決めるので、中の 3D の範囲には合わせない。
         protected override bool UsesGroupMemberBounds => false;
 
         protected override void OnUpdating(EffectDescription effectDescription)
@@ -35,8 +33,6 @@ namespace RandomScatter3D
                 ? SceneDepthCollector.FindSources(owner, Devices).FirstOrDefault(source => !ReferenceEquals(source, this))
                 : null;
 
-        // グループ制御の中では、複製を置く基準だけ中のアイテムから引き継ぐ。
-        // 立体そのものの大きさは複製ごとに掛けるので、ここでは受け取らない。
         protected override bool TryInheritTransform(out Matrix4x4 local, out Matrix4x4 world)
         {
             if (GroupMemberProcessor is { } member && member.TryGetPlacement(out var placement))

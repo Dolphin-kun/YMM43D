@@ -10,7 +10,51 @@
              Focusable="True"
              PreviewKeyDown="UserControl_PreviewKeyDown">
     <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/YMM43D;component/PreviewTool/Views/Icons.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
         <BooleanToVisibilityConverter x:Key="VisibleWhenTrue"/>
+
+        <SolidColorBrush x:Key="ModeInk" Color="#FFECECEC"/>
+
+        <Style x:Key="ModeIcon" TargetType="Path">
+            <Setter Property="Fill" Value="{StaticResource ModeInk}"/>
+            <Setter Property="Stretch" Value="Uniform"/>
+            <Setter Property="Width" Value="15"/>
+            <Setter Property="Height" Value="15"/>
+        </Style>
+
+        <Style x:Key="ModeButton" TargetType="RadioButton">
+            <Setter Property="Width" Value="30"/>
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="Margin" Value="0,0,0,5"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Grid>
+                            <Ellipse x:Name="Back"
+                                     Fill="#B2202020"
+                                     Stroke="#40FFFFFF"
+                                     StrokeThickness="1"/>
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Back" Property="Stroke" Value="#C0FFFFFF"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Back" Property="Fill" Value="#CC1E88E5"/>
+                                <Setter TargetName="Back" Property="Stroke" Value="#FF90CAF9"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        </ResourceDictionary>
     </UserControl.Resources>
     <Grid x:Name="RootGrid">
         <Grid.RowDefinitions>
@@ -41,23 +85,24 @@
                 <MenuItem Header="カメラ追従"
                           IsCheckable="True"
                           IsChecked="{Binding DrivesSceneCamera}"
-                          InputGestureText="0"
+                          InputGestureText="{Binding Keys[DriveSceneCamera]}"
                           ToolTip="入れると、見る位置がカメラアイテムに追従し、ドラッグがそのカメラを直接動かします。外すと見る位置だけが動き、出力は変わりません。入れている間はドラッグでアイテムを掴めません。動かすときは、選んでから軸ハンドルを掴んでください。"/>
 
                 <MenuItem Header="ドラッグで中間点を打つ"
                           IsCheckable="True"
                           IsChecked="{Binding InsertsKeyFrame}"
-                          InputGestureText="K"
+                          InputGestureText="{Binding Keys[ToggleAutoKeyFrame]}"
                           ToolTip="入れると、ドラッグがいまの再生位置に中間点を打ち、そこだけを動かします。外すと、打ってある中間点すべてが同じだけ動きます。カメラにもアイテムにも効きます。"/>
 
                 <MenuItem Header="現在の再生位置に中間点を追加"
                           Command="{Binding AddKeyFrameCommand}"
                           IsEnabled="{Binding HasSelectedItem}"
+                          InputGestureText="{Binding Keys[AddKeyFrame]}"
                           ToolTip="YMM4 本体の「現在の再生位置に中間点を追加」を、選んでいるアイテムに対して実行します。アイテムを選んでいないときは押せません。"/>
 
                 <MenuItem Header="視点をカメラに戻す"
                           Command="{Binding ResetToSceneCameraCommand}"
-                          InputGestureText="Ctrl+R"
+                          InputGestureText="{Binding Keys[ViewCamera]}"
                           ToolTip="プレビューで見る位置を、いまシーンを撮っているカメラの位置に合わせ直します。"/>
             </MenuItem>
 
@@ -65,32 +110,40 @@
                 <MenuItem Header="グリッド"
                           IsCheckable="True"
                           IsChecked="{Binding ShowsGrid}"
-                          InputGestureText="G"
+                          InputGestureText="{Binding Keys[ToggleGrid]}"
                           ToolTip="床の格子と、原点を通る2本の座標軸を出すかどうか。動画の出力には関係ありません。"/>
 
                 <MenuItem Header="モデルを網で出す"
                           IsCheckable="True"
                           IsChecked="{Binding ShowsMesh}"
-                          InputGestureText="W"
-                          ToolTip="3Dモデルを面で塗らず、線だけ（網）で出します。体の中の骨が見えるので、骨を掴みやすくなります。動画の出力には関係ありません。"/>
+                          InputGestureText="{Binding Keys[ToggleWireframe]}"
+                          ToolTip="3Dモデルを面で塗らず、線だけ（網）で出します。体の中のボーンが見えるので、ボーンを掴みやすくなります。動画の出力には関係ありません。"/>
             </MenuItem>
 
             <MenuItem Header="編集">
                 <MenuItem Header="すべて選ぶ"
                           Command="{Binding SelectAllCommand}"
-                          InputGestureText="Ctrl+A"
+                          InputGestureText="{Binding Keys[SelectAll]}"
                           ToolTip="3Dプレビューに出ているアイテムをすべて選びます。Ctrl を押しながらクリックすると、1つずつ足したり外したりできます。選んだものはまとめて動かせます。"/>
 
                 <MenuItem Header="選択を解除"
                           Command="{Binding ClearSelectionCommand}"
-                          InputGestureText="Esc"/>
+                          InputGestureText="{Binding Keys[ClearSelection]}"/>
+
+                <Separator/>
+
+                <MenuItem Header="ローカル軸で動かす"
+                          IsCheckable="True"
+                          IsChecked="{Binding UsesLocalSpace}"
+                          InputGestureText="{Binding Keys[ToggleLocalSpace]}"
+                          ToolTip="入れると、軸ハンドルと回転の輪がそのアイテムの向きに沿います。外すと世界の軸に沿います。回したものを「その正面へ出す」ときに使ってください。"/>
 
                 <Separator/>
 
                 <MenuItem Header="スナップ"
                           IsCheckable="True"
                           IsChecked="{Binding SnapsToGrid}"
-                          InputGestureText="S"
+                          InputGestureText="{Binding Keys[ToggleSnap]}"
                           ToolTip="入れると、ドラッグで動かした位置が決まった間隔に、回転が 15° ずつに吸い付きます。ドラッグ中に Shift を押している間は、入り切りが逆になります。"/>
 
                 <MenuItem Header="スナップの間隔">
@@ -101,30 +154,38 @@
             </MenuItem>
 
             <MenuItem Header="視点">
+                <MenuItem Header="平行投影"
+                          IsCheckable="True"
+                          IsChecked="{Binding IsOrthographic}"
+                          InputGestureText="{Binding Keys[ToggleOrthographic]}"
+                          ToolTip="遠近をつけずに写します。真横・真上から見て並べたり、床に接地させたりするときに使ってください。動画の出力には関係ありません。"/>
+
+                <Separator/>
+
                 <MenuItem Header="選んだものを注目"
                           Command="{Binding FocusSelectedCommand}"
-                          InputGestureText="F"
+                          InputGestureText="{Binding Keys[FocusSelected]}"
                           ToolTip="選んでいるアイテムが画面に収まるまで寄ります。以後の回り込みも、そのアイテムを中心に効きます。"/>
 
                 <MenuItem Header="全体を見渡す"
                           Command="{Binding ViewAllCommand}"
-                          InputGestureText="Home"
+                          InputGestureText="{Binding Keys[ViewAll]}"
                           ToolTip="いま出ているものが全部入るまで引きます。"/>
 
                 <MenuItem Header="傾きを戻す"
                           Command="{Binding LevelRollCommand}"
-                          InputGestureText="Shift+R"
+                          InputGestureText="{Binding Keys[LevelRoll]}"
                           ToolTip="視点の傾きを 0 に戻します。位置と向きはそのままです。"/>
 
                 <Separator/>
 
                 <MenuItem Header="決まった向きから">
-                    <MenuItem Header="前から" Command="{Binding ViewFromCommand}" CommandParameter="Front" InputGestureText="1"/>
-                    <MenuItem Header="後ろから" Command="{Binding ViewFromCommand}" CommandParameter="Back" InputGestureText="Ctrl+1"/>
-                    <MenuItem Header="右から" Command="{Binding ViewFromCommand}" CommandParameter="Right" InputGestureText="3"/>
-                    <MenuItem Header="左から" Command="{Binding ViewFromCommand}" CommandParameter="Left" InputGestureText="Ctrl+3"/>
-                    <MenuItem Header="上から" Command="{Binding ViewFromCommand}" CommandParameter="Top" InputGestureText="7"/>
-                    <MenuItem Header="下から" Command="{Binding ViewFromCommand}" CommandParameter="Bottom" InputGestureText="Ctrl+7"/>
+                    <MenuItem Header="前から" Command="{Binding ViewFromCommand}" CommandParameter="Front" InputGestureText="{Binding Keys[ViewFront]}"/>
+                    <MenuItem Header="後ろから" Command="{Binding ViewFromCommand}" CommandParameter="Back" InputGestureText="{Binding Keys[ViewBack]}"/>
+                    <MenuItem Header="右から" Command="{Binding ViewFromCommand}" CommandParameter="Right" InputGestureText="{Binding Keys[ViewRight]}"/>
+                    <MenuItem Header="左から" Command="{Binding ViewFromCommand}" CommandParameter="Left" InputGestureText="{Binding Keys[ViewLeft]}"/>
+                    <MenuItem Header="上から" Command="{Binding ViewFromCommand}" CommandParameter="Top" InputGestureText="{Binding Keys[ViewTop]}"/>
+                    <MenuItem Header="下から" Command="{Binding ViewFromCommand}" CommandParameter="Bottom" InputGestureText="{Binding Keys[ViewBottom]}"/>
                 </MenuItem>
             </MenuItem>
         </Menu>
@@ -158,9 +219,56 @@
         </Border>
 
         <Grid Grid.Row="2">
-            <ContentControl Content="{Binding D3DHost}"/>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
 
-            <Border HorizontalAlignment="Left"
+            <Border Grid.Column="0" Background="#FF262626" Padding="6,8">
+                <StackPanel VerticalAlignment="Top">
+                <RadioButton Style="{StaticResource ModeButton}"
+                             GroupName="GizmoMode"
+                             IsChecked="{Binding IsMovingMode, Mode=TwoWay}">
+                    <RadioButton.ToolTip>
+                        <TextBlock>
+                            <Run Text="動かす"/><LineBreak/>
+                            <Run Text="矢で1軸、矢の間の四角で2軸ぶん動かします。"/>
+                        </TextBlock>
+                    </RadioButton.ToolTip>
+                    <Path Style="{StaticResource ModeIcon}" Data="{StaticResource MoveIcon}"/>
+                </RadioButton>
+
+                <RadioButton Style="{StaticResource ModeButton}"
+                             GroupName="GizmoMode"
+                             IsChecked="{Binding IsRotatingMode, Mode=TwoWay}">
+                    <RadioButton.ToolTip>
+                        <TextBlock>
+                            <Run Text="回す"/><LineBreak/>
+                            <Run Text="輪をドラッグすると、その軸まわりに回ります。"/>
+                        </TextBlock>
+                    </RadioButton.ToolTip>
+                    <Path Style="{StaticResource ModeIcon}" Data="{StaticResource RotateIcon}"/>
+                </RadioButton>
+
+                <RadioButton Style="{StaticResource ModeButton}"
+                             GroupName="GizmoMode"
+                             IsChecked="{Binding IsScalingMode, Mode=TwoWay}">
+                    <RadioButton.ToolTip>
+                        <TextBlock>
+                            <Run Text="大きさを変える"/><LineBreak/>
+                            <Run Text="四角をドラッグすると拡大率が変わります。"/><LineBreak/>
+                            <Run Text="YMM4 の拡大率は1つの値なので、どの軸を掴んでも同じだけ大きくなります。"/>
+                        </TextBlock>
+                    </RadioButton.ToolTip>
+                    <Path Style="{StaticResource ModeIcon}" Data="{StaticResource ScaleIcon}"/>
+                </RadioButton>
+                </StackPanel>
+            </Border>
+
+            <ContentControl Grid.Column="1" Content="{Binding D3DHost}"/>
+
+            <Border Grid.Column="1"
+                    HorizontalAlignment="Left"
                     VerticalAlignment="Bottom"
                     Margin="8"
                     Padding="6,2"

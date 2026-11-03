@@ -7,7 +7,6 @@ using YukkuriMovieMaker.Commons;
 
 namespace YMM43D.Project.Tachie
 {
-    // 立ち絵 1 枚を描くときの設定。口パクと表情は毎フレーム変わるので、そのつど作り直す。
     internal sealed class TachieLook(
         ModelData model,
         Model3DCharacterParameter character,
@@ -21,9 +20,27 @@ namespace YMM43D.Project.Tachie
 
         public bool IsUnlit => character.IsUnlit;
 
-        public float ToonSteps => !character.IsUnlit && character.IsToon ? character.ToonLevels : 0f;
-
         public SurfaceGloss GetGloss(in FrameContext time) => SurfaceGloss.None;
+
+        public ModelPaint GetPaint(in FrameContext time)
+        {
+            var paint = ModelPaint.Default with { Glow = (float)(character.Glow / 100.0) };
+
+            if (character.IsUnlit)
+                return paint;
+
+            return paint with
+            {
+                ToonSteps = character.ToonSteps,
+                ToonShift = (float)(character.ToonShift / 100.0),
+                ToonFeather = (float)(character.ToonFeather / Model3DCharacterParameter.FeatherSpan),
+                Shade = character.ShadeColor.ToVector3(),
+                Bump = (float)(character.Bump / 100.0),
+                Metallic = (float)(character.Metallic / 100.0),
+                Smoothness = (float)(character.Smoothness / 100.0),
+                Mirror = (float)(character.Mirror / 100.0),
+            };
+        }
 
         public Matrix4x4 GetLocalMatrix(ModelData model, in FrameContext time)
         {
@@ -44,9 +61,10 @@ namespace YMM43D.Project.Tachie
         public IReadOnlyList<(ModelBlend Blend, float Cutoff)?> GetBlends(ModelData model)
             => new (ModelBlend, float)?[model.Materials.Length];
 
-        public IReadOnlyList<Matrix4x4>? GetPose(ModelData model, in FrameContext time) => null;
+        public IReadOnlyList<Matrix4x4>? GetPose(
+            ModelData model, in FrameContext time, in Matrix4x4 world, bool advance)
+            => null;
 
-        // 口パク・まばたき・表情を混ぜて、形ごとの動かす量にする。
         public IReadOnlyList<float>? GetMorphWeights(ModelData model, in FrameContext time)
             => ModelExpressionWeights.Of(model, Wanted());
 
@@ -60,7 +78,6 @@ namespace YMM43D.Project.Tachie
                 yield return (face.Expression, (float)(face.Strength / 100.0));
         }
 
-        // 決まった間隔で目を閉じる。閉じ始めと開き終わりは少しなめらかにする。
         private float Blink()
         {
             if (character.BlinkExpression.Length == 0 || character.BlinkInterval <= 0)
@@ -73,7 +90,6 @@ namespace YMM43D.Project.Tachie
             if (at >= length)
                 return 0f;
 
-            // 閉じて開くまでを 1 山にする。
             return (float)Math.Sin(at / length * Math.PI);
         }
     }

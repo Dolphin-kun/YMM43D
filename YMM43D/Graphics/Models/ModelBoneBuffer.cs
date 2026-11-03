@@ -4,7 +4,6 @@ using Vortice.Direct3D11;
 
 namespace YMM43D.Graphics.Models
 {
-    // 骨ごとの行列を GPU に渡す入れ物。モデル 1 つにつき 1 つ持つ。
     public sealed class ModelBoneBuffer(ID3D11Device device) : IDisposable
     {
         public const int Slot = 3;

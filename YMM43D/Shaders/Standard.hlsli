@@ -32,7 +32,6 @@ PS_IN MakeVertex(float3 position, float4 color, float2 texCoord, float3 normal)
     return output;
 }
 
-// 骨で頂点を動かすときは、こちらを止めて自前の VSMain を書く。
 #ifndef YMM43D_CUSTOM_VERTEX_SHADER
 PS_IN VSMain(VS_IN input)
 {

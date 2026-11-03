@@ -2,7 +2,6 @@ using YMM43D.Graphics.Models;
 
 namespace YMM43D.Project.Model
 {
-    // 表情の強さを、形ごとの動かす量に直す。
     internal static class ModelExpressionWeights
     {
         public static float[]? Of(ModelData model, IEnumerable<(string Name, float Strength)> wanted)

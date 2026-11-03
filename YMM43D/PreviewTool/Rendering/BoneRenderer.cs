@@ -8,20 +8,16 @@ using YMM43D.Graphics.Meshes;
 
 namespace YMM43D.PreviewTool.Rendering
 {
-    // 骨を Blender と同じ八面体の形で出す。手前の物に隠れないように、奥行きを見ないで描く。
     internal sealed class BoneRenderer : IDisposable
     {
         private static readonly Color4 BoneColor = new(0.45f, 0.75f, 1f, 1f);
 
         private static readonly Color4 SelectedColor = new(1f, 0.85f, 0.3f, 1f);
 
-        // 親子のつながりを出す点線の色。骨そのものより控えめにする。
         private static readonly Color4 LinkColor = new(0.4f, 0.5f, 0.65f, 1f);
 
-        // 点線の刻み数。
         private const int Dashes = 12;
 
-        // 頭から尻尾までの長さに対する、いちばん太いところの太さと、その位置。
         private const float Thickness = 0.1f;
 
         private readonly DeviceResourceCache<BoneResources> resources;
@@ -38,7 +34,6 @@ namespace YMM43D.PreviewTool.Rendering
 
             var shared = resources.Get(render.Device);
 
-            // 先につながりの点線を描き、その上に骨を描く。
             for (var i = 0; i < bones.Count; i++)
             {
                 if (bones[i].HasParent)
@@ -51,7 +46,6 @@ namespace YMM43D.PreviewTool.Rendering
 
         public void Dispose() => resources.Dispose();
 
-        // 親の尻尾から子の頭へ引く点線。長さ 1 の線を刻んだもの。
         private static Vector3[] Dotted()
         {
             var points = new List<Vector3>();
@@ -67,7 +61,6 @@ namespace YMM43D.PreviewTool.Rendering
             return [.. points];
         }
 
-        // Blender の骨と同じ形。頭から少し進んだところに四角い輪があり、そこから尻尾へすぼまる。
         private static Vector3[] Body()
         {
             var head = Vector3.Zero;

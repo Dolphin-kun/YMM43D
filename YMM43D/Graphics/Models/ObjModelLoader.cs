@@ -17,7 +17,14 @@ namespace YMM43D.Graphics.Models
             return Encoding.GetEncoding(932);
         });
 
-        private readonly record struct Material(Vector4 Color, string? Texture, string Directory);
+        private readonly record struct Material(Vector4 Color, string? Texture, string Directory)
+        {
+            public string? Bump { get; init; }
+
+            public string? Glow { get; init; }
+
+            public Vector3 GlowColor { get; init; }
+        }
 
         private readonly record struct Corner(int Position, int TexCoord, int Normal);
 
@@ -92,7 +99,11 @@ namespace YMM43D.Graphics.Models
                             : new Material(Vector4.One, null, directory);
 
                         builder.BeginPart(
-                            material.Color, ImageOf(material, directory, images, builder), name, name);
+                            material.Color,
+                            ImageOf(material, material.Texture, directory, images, builder),
+                            name,
+                            name,
+                            surface: SurfaceOf(material, directory, images, builder));
                         shared.Clear();
                         break;
 
@@ -234,11 +245,21 @@ namespace YMM43D.Graphics.Models
             string? name = null;
             var color = Vector4.One;
             string? texture = null;
+            string? bump = null;
+            string? glow = null;
+            var glowColor = Vector3.Zero;
 
             void Flush()
             {
                 if (name is not null)
-                    materials[name] = new Material(color, texture, directory);
+                {
+                    materials[name] = new Material(color, texture, directory)
+                    {
+                        Bump = bump,
+                        Glow = glow,
+                        GlowColor = glowColor,
+                    };
+                }
             }
 
             foreach (var raw in ReadLines(path))
@@ -257,6 +278,9 @@ namespace YMM43D.Graphics.Models
                         name = RestOf(line);
                         color = Vector4.One;
                         texture = null;
+                        bump = null;
+                        glow = null;
+                        glowColor = Vector3.Zero;
                         break;
 
                     case "kd":
@@ -273,6 +297,20 @@ namespace YMM43D.Graphics.Models
 
                     case "map_kd":
                         texture = TextureReference(line) ?? texture;
+                        break;
+
+                    case "map_bump":
+                    case "bump":
+                    case "norm":
+                        bump = TextureReference(line) ?? bump;
+                        break;
+
+                    case "ke":
+                        glowColor = new Vector3(Number(parts, 1), Number(parts, 2), Number(parts, 3));
+                        break;
+
+                    case "map_ke":
+                        glow = TextureReference(line) ?? glow;
                         break;
                 }
             }
@@ -318,10 +356,30 @@ namespace YMM43D.Graphics.Models
             return reference.Length > 0 ? reference : null;
         }
 
-        private static int ImageOf(
+        private static ModelSurface SurfaceOf(
             Material material, string modelDirectory, Dictionary<string, int> images, ModelBuilder builder)
         {
-            if (material.Texture is not { } texture)
+            var bump = ImageOf(material, material.Bump, modelDirectory, images, builder);
+            var glow = ImageOf(material, material.Glow, modelDirectory, images, builder);
+            var color = material.GlowColor;
+
+            if (glow >= 0 && color == Vector3.Zero)
+                color = Vector3.One;
+
+            if (bump < 0 && glow < 0 && color == Vector3.Zero)
+                return ModelSurface.Default;
+
+            return ModelSurface.Default with { BumpImage = bump, GlowImage = glow, Glow = color };
+        }
+
+        private static int ImageOf(
+            Material material,
+            string? wanted,
+            string modelDirectory,
+            Dictionary<string, int> images,
+            ModelBuilder builder)
+        {
+            if (wanted is not { } texture)
                 return -1;
 
             var key = $"{material.Directory}|{texture}";

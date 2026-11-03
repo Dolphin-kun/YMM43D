@@ -24,12 +24,10 @@ namespace YMM43D.PreviewTool.ViewModels
 
         private const double ClickSlop = 4;
 
-        // 何かが変わった直後は、YMM4 側の描き直しが追いつくまで少しのあいだ描き続ける。
         private const long SettleMs = 500;
 
         private const long SettleIntervalMs = 33;
 
-        // 何も起きていないときの見回りの間隔。取りこぼした変化もこの間隔で拾う。
         private const long IdleIntervalMs = 1000;
 
         private readonly DisposeCollector disposer = new();
@@ -56,6 +54,9 @@ namespace YMM43D.PreviewTool.ViewModels
         private bool insertsKeyFrame;
         private bool showsGrid = true;
         private bool showsMesh;
+        private bool isOrthographic;
+        private bool usesLocalSpace;
+        private GizmoMode mode;
         private bool snapsToGrid;
         private float snapStep = SnapGrid.DefaultStep;
         private bool hadSelectedItem;
@@ -106,6 +107,58 @@ namespace YMM43D.PreviewTool.ViewModels
             set => Set(ref showsMesh, value, nameof(ShowsMesh));
         }
 
+        public bool IsOrthographic
+        {
+            get => isOrthographic;
+            set => Set(ref isOrthographic, value, nameof(IsOrthographic));
+        }
+
+        public bool UsesLocalSpace
+        {
+            get => usesLocalSpace;
+            set => Set(ref usesLocalSpace, value, nameof(UsesLocalSpace));
+        }
+
+        public PreviewKeyText Keys { get; } = new();
+
+        public GizmoMode Mode
+        {
+            get => mode;
+            set
+            {
+                if (!Set(ref mode, value, nameof(Mode)))
+                    return;
+
+                OnPropertyChanged(nameof(IsMovingMode));
+                OnPropertyChanged(nameof(IsRotatingMode));
+                OnPropertyChanged(nameof(IsScalingMode));
+            }
+        }
+
+        public bool IsMovingMode
+        {
+            get => Mode is GizmoMode.Move;
+            set => Choose(value, GizmoMode.Move);
+        }
+
+        public bool IsRotatingMode
+        {
+            get => Mode is GizmoMode.Rotate;
+            set => Choose(value, GizmoMode.Rotate);
+        }
+
+        public bool IsScalingMode
+        {
+            get => Mode is GizmoMode.Scale;
+            set => Choose(value, GizmoMode.Scale);
+        }
+
+        private void Choose(bool chosen, GizmoMode wanted)
+        {
+            if (chosen)
+                Mode = wanted;
+        }
+
         public bool SnapsToGrid
         {
             get => snapsToGrid;
@@ -140,9 +193,8 @@ namespace YMM43D.PreviewTool.ViewModels
             OnPropertyChanged(nameof(SnapsEvery100));
         }
 
-        // 3Dプレビューの隅に出す、いま選んでいる骨の名前。
         public string SelectedBoneName => SelectedBone() is { } bone
-            ? bone.HasParent ? $"骨 {bone.Name}（親 {bone.ParentName}）" : $"骨 {bone.Name}"
+            ? bone.HasParent ? $"ボーン {bone.Name}（親 {bone.ParentName}）" : $"ボーン {bone.Name}"
             : string.Empty;
 
         public bool HasSelectedBone => SelectedBoneName.Length > 0;
@@ -156,7 +208,6 @@ namespace YMM43D.PreviewTool.ViewModels
 
             selectedBone = index;
 
-            // 選んだ骨はすぐパラメータに出す。動かさないまま選び直したら片付ける。
             if (left is { } gone)
                 gone.Parameter.DropBoneIfUntouched(gone.Name);
 
@@ -493,6 +544,10 @@ namespace YMM43D.PreviewTool.ViewModels
                 SelectedBone = selectedBone,
                 ShowsGrid = showsGrid,
                 ShowsMesh = showsMesh,
+                IsOrthographic = isOrthographic,
+                ViewDistance = freeCamera.PivotDistance,
+                Space = usesLocalSpace ? GizmoSpace.Local : GizmoSpace.World,
+                Mode = mode,
                 ActiveHandle = boneDrag.IsDragging ? boneDrag.Handle : itemDrag.Handle,
             };
         }
@@ -631,18 +686,19 @@ namespace YMM43D.PreviewTool.ViewModels
                 if (renderer.GizmoMarker is { } held && CanGrab(held))
                 {
                     return itemDrag.BeginMarker(
-                        held.Source, held.ItemTime, gizmo.Origin, grabbed, gizmoRay,
+                        held.Source, held.ItemTime, gizmo, grabbed, gizmoRay,
                         freeCamera.State.Forward, GetEditScope(held.Item));
                 }
 
                 if (MovableSelection() is { Count: > 0 } movable)
-                    return BeginItems(movable, movable[0], gizmo.Origin, grabbed, gizmoRay);
+                    return BeginItems(movable, movable[0], gizmo, grabbed, gizmoRay);
             }
 
             if (renderer.PickBone(screen) is var pickedBone and >= 0)
             {
                 SetSelectedBone(pickedBone);
                 RequestRender();
+
                 return true;
             }
 
@@ -653,8 +709,13 @@ namespace YMM43D.PreviewTool.ViewModels
                 Select([placed.Item]);
 
                 return itemDrag.BeginMarker(
-                    placed.Source, placed.ItemTime, placed.Marker.Position, GizmoHandle.Free, markerRay,
-                    freeCamera.State.Forward, GetEditScope(placed.Item));
+                    placed.Source,
+                    placed.ItemTime,
+                    TransformGizmo.Create(placed.Marker.Position, freeCamera.State.Position),
+                    GizmoHandle.Free,
+                    markerRay,
+                    freeCamera.State.Forward,
+                    GetEditScope(placed.Item));
             }
 
             renderer.RequestPick(screen);
@@ -666,14 +727,18 @@ namespace YMM43D.PreviewTool.ViewModels
                 return false;
             }
 
-            // 骨ではないところを掴んだら、骨の選択は外す。
             SetSelectedBone(-1);
 
             if (!selection.Contains(picked.Item))
                 Select([picked.Item]);
 
             return MovableSelection() is { Count: > 0 } targets
-                && BeginItems(targets, picked.Item, picked.Origin, GizmoHandle.Free, ray);
+                && BeginItems(
+                    targets,
+                    picked.Item,
+                    TransformGizmo.Create(picked.Origin, freeCamera.State.Position),
+                    GizmoHandle.Free,
+                    ray);
         }
 
         private PreviewBone? SelectedBone()
@@ -683,7 +748,11 @@ namespace YMM43D.PreviewTool.ViewModels
             => [.. selection.Where(item => !item.IsLocked)];
 
         private bool BeginItems(
-            IReadOnlyList<IVideoItem> items, IVideoItem primary, Vector3 origin, GizmoHandle grabbed, PickRay ray)
+            IReadOnlyList<IVideoItem> items,
+            IVideoItem primary,
+            in TransformGizmo gizmo,
+            GizmoHandle grabbed,
+            PickRay ray)
         {
             if (timeline is null)
                 return false;
@@ -691,13 +760,15 @@ namespace YMM43D.PreviewTool.ViewModels
             var fps = Math.Max(1, timeline.VideoInfo.FPS);
 
             return itemDrag.Begin(
-                [.. items.Select(item => new DragTarget(item, GetEditScope(item)))],
+                [.. items.Select(item => new DragTarget(
+                    item, GetEditScope(item), FrameContext.ForItem(item, timeline.CurrentFrame, fps)))],
                 primary,
                 FrameContext.ForItem(primary, timeline.CurrentFrame, fps),
-                origin,
+                gizmo,
                 grabbed,
                 ray,
-                freeCamera.State.Forward);
+                freeCamera.State.Forward,
+                usesLocalSpace ? GizmoSpace.Local : GizmoSpace.World);
         }
 
         private SnapGrid CurrentSnap()
@@ -736,69 +807,106 @@ namespace YMM43D.PreviewTool.ViewModels
         {
             RequestRender();
 
-            var control = (modifiers & ModifierKeys.Control) != 0;
-            var shift = (modifiers & ModifierKeys.Shift) != 0;
+            return PreviewShortcuts.Find(key, modifiers) is { } action
+                ? Run(action)
+                : TryHostKey(key, modifiers);
+        }
 
-            switch (key)
+        private bool Run(PreviewAction action)
+        {
+            switch (action)
             {
-                case Key.R when control:
+                case PreviewAction.ViewFront:
+                    ViewFrom(ViewDirection.Front);
+                    return true;
+
+                case PreviewAction.ViewBack:
+                    ViewFrom(ViewDirection.Back);
+                    return true;
+
+                case PreviewAction.ViewRight:
+                    ViewFrom(ViewDirection.Right);
+                    return true;
+
+                case PreviewAction.ViewLeft:
+                    ViewFrom(ViewDirection.Left);
+                    return true;
+
+                case PreviewAction.ViewTop:
+                    ViewFrom(ViewDirection.Top);
+                    return true;
+
+                case PreviewAction.ViewBottom:
+                    ViewFrom(ViewDirection.Bottom);
+                    return true;
+
+                case PreviewAction.ToggleOrthographic:
+                    IsOrthographic = !IsOrthographic;
+                    return true;
+
+                case PreviewAction.ViewCamera:
                     ResetToSceneCamera();
                     return true;
 
-                case Key.R when shift:
-                    LevelRoll();
-                    return true;
-
-                case Key.F when modifiers == ModifierKeys.None:
-                    FocusSelected();
-                    return true;
-
-                case Key.Home when modifiers == ModifierKeys.None:
-                    ViewAll();
-                    return true;
-
-                case Key.K when modifiers == ModifierKeys.None:
-                    InsertsKeyFrame = !InsertsKeyFrame;
-                    return true;
-
-                case Key.W when modifiers == ModifierKeys.None:
-                    ShowsMesh = !ShowsMesh;
-                    return true;
-
-                case Key.G when modifiers == ModifierKeys.None:
-                    ShowsGrid = !ShowsGrid;
-                    return true;
-
-                case Key.S when modifiers == ModifierKeys.None:
-                    SnapsToGrid = !SnapsToGrid;
-                    return true;
-
-                case Key.A when modifiers == ModifierKeys.Control:
-                    SelectAll();
-                    return true;
-
-                case Key.Escape when modifiers == ModifierKeys.None:
-                    ClearSelection();
-                    return true;
-
-                case Key.NumPad0 or Key.D0:
+                case PreviewAction.DriveSceneCamera:
                     DrivesSceneCamera = !DrivesSceneCamera;
                     return true;
 
-                case Key.NumPad1 or Key.D1:
-                    ViewFrom(control ? ViewDirection.Back : ViewDirection.Front);
+                case PreviewAction.FocusSelected:
+                    FocusSelected();
                     return true;
 
-                case Key.NumPad3 or Key.D3:
-                    ViewFrom(control ? ViewDirection.Left : ViewDirection.Right);
+                case PreviewAction.ViewAll:
+                    ViewAll();
                     return true;
 
-                case Key.NumPad7 or Key.D7:
-                    ViewFrom(control ? ViewDirection.Bottom : ViewDirection.Top);
+                case PreviewAction.LevelRoll:
+                    LevelRoll();
+                    return true;
+
+                case PreviewAction.SelectAll:
+                    SelectAll();
+                    return true;
+
+                case PreviewAction.ClearSelection:
+                    ClearSelection();
+                    return true;
+
+                case PreviewAction.ToggleWireframe:
+                    ShowsMesh = !ShowsMesh;
+                    return true;
+
+                case PreviewAction.ToggleGrid:
+                    ShowsGrid = !ShowsGrid;
+                    return true;
+
+                case PreviewAction.ToggleSnap:
+                    SnapsToGrid = !SnapsToGrid;
+                    return true;
+
+                case PreviewAction.ToggleLocalSpace:
+                    UsesLocalSpace = !UsesLocalSpace;
+                    return true;
+
+                case PreviewAction.ModeMove:
+                    Mode = GizmoMode.Move;
+                    return true;
+
+                case PreviewAction.ModeRotate:
+                    Mode = GizmoMode.Rotate;
+                    return true;
+
+                case PreviewAction.ModeScale:
+                    Mode = GizmoMode.Scale;
+                    return true;
+
+                case PreviewAction.AddKeyFrame:
+                    AddKeyFrameCommand.Execute(null);
                     return true;
 
                 default:
-                    return TryHostKey(key, modifiers);
+                    InsertsKeyFrame = !InsertsKeyFrame;
+                    return true;
             }
         }
 

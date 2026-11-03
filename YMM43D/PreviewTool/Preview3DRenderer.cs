@@ -20,6 +20,9 @@ namespace YMM43D.PreviewTool
 
         private static readonly GizmoHandle[] MoveHandles = [GizmoHandle.MoveX, GizmoHandle.MoveY, GizmoHandle.MoveZ];
 
+        private static readonly GizmoHandle[] PlaneHandles =
+            [GizmoHandle.PlaneYZ, GizmoHandle.PlaneZX, GizmoHandle.PlaneXY];
+
         private static readonly GizmoHandle[] TurnHandles = [GizmoHandle.RotateX, GizmoHandle.RotateY, GizmoHandle.RotateZ];
 
         private static readonly GizmoHandle[] ScreenTurnHandle = [GizmoHandle.RotateZ];
@@ -43,6 +46,7 @@ namespace YMM43D.PreviewTool
         private Vector3[] frustumCorners = [];
         private TransformGizmo? lastGizmo;
         private GizmoStyle lastGizmoStyle;
+        private bool lastTurnsInThreeAxes;
 
         private IReadOnlyList<PreviewBone> lastBones = [];
         private Matrix4x4 lastViewProjection = Matrix4x4.Identity;
@@ -128,8 +132,12 @@ namespace YMM43D.PreviewTool
 
             var pixelsPerTangent = SceneProjection.GetPixelsPerTangent(scene.SceneCamera, scene.ScreenHeight);
 
-            var projection = SceneProjection.GetProjectionMatrix(
-                (float)width / Math.Max(1, height), scene.ScreenHeight, pixelsPerTangent);
+            var aspect = (float)width / Math.Max(1, height);
+
+            var projection = scene.IsOrthographic
+                ? SceneProjection.GetOrthographicMatrix(
+                    aspect, scene.ScreenHeight, pixelsPerTangent, scene.ViewDistance)
+                : SceneProjection.GetProjectionMatrix(aspect, scene.ScreenHeight, pixelsPerTangent);
 
             var casters = new List<SceneDepthCollector.Occluder>(entries.Count);
 
@@ -161,7 +169,6 @@ namespace YMM43D.PreviewTool
             pickMarkers = scene.Markers;
             markers.Draw(render, scene.Markers, scene.SelectedMarker);
 
-            // 「モデルを網で出す」を入れているときは、骨のあるモデルを線だけで描く。
             try
             {
                 foreach (var (previewItem, drawContext) in entries)
@@ -191,22 +198,34 @@ namespace YMM43D.PreviewTool
             lastBones = ResolveBones(entries, scene);
             boneRenderer.Draw(render, lastBones, scene.SelectedBone);
 
-            lastGizmo = gizmoMarker is { } placed
-                ? TransformGizmo.Create(placed.Marker.Position, viewPose.Position)
-                : SelectedBone(scene) is { } bone
-                    ? TransformGizmo.Create(
-                        bone.Position, viewPose.Position, BoneOrientation(bone), TransformGizmo.BoneRatio)
-                    : FindGizmo(scene.Selection, viewPose.Position);
+            var gizmoReach = scene.IsOrthographic
+                ? (float?)scene.ViewDistance
+                : null;
 
-            // 骨は回すだけなので、矢印ではなく 3 本の輪を出す。
+            lastTurnsInThreeAxes = false;
+
+            lastGizmo = gizmoMarker is { } placed
+                ? Sized(placed.Marker.Position, viewPose.Position, gizmoReach)
+                : SelectedBone(scene) is { } bone
+                    ? Sized(
+                        bone.Position, viewPose.Position, gizmoReach,
+                        BoneOrientation(bone), TransformGizmo.BoneRatio)
+                    : FindGizmo(scene, viewPose.Position, gizmoReach);
+
             lastGizmoStyle = gizmoMarker is not null
                 ? GizmoStyle.Move
                 : SelectedBone(scene) is not null
                     ? GizmoStyle.Turn
-                    : GizmoStyle.MoveAndTurn;
+                    : TransformGizmo.StyleOf(scene.Mode);
+
+            if (SelectedBone(scene) is not null)
+                lastTurnsInThreeAxes = true;
 
             if (lastGizmo is { } gizmo)
-                transformGizmo.Draw(render, gizmo, scene.ActiveHandle, lastGizmoStyle);
+            {
+                transformGizmo.Draw(
+                    render, gizmo, scene.ActiveHandle, lastGizmoStyle, lastTurnsInThreeAxes);
+            }
 
             axisIndicator.Draw(render, viewPose, width, height);
 
@@ -226,7 +245,6 @@ namespace YMM43D.PreviewTool
             }
         }
 
-        // 選んでいるアイテムが骨を持つモデルなら、その骨を並べる。
         private static IReadOnlyList<PreviewBone> ResolveBones(
             List<(PreviewItem Item, DrawContext3D Context)> entries, PreviewScene scene)
         {
@@ -255,21 +273,11 @@ namespace YMM43D.PreviewTool
 
         private static Matrix4x4 BoneOrientation(in PreviewBone bone)
         {
-            var pose = bone.Parameter.FindBonePose(bone.Name);
-
-            return pose is null
-                ? bone.HandleOrientation(0f, 0f, 0f)
-                : bone.HandleOrientation(
-                    pose.RotationX.GetFloat(bone.Time),
-                    pose.RotationY.GetFloat(bone.Time),
-                    pose.RotationZ.GetFloat(bone.Time));
+            return bone.HandleOrientation(0f, 0f, 0f);
         }
 
         public IReadOnlyList<PreviewBone> Bones => lastBones;
 
-        // 骨の体（頭から尻尾まで）を画面の上で探す。いちばん近いものを返す。
-        // 関節のところは骨が重なるので、同じくらい近いときは
-        // ねじれ用より関節の骨を、さらにその中では掴んだ側に頭がある骨を選ぶ。
         public int PickBone(Vector2 position)
         {
             var nearest = float.MaxValue;
@@ -308,7 +316,6 @@ namespace YMM43D.PreviewTool
 
         public const float BoneGrabThreshold = 10f;
 
-        // 骨どうしの近さがこれくらいしか違わないなら、同じくらい近いものとして扱う。
         private const float BoneTieBreak = 4f;
 
         public void RequestPick(Vector2 position)
@@ -351,21 +358,59 @@ namespace YMM43D.PreviewTool
             return null;
         }
 
-        private TransformGizmo? FindGizmo(IReadOnlyCollection<IVideoItem> selected, in Vector3 cameraPosition)
+        private static TransformGizmo Sized(
+            in Vector3 origin,
+            in Vector3 cameraPosition,
+            float? reach,
+            in Matrix4x4? orientation = null,
+            float ratio = 1f)
+            => reach is { } distance
+                ? TransformGizmo.AtDistance(origin, distance, orientation, ratio)
+                : TransformGizmo.Create(origin, cameraPosition, orientation, ratio);
+
+        private TransformGizmo? FindGizmo(PreviewScene scene, in Vector3 cameraPosition, float? reach)
         {
             var sum = Vector3.Zero;
             var count = 0;
+            IVideoItem? only = null;
 
             foreach (var target in pickTargets)
             {
-                if (target.Item.IsLocked || !selected.Contains(target.Item))
+                if (target.Item.IsLocked || !scene.Selection.Contains(target.Item))
                     continue;
+
+                if (count == 0)
+                    only = target.Item;
+                else if (!ReferenceEquals(only, target.Item))
+                    only = null;
 
                 sum += target.Origin;
                 count++;
             }
 
-            return count > 0 ? TransformGizmo.Create(sum / count, cameraPosition) : null;
+            if (count == 0)
+                return null;
+
+            var origin = sum / count;
+
+            if (only is not { } item || ItemRotation.Find(item) is not { } rotation)
+                return Sized(origin, cameraPosition, reach);
+
+            lastTurnsInThreeAxes = true;
+
+            var time = FrameContext.ForItem(item, scene.Time.Frame, scene.Time.Fps);
+
+            var facing = rotation.ToOrientation(
+                    rotation.RotationX.GetFloat(time),
+                    rotation.RotationY.GetFloat(time),
+                    rotation.RotationZ.GetFloat(time))
+                * Matrix4x4.CreateRotationZ(-float.DegreesToRadians(item.Rotation.GetFloat(time)));
+
+            return Sized(
+                origin,
+                cameraPosition,
+                reach,
+                scene.Space is GizmoSpace.Local ? facing : null);
         }
 
         public IReadOnlyList<IVideoItem> VisibleItems => [.. pickTargets.Select(target => target.Item).Distinct()];
@@ -480,7 +525,7 @@ namespace YMM43D.PreviewTool
             var found = GizmoHandle.None;
             var nearest = TransformGizmo.GrabThreshold;
 
-            if (lastGizmoStyle is not GizmoStyle.Turn)
+            if (lastGizmoStyle is GizmoStyle.Move)
             {
                 foreach (var handle in MoveHandles)
                 {
@@ -494,16 +539,39 @@ namespace YMM43D.PreviewTool
                     nearest = distance;
                     found = handle;
                 }
+
+                foreach (var handle in PlaneHandles)
+                {
+                    if (!IsInsidePlane(gizmo, handle, position))
+                        continue;
+
+                    nearest = 0f;
+                    found = handle;
+                }
+            }
+
+            if (lastGizmoStyle is GizmoStyle.Scale)
+            {
+                foreach (var handle in MoveHandles)
+                {
+                    if (ToScreen(gizmo.ScaleEnd(handle)) is not { } end)
+                        continue;
+
+                    var distance = DistanceToSegment(position, origin, end);
+                    if (distance >= nearest)
+                        continue;
+
+                    nearest = distance;
+                    found = GizmoHandle.ScaleAll;
+                }
             }
 
             var rings = lastGizmoStyle switch
             {
-                GizmoStyle.Turn => TurnHandles,
-                GizmoStyle.MoveAndTurn => ScreenTurnHandle,
+                GizmoStyle.Turn => lastTurnsInThreeAxes ? TurnHandles : ScreenTurnHandle,
                 _ => [],
             };
 
-            // 重なって見えるときは、いちばん近い輪を選ぶ。
             foreach (var handle in rings)
             {
                 for (var i = 0; i < TransformGizmo.RingSegments; i++)
@@ -524,6 +592,40 @@ namespace YMM43D.PreviewTool
             }
 
             return found;
+        }
+
+        private bool IsInsidePlane(in TransformGizmo gizmo, GizmoHandle handle, Vector2 position)
+        {
+            Span<Vector2> corners = stackalloc Vector2[TransformGizmo.PlaneCorners];
+
+            for (var i = 0; i < TransformGizmo.PlaneCorners; i++)
+            {
+                if (ToScreen(gizmo.PlanePoint(handle, i)) is not { } corner)
+                    return false;
+
+                corners[i] = corner;
+            }
+
+            return IsInsideTriangle(position, corners[0], corners[1], corners[2])
+                || IsInsideTriangle(position, corners[0], corners[2], corners[3]);
+        }
+
+        private static bool IsInsideTriangle(Vector2 point, Vector2 a, Vector2 b, Vector2 c)
+        {
+            var first = Side(point, a, b);
+            var second = Side(point, b, c);
+            var third = Side(point, c, a);
+
+            return (first >= 0f && second >= 0f && third >= 0f)
+                || (first <= 0f && second <= 0f && third <= 0f);
+        }
+
+        private static float Side(Vector2 point, Vector2 from, Vector2 to)
+        {
+            var edge = to - from;
+            var offset = point - from;
+
+            return edge.X * offset.Y - edge.Y * offset.X;
         }
 
         public WorldBounds? GetBounds(IReadOnlyCollection<IVideoItem>? items)
@@ -748,7 +850,6 @@ namespace YMM43D.PreviewTool
 
         public IReadOnlyCollection<IVideoItem> Selection { get; init; } = [];
 
-        // 選んでいる骨の番号。選んでいなければ -1。
         public int SelectedBone { get; init; } = -1;
 
         public bool ShowsMesh { get; init; }
@@ -760,5 +861,13 @@ namespace YMM43D.PreviewTool
         public bool ShowsGrid { get; init; } = true;
 
         public GizmoHandle ActiveHandle { get; init; }
+
+        public bool IsOrthographic { get; init; }
+
+        public float ViewDistance { get; init; } = SceneProjection.DefaultFocalDistance;
+
+        public GizmoSpace Space { get; init; }
+
+        public GizmoMode Mode { get; init; }
     }
 }
