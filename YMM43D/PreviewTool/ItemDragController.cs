@@ -1,5 +1,6 @@
 using System.Numerics;
 using YMM43D.Commons;
+using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Project.Items;
 
 namespace YMM43D.PreviewTool
@@ -35,8 +36,12 @@ namespace YMM43D.PreviewTool
         private float appliedTurn;
 
         private float scaleReach;
+        private float scaleStart;
         private float appliedRatio;
         private float[] startZooms = [];
+
+        private ISceneScale3D? scaling;
+        private float startAxisScale;
 
         private ISceneRotation3D? turning;
         private Matrix4x4 turnStart;
@@ -57,8 +62,9 @@ namespace YMM43D.PreviewTool
             in EditScope edit)
         {
             turning = null;
+            scaling = null;
 
-            if (TransformGizmo.IsTurn(grabbed))
+            if (TransformGizmo.IsTurn(grabbed) || TransformGizmo.IsScale(grabbed))
                 grabbed = GizmoHandle.Free;
 
             if (!Grab(gizmo, ref grabbed, ray, viewDirection))
@@ -95,8 +101,17 @@ namespace YMM43D.PreviewTool
                 ? ItemRotation.Find(primary)
                 : null;
 
+            scaling = TransformGizmo.IsScale(grabbed) && items.Count == 1
+                ? ItemScale3D.Find(primary)
+                : null;
+
             if (turning is { } rotation)
                 PrepareTurn(rotation, primary, primaryTime);
+
+            if (scaling is { } stretch && AxisScale(stretch, grabbed) is { } axisScale)
+                startAxisScale = axisScale.GetFloat(primaryTime);
+            else
+                scaling = null;
 
             if (!Grab(gizmo, ref grabbed, ray, viewDirection))
                 return false;
@@ -157,14 +172,27 @@ namespace YMM43D.PreviewTool
                 return true;
             }
 
+            if (TransformGizmo.IsScale(grabbed))
+            {
+                axis = gizmo.Axis(grabbed);
+
+                if (!Stretch3D.TryReach(ray, gizmo.Origin, axis, out scaleReach))
+                    return false;
+
+                appliedRatio = 1f;
+
+                return true;
+            }
+
             if (grabbed is GizmoHandle.ScaleAll)
             {
                 planeNormal = -viewDirection;
                 anchor = ray.IntersectPlane(planePoint, planeNormal) ?? planePoint;
-                scaleReach = Vector3.Distance(anchor, planePoint);
+                scaleStart = Vector3.Distance(anchor, planePoint);
+                scaleReach = Stretch3D.CenterSpan(gizmo.Scale);
                 appliedRatio = 1f;
 
-                return scaleReach >= 1e-4f;
+                return true;
             }
 
             if (TransformGizmo.IsTurn(grabbed))
@@ -197,6 +225,9 @@ namespace YMM43D.PreviewTool
 
             if (TransformGizmo.IsTurn(handle))
                 return Turn(ray, snap);
+
+            if (TransformGizmo.IsScale(handle))
+                return ResizeAlongAxis(ray, snap);
 
             if (handle is GizmoHandle.ScaleAll)
                 return Resize(ray, snap);
@@ -233,31 +264,74 @@ namespace YMM43D.PreviewTool
             startZooms = [];
             marker = null;
             turning = null;
+            scaling = null;
             handle = GizmoHandle.None;
         }
 
         private bool Resize(in PickRay ray, in SnapGrid snap)
         {
-            if (startZooms.Length == 0 || ray.IntersectPlane(planePoint, planeNormal) is not { } hit)
+            if (ray.IntersectPlane(planePoint, planeNormal) is not { } hit)
                 return false;
 
             var reach = Vector3.Distance(hit, planePoint);
-            var ratio = snap.SnapScale(startZooms[0], MathF.Max(reach / scaleReach, 0f));
 
-            if (ratio == appliedRatio)
+            return ApplyScale(snap, Stretch3D.CenterRatio(reach, scaleStart, scaleReach));
+        }
+
+        private bool ResizeAlongAxis(in PickRay ray, in SnapGrid snap)
+        {
+            var ratio = Stretch3D.Ratio(ray, planePoint, axis, scaleReach);
+
+            return !float.IsNaN(ratio) && ApplyScale(snap, ratio);
+        }
+
+        private bool ApplyScale(in SnapGrid snap, float ratio)
+        {
+            if (targets.Count > 0 && scaling is { } stretch && AxisScale(stretch, handle) is { } animation)
+            {
+                var wanted = snap.SnapScale(startAxisScale, ratio);
+
+                if (wanted == appliedRatio)
+                    return false;
+
+                var step = startAxisScale * (wanted - appliedRatio);
+                appliedRatio = wanted;
+
+                if (step == 0f)
+                    return false;
+
+                targets[0].Scope.Nudge(animation, step);
+
+                return true;
+            }
+
+            if (startZooms.Length == 0)
+                return false;
+
+            var zoomed = snap.SnapScale(startZooms[0], ratio);
+
+            if (zoomed == appliedRatio)
                 return false;
 
             for (var i = 0; i < targets.Count && i < startZooms.Length; i++)
             {
                 var (item, itemScope) = (targets[i].Item, targets[i].Scope);
 
-                itemScope.Nudge(item.Zoom, startZooms[i] * (ratio - appliedRatio));
+                itemScope.Nudge(item.Zoom, startZooms[i] * (zoomed - appliedRatio));
             }
 
-            appliedRatio = ratio;
+            appliedRatio = zoomed;
 
             return true;
         }
+
+        private static Animation? AxisScale(ISceneScale3D scale, GizmoHandle handle) => handle switch
+        {
+            GizmoHandle.ScaleX => scale.ScaleX,
+            GizmoHandle.ScaleY => scale.ScaleY,
+            GizmoHandle.ScaleZ => scale.ScaleZ,
+            _ => null,
+        };
 
         private bool Follow(in PickRay ray, out Vector3 step)
         {

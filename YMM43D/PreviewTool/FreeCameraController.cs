@@ -11,7 +11,7 @@ namespace YMM43D.PreviewTool
         private const float RotateSpeed = 0.5f;
 
         private const float PanStep = 0.03f;
-        private const float DollyStep = 2f;
+        private const float DollyRatio = 0.2f;
 
         private const float FineRatio = 0.25f;
 
@@ -57,6 +57,17 @@ namespace YMM43D.PreviewTool
         }
 
         public void Invalidate() => initialized = false;
+
+        public void AimAt(in Vector3 pivot, in CameraState basis)
+        {
+            var distance = Vector3.Dot(pivot - basis.Position, basis.Forward);
+
+            if (!float.IsFinite(distance) || distance < MinPivotDistance)
+                return;
+
+            pivotDistance = MathF.Min(distance, MaxPivotDistance);
+            pivotInitialized = true;
+        }
 
         public CameraPose GetPose() => state.GetPose();
 
@@ -158,7 +169,10 @@ namespace YMM43D.PreviewTool
 
         private CameraMove Dolly(float notches, in CameraState basis)
         {
-            var travel = DollyStep * notches;
+            var travel = pivotDistance * (1f - MathF.Pow(1f - DollyRatio, notches));
+
+            if (!float.IsFinite(travel))
+                return CameraMove.Translate(Vector3.Zero);
 
             pivotDistance = Math.Clamp(pivotDistance - travel, MinPivotDistance, MaxPivotDistance);
 

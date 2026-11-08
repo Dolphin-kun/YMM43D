@@ -10,7 +10,8 @@ using YukkuriMovieMaker.Player.Video;
 namespace YMM43D.Plugin
 {
     public abstract class VideoEffect3DProcessorBase(VideoEffect3DBase? owner, IGraphicsDevicesAndContext devices)
-                : IVideoEffectProcessor, I3DVideoEffect, I3DSizeProvider, I3DLocalTransform, I3DBounds, I3DPlacedInstance
+                : IVideoEffectProcessor, I3DVideoEffect, I3DSizeProvider, I3DLocalTransform, I3DBounds, I3DPlacedInstance,
+                  I3DAlive
     {
         private readonly VideoEffect3DBase? owner = owner;
         private readonly D2DTextureBridge textureBridge = new();
@@ -29,6 +30,8 @@ namespace YMM43D.Plugin
         private VideoEffect3DProcessorBase? groupMemberProcessor;
 
         protected IGraphicsDevicesAndContext Devices { get; } = devices;
+
+        public bool IsAlive => !isDisposed;
 
         protected virtual bool KeepsGroupMemberSolid => false;
 

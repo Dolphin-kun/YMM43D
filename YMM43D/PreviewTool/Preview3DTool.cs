@@ -1,11 +1,11 @@
-using System.Reflection;
+using YMM43D.Commons;
 using YMM43D.PreviewTool.ViewModels;
 using YMM43D.PreviewTool.Views;
 using YukkuriMovieMaker.Plugin;
+using YukkuriMovieMaker.Plugin.Update;
 
 namespace YMM43D.PreviewTool
 {
-    [PluginDetails(AuthorName ="いるかぁぁ", ContentId = "nc504835")]
     public class Preview3DTool : IToolPlugin
     {
         public string Name => "3Dプレビュー";
@@ -13,6 +13,9 @@ namespace YMM43D.PreviewTool
         public Type ViewType => typeof(Preview3DView);
         public bool AllowMultipleInstances => true;
 
-        public PluginDetailsAttribute Details => GetType().GetCustomAttribute<PluginDetailsAttribute>() ?? new();
+        public PluginDetailsAttribute Details
+            => new() { AuthorName = "いるかぁぁ", ContentId = "nc504835" };
+
+        public IPluginUpdater? Updater { get; } = new Ymm4InfoPluginUpdater<Preview3DTool>("1789299160303180");
     }
 }

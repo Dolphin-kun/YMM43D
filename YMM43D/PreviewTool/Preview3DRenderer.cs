@@ -25,6 +25,8 @@ namespace YMM43D.PreviewTool
 
         private static readonly GizmoHandle[] TurnHandles = [GizmoHandle.RotateX, GizmoHandle.RotateY, GizmoHandle.RotateZ];
 
+        private static readonly GizmoHandle[] ScaleHandles = [GizmoHandle.ScaleX, GizmoHandle.ScaleY, GizmoHandle.ScaleZ];
+
         private static readonly GizmoHandle[] ScreenTurnHandle = [GizmoHandle.RotateZ];
 
         private readonly GridRenderer grid = new();
@@ -33,6 +35,8 @@ namespace YMM43D.PreviewTool
         private readonly TransformGizmoRenderer transformGizmo = new();
 
         private readonly BoneRenderer boneRenderer = new();
+        private readonly OutlineRenderer outlineRenderer = new();
+        private readonly MeshEditRenderer meshEditRenderer = new();
         private readonly AxisIndicatorRenderer axisIndicator = new();
         private readonly FlatItemProvider flatItemProvider = new();
         private readonly ItemDrawContextBuilder contextBuilder = new();
@@ -49,7 +53,12 @@ namespace YMM43D.PreviewTool
         private bool lastTurnsInThreeAxes;
 
         private IReadOnlyList<PreviewBone> lastBones = [];
+        private PreviewOutline? lastOutline;
+        private MeshEditTarget? lastMeshEdit;
+        private (IVideoItem Item, FrameContext Time, Matrix4x4 World)? lastSingle;
+        private Vector3? lastInflate;
         private Matrix4x4 lastViewProjection = Matrix4x4.Identity;
+        private Vector3 lastViewPosition;
         private Matrix4x4 lastView = Matrix4x4.Identity;
         private Matrix4x4 lastProjection = Matrix4x4.Identity;
         private SceneLighting? lastLighting;
@@ -198,25 +207,58 @@ namespace YMM43D.PreviewTool
             lastBones = ResolveBones(entries, scene);
             boneRenderer.Draw(render, lastBones, scene.SelectedBone);
 
+            lastOutline = ResolveOutline(entries, scene);
+
+            if (lastOutline is { } shownOutline)
+                outlineRenderer.Draw(render, shownOutline.Points, viewPose.Position);
+
+            lastSingle = SinglePlacement(entries, scene);
+            lastMeshEdit = scene.IsEditingMesh ? ResolveMeshShape() : null;
+            lastInflate = null;
+
+            if (lastMeshEdit is { } shownMesh)
+            {
+                var (right, up) = LocalScreenAxes(shownMesh.ToWorld, viewPose);
+
+                meshEditRenderer.Draw(
+                    render,
+                    shownMesh.ToWorld,
+                    shownMesh.Mesh,
+                    scene.MeshSelection,
+                    scene.MeshPart,
+                    scene.MeshRevision,
+                    right,
+                    up,
+                    scene.CutEdge,
+                    scene.ShowsInflateHandle);
+
+                lastInflate = scene.ShowsInflateHandle
+                    && MeshEditRenderer.HandleAt(shownMesh.Mesh, scene.MeshSelection, right) is { } grip
+                        ? Vector3.Transform(grip, shownMesh.ToWorld)
+                        : null;
+            }
+
             var gizmoReach = scene.IsOrthographic
                 ? (float?)scene.ViewDistance
                 : null;
 
             lastTurnsInThreeAxes = false;
 
-            lastGizmo = gizmoMarker is { } placed
-                ? Sized(placed.Marker.Position, viewPose.Position, gizmoReach)
-                : SelectedBone(scene) is { } bone
-                    ? Sized(
-                        bone.Position, viewPose.Position, gizmoReach,
-                        BoneOrientation(bone), TransformGizmo.BoneRatio)
-                    : FindGizmo(scene, viewPose.Position, gizmoReach);
-
             lastGizmoStyle = gizmoMarker is not null
                 ? GizmoStyle.Move
                 : SelectedBone(scene) is not null
                     ? GizmoStyle.Turn
                     : TransformGizmo.StyleOf(scene.Mode);
+
+            lastGizmo = !TransformGizmo.ShowsHandles(scene.Mode)
+                ? null
+                : gizmoMarker is { } placed
+                ? Sized(placed.Marker.Position, viewPose.Position, gizmoReach)
+                : SelectedBone(scene) is { } bone
+                    ? Sized(
+                        bone.Position, viewPose.Position, gizmoReach,
+                        BoneOrientation(bone), TransformGizmo.BoneRatio)
+                    : FindGizmo(scene, viewPose.Position, gizmoReach, lastGizmoStyle);
 
             if (SelectedBone(scene) is not null)
                 lastTurnsInThreeAxes = true;
@@ -230,6 +272,7 @@ namespace YMM43D.PreviewTool
             axisIndicator.Draw(render, viewPose, width, height);
 
             lastViewProjection = viewPose.ViewMatrix * projection;
+            lastViewPosition = viewPose.Position;
             lastView = viewPose.ViewMatrix;
             lastProjection = projection;
             lastLighting = scene.Lighting;
@@ -243,6 +286,208 @@ namespace YMM43D.PreviewTool
                 pendingPick = null;
                 pickResult = ResolvePick(cursor);
             }
+        }
+
+        private static (IVideoItem Item, FrameContext Time, Matrix4x4 World)? SinglePlacement(
+            List<(PreviewItem Item, DrawContext3D Context)> entries, PreviewScene scene)
+        {
+            if (scene.Selection.Count != 1)
+                return null;
+
+            foreach (var selected in scene.Selection)
+            {
+                foreach (var (previewItem, context) in entries)
+                {
+                    if (ReferenceEquals(previewItem.Item, selected))
+                        return (selected, context.Time, context.World);
+                }
+            }
+
+            return null;
+        }
+
+        public MeshEditTarget? ResolveMeshShape()
+            => lastSingle is { } placed
+                ? MeshEditTarget.Resolve(placed.Item, placed.Time, placed.World)
+                : null;
+
+        private static (Vector3 Right, Vector3 Up) LocalScreenAxes(in Matrix4x4 toWorld, in CameraPose pose)
+        {
+            if (!Matrix4x4.Invert(pose.ViewMatrix, out var camera)
+                || !Matrix4x4.Invert(toWorld, out var back))
+            {
+                return (Vector3.UnitX, Vector3.UnitY);
+            }
+
+            var right = Vector3.TransformNormal(new Vector3(camera.M11, camera.M12, camera.M13), back);
+            var up = Vector3.TransformNormal(new Vector3(camera.M21, camera.M22, camera.M23), back);
+
+            return (Straight(right, Vector3.UnitX), Straight(up, Vector3.UnitY));
+        }
+
+        public MeshEditTarget? MeshEdit => lastMeshEdit;
+
+        public Vector3? InflateHandle => lastInflate;
+
+        public bool PickInflate(Vector2 position)
+            => lastInflate is { } grip
+            && ToScreen(grip) is { } at
+            && Vector2.Distance(position, at) < MeshEditRenderer.GrabThreshold * 2f;
+
+        public int PickMeshVertex(Vector2 position)
+        {
+            if (lastMeshEdit is not { } edit)
+                return -1;
+
+            var nearest = MeshEditRenderer.GrabThreshold;
+            var found = -1;
+
+            for (var i = 0; i < edit.Points.Length; i++)
+            {
+                if (ToScreen(edit.Points[i]) is not { } at)
+                    continue;
+
+                var distance = Vector2.Distance(position, at);
+
+                if (distance >= nearest)
+                    continue;
+
+                nearest = distance;
+                found = i;
+            }
+
+            return found;
+        }
+
+        public int PickMeshEdge(Vector2 position)
+        {
+            if (lastMeshEdit is not { } edit)
+                return -1;
+
+            var nearest = MeshEditRenderer.GrabThreshold;
+            var found = -1;
+
+            for (var i = 0; i < edit.Mesh.Edges.Length; i++)
+            {
+                var edge = edit.Mesh.Edges[i];
+
+                if (ToScreen(edit.Points[edge.A]) is not { } from
+                    || ToScreen(edit.Points[edge.B]) is not { } to)
+                {
+                    continue;
+                }
+
+                var distance = DistanceToSegment(position, from, to);
+
+                if (distance >= nearest)
+                    continue;
+
+                nearest = distance;
+                found = i;
+            }
+
+            return found;
+        }
+
+        public int PickMeshFace(Vector2 position)
+        {
+            if (lastMeshEdit is not { } edit)
+                return -1;
+
+            var nearest = float.MaxValue;
+            var found = -1;
+
+            for (var f = 0; f < edit.Mesh.Faces.Length; f++)
+            {
+                var corners = edit.Mesh.Faces[f];
+                var flat = new Vector2[corners.Length];
+                var middle = Vector3.Zero;
+                var drawn = true;
+
+                for (var i = 0; i < corners.Length; i++)
+                {
+                    if (ToScreen(edit.Points[corners[i]]) is not { } at)
+                    {
+                        drawn = false;
+                        break;
+                    }
+
+                    flat[i] = at;
+                    middle += edit.Points[corners[i]];
+                }
+
+                if (!drawn || !IsInsidePolygon(position, flat))
+                    continue;
+
+                var depth = Vector3.Distance(middle / corners.Length, lastViewPosition);
+
+                if (depth >= nearest)
+                    continue;
+
+                nearest = depth;
+                found = f;
+            }
+
+            return found;
+        }
+
+        private static bool IsInsidePolygon(Vector2 point, Vector2[] corners)
+        {
+            for (var i = 1; i + 1 < corners.Length; i++)
+            {
+                if (IsInsideTriangle(point, corners[0], corners[i], corners[i + 1]))
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static PreviewOutline? ResolveOutline(
+            List<(PreviewItem Item, DrawContext3D Context)> entries, PreviewScene scene)
+        {
+            if (scene.Selection.Count != 1)
+                return null;
+
+            foreach (var selected in scene.Selection)
+            {
+                foreach (var (previewItem, context) in entries)
+                {
+                    if (!ReferenceEquals(previewItem.Item, selected))
+                        continue;
+
+                    if (PreviewOutline.Resolve(selected, context.Time, context.World) is { } found)
+                        return found;
+                }
+            }
+
+            return null;
+        }
+
+        public PreviewOutline? Outline => lastOutline;
+
+        public int PickOutlinePoint(Vector2 position)
+        {
+            if (lastOutline is not { } outline)
+                return -1;
+
+            var nearest = OutlineRenderer.GrabThreshold;
+            var found = -1;
+
+            for (var i = 0; i < outline.Points.Length; i++)
+            {
+                if (ToScreen(outline.Points[i]) is not { } at)
+                    continue;
+
+                var distance = Vector2.Distance(position, at);
+
+                if (distance >= nearest)
+                    continue;
+
+                nearest = distance;
+                found = i;
+            }
+
+            return found;
         }
 
         private static IReadOnlyList<PreviewBone> ResolveBones(
@@ -368,8 +613,21 @@ namespace YMM43D.PreviewTool
                 ? TransformGizmo.AtDistance(origin, distance, orientation, ratio)
                 : TransformGizmo.Create(origin, cameraPosition, orientation, ratio);
 
-        private TransformGizmo? FindGizmo(PreviewScene scene, in Vector3 cameraPosition, float? reach)
+        private TransformGizmo? FindGizmo(
+            PreviewScene scene, in Vector3 cameraPosition, float? reach, GizmoStyle style)
         {
+            if (scene.IsEditingMesh)
+            {
+                if (lastMeshEdit is not { } edit || scene.MeshSelection.Count == 0)
+                    return null;
+
+                lastTurnsInThreeAxes = true;
+
+                var middle = Vector3.Transform(edit.Mesh.Middle([.. scene.MeshSelection]), edit.ToWorld);
+
+                return Sized(middle, cameraPosition, reach, Facing(edit.ToWorld));
+            }
+
             var sum = Vector3.Zero;
             var count = 0;
             IVideoItem? only = null;
@@ -406,12 +664,22 @@ namespace YMM43D.PreviewTool
                     rotation.RotationZ.GetFloat(time))
                 * Matrix4x4.CreateRotationZ(-float.DegreesToRadians(item.Rotation.GetFloat(time)));
 
-            return Sized(
-                origin,
-                cameraPosition,
-                reach,
-                scene.Space is GizmoSpace.Local ? facing : null);
+            var alongObject = scene.Space is GizmoSpace.Local || style is GizmoStyle.Scale;
+
+            return Sized(origin, cameraPosition, reach, alongObject ? facing : null);
         }
+
+        private static Matrix4x4 Facing(in Matrix4x4 world)
+        {
+            var x = Straight(new Vector3(world.M11, world.M12, world.M13), Vector3.UnitX);
+            var y = Straight(new Vector3(world.M21, world.M22, world.M23), Vector3.UnitY);
+            var z = Straight(new Vector3(world.M31, world.M32, world.M33), Vector3.UnitZ);
+
+            return new Matrix4x4(x.X, x.Y, x.Z, 0f, y.X, y.Y, y.Z, 0f, z.X, z.Y, z.Z, 0f, 0f, 0f, 0f, 1f);
+        }
+
+        private static Vector3 Straight(in Vector3 value, in Vector3 fallback)
+            => value.LengthSquared() > 1e-12f ? Vector3.Normalize(value) : fallback;
 
         public IReadOnlyList<IVideoItem> VisibleItems => [.. pickTargets.Select(target => target.Item).Distinct()];
 
@@ -552,7 +820,7 @@ namespace YMM43D.PreviewTool
 
             if (lastGizmoStyle is GizmoStyle.Scale)
             {
-                foreach (var handle in MoveHandles)
+                foreach (var handle in ScaleHandles)
                 {
                     if (ToScreen(gizmo.ScaleEnd(handle)) is not { } end)
                         continue;
@@ -562,6 +830,12 @@ namespace YMM43D.PreviewTool
                         continue;
 
                     nearest = distance;
+                    found = handle;
+                }
+
+                if (Vector2.Distance(position, origin) <= TransformGizmo.CenterGrab)
+                {
+                    nearest = 0f;
                     found = GizmoHandle.ScaleAll;
                 }
             }
@@ -811,6 +1085,8 @@ namespace YMM43D.PreviewTool
             cameraGizmo.Dispose();
             boneRenderer.Dispose();
             markers.Dispose();
+            outlineRenderer.Dispose();
+            meshEditRenderer.Dispose();
             transformGizmo.Dispose();
             axisIndicator.Dispose();
             flatItemProvider.Dispose();
@@ -863,6 +1139,18 @@ namespace YMM43D.PreviewTool
         public GizmoHandle ActiveHandle { get; init; }
 
         public bool IsOrthographic { get; init; }
+
+        public bool IsEditingMesh { get; init; }
+
+        public MeshPart MeshPart { get; init; }
+
+        public IReadOnlySet<int> MeshSelection { get; init; } = new HashSet<int>();
+
+        public long MeshRevision { get; init; }
+
+        public int CutEdge { get; init; } = -1;
+
+        public bool ShowsInflateHandle { get; init; }
 
         public float ViewDistance { get; init; } = SceneProjection.DefaultFocalDistance;
 

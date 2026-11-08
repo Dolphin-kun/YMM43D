@@ -28,6 +28,7 @@ namespace Outline3D
 
         private I3DProvider? solidSource;
         private VideoEffect3DProcessorBase? precedingEffect;
+        private bool expectsSolid;
 
         private IBrushParameter? brushParameter;
         private IBrushSource? brushSource;
@@ -38,7 +39,9 @@ namespace Outline3D
         private Vector2 brushSize;
 
         public override bool ScalesToInputSize
-            => precedingEffect is { } preceding ? preceding.ScalesToInputSize : solidSource is null;
+            => precedingEffect is { } preceding
+                ? preceding.ScalesToInputSize
+                : solidSource is null && !expectsSolid;
 
         public override bool TryGetSize(out Vector2 size, out Vector2 offset)
             => precedingEffect is { } preceding
@@ -51,6 +54,9 @@ namespace Outline3D
 
         protected override void OnUpdating(EffectDescription effectDescription)
         {
+            var lastSolid = solidSource;
+            var lastPreceding = precedingEffect;
+
             precedingEffect = null;
             solidSource = null;
 
@@ -58,21 +64,33 @@ namespace Outline3D
             {
                 solidSource = member;
                 precedingEffect = GroupMemberProcessor;
+                expectsSolid = true;
                 UpdateBrush(effectDescription);
                 return;
             }
 
-            if (SceneDepthCollector.FindOwner(effectDescription) is not { } owner)
-                return;
+            if (SceneDepthCollector.FindOwner(effectDescription) is { } owner)
+            {
+                expectsSolid = SceneDepthCollector.ExpectsSolid(owner);
 
-            if (FindPreceding(owner, effectDescription.InputIndex) is { } preceding)
-            {
-                precedingEffect = preceding as VideoEffect3DProcessorBase;
-                solidSource = preceding;
+                if (FindPreceding(owner, effectDescription.InputIndex) is { } preceding)
+                {
+                    precedingEffect = preceding as VideoEffect3DProcessorBase;
+                    solidSource = preceding;
+                }
+                else
+                {
+                    solidSource = SceneDepthCollector
+                        .FindSources(owner, Devices)
+                        .FirstOrDefault(source => !ReferenceEquals(source, this));
+                }
             }
-            else
+
+            if (solidSource is null && Live3D.KeepLast(null, lastSolid) is { } kept)
             {
-                solidSource = SceneDepthCollector.FindSources(owner, Devices).FirstOrDefault(source => !ReferenceEquals(source, this));
+                solidSource = kept;
+                precedingEffect = Live3D.IsAlive(lastPreceding) ? lastPreceding : null;
+                expectsSolid = true;
             }
 
             UpdateBrush(effectDescription);
@@ -148,6 +166,9 @@ namespace Outline3D
                 return;
             }
 
+            if (expectsSolid)
+                return;
+
             var texture = item.Texture ?? GetTexture(render.Device);
 
             if (texture is null || !planes.TryGet(render.Device, out var pipeline))
@@ -185,7 +206,7 @@ namespace Outline3D
             => solidSource switch
             {
                 I3DBounds bounds => bounds.GetLocalBounds(time),
-                null => UnitPlane,
+                null => expectsSolid ? WorldBounds.Empty : UnitPlane,
                 _ => WorldBounds.Empty,
             };
 

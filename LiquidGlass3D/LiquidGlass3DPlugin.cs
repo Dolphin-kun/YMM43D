@@ -1,3 +1,4 @@
+using YukkuriMovieMaker.Plugin;
 using YukkuriMovieMaker.Plugin.Shape;
 using YukkuriMovieMaker.Project;
 
@@ -13,5 +14,8 @@ namespace LiquidGlass3D
 
         public IShapeParameter CreateShapeParameter(SharedDataStore? sharedData)
             => new LiquidGlass3DParameter(sharedData);
+
+        public PluginDetailsAttribute Details
+            => new() { AuthorName = "いるかぁぁ", ContentId = "nc504835" };
     }
 }

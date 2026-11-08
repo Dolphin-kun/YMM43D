@@ -14,6 +14,8 @@ namespace YMM43D.Graphics
 
         public bool DepthOnly { get; init; }
 
+        public bool LiftsLines { get; init; }
+
         public ID3D11ShaderResourceView? Texture { get; init; }
 
         public ID3D11SamplerState? Sampler { get; init; }

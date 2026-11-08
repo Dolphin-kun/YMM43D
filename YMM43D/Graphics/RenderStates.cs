@@ -32,6 +32,12 @@ namespace YMM43D.Graphics
 
         public ID3D11RasterizerState CullFront { get; }
 
+        public ID3D11RasterizerState LiftedLines { get; }
+
+        public const int LineDepthBias = -6000;
+
+        public const float LineSlopeBias = -2f;
+
         private readonly ID3D11RasterizerState meshNone;
         private readonly ID3D11RasterizerState meshBack;
         private readonly ID3D11RasterizerState meshFront;
@@ -100,6 +106,7 @@ namespace YMM43D.Graphics
             CullNone = CreateRasterizer(device, CullMode.None);
             CullBack = CreateRasterizer(device, CullMode.Back);
             CullFront = CreateRasterizer(device, CullMode.Front);
+            LiftedLines = CreateRasterizer(device, CullMode.None, FillMode.Solid, LineDepthBias, LineSlopeBias);
 
             meshNone = CreateRasterizer(device, CullMode.None, FillMode.Wireframe);
             meshBack = CreateRasterizer(device, CullMode.Back, FillMode.Wireframe);
@@ -146,12 +153,18 @@ namespace YMM43D.Graphics
         }
 
         private ID3D11RasterizerState CreateRasterizer(
-            ID3D11Device device, CullMode cullMode, FillMode fillMode = FillMode.Solid)
+            ID3D11Device device,
+            CullMode cullMode,
+            FillMode fillMode = FillMode.Solid,
+            int depthBias = 0,
+            float slopeBias = 0f)
         {
             return Collect(device.CreateRasterizerState(new RasterizerDescription
             {
                 FillMode = fillMode,
                 CullMode = cullMode,
+                DepthBias = depthBias,
+                SlopeScaledDepthBias = slopeBias,
                 DepthClipEnable = true,
                 MultisampleEnable = true,
                 AntialiasedLineEnable = true,

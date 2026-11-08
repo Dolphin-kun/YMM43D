@@ -100,8 +100,13 @@ namespace YMM43D.Project.Model
 
         private void OnParameterPropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
-            if (e.PropertyName == nameof(Model3DParameter.Tab))
+            if (e.PropertyName is null
+                or nameof(Model3DParameter.Tab)
+                or nameof(Model3DParameter.HasBones)
+                or nameof(Model3DParameter.HasFaces))
+            {
                 Refresh();
+            }
         }
 
         private void Choose(ModelTab tab)
@@ -123,7 +128,26 @@ namespace YMM43D.Project.Model
         private void Refresh()
         {
             foreach (var button in buttons)
-                button.IsChecked = parameter is not null && (ModelTab)button.Tag == parameter.Tab;
+            {
+                var tab = (ModelTab)button.Tag;
+
+                button.Visibility = Holds(tab) ? Visibility.Visible : Visibility.Collapsed;
+                button.IsChecked = Chosen(tab);
+            }
         }
+
+        private bool Holds(ModelTab tab) => tab switch
+        {
+            ModelTab.Bones => parameter is { HasBones: true },
+            ModelTab.Faces => parameter is { HasFaces: true },
+            _ => parameter is not null,
+        };
+
+        private bool Chosen(ModelTab tab) => tab switch
+        {
+            ModelTab.Bones => parameter is { ShowsBones: true },
+            ModelTab.Faces => parameter is { ShowsFaces: true },
+            _ => parameter is { ShowsMaterials: true },
+        };
     }
 }

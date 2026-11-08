@@ -11,7 +11,7 @@ namespace YMM43D.Project.Shape
         [Display(Name = "四面体", Description = "正三角形4枚")]
         Tetrahedron,
 
-        [Display(Name = "六面体", Description = "正方形6枚（立方体）")]
+        [Display(Name = "立方体", Description = "正方形6枚。六面体ともいいます")]
         Cube,
 
         [Display(Name = "八面体", Description = "正三角形8枚")]
@@ -34,6 +34,10 @@ namespace YMM43D.Project.Shape
 
         [Display(Name = "ドーナツ", Description = "太さで穴の大きさが決まります")]
         Torus,
+
+        [Display(Name = "自由な形",
+            Description = "下書きの点をつないだ形から立体を作ります。3Dプレビューで点を掴んで動かせます")]
+        Custom,
     }
 
     public static class Solids
@@ -92,7 +96,8 @@ namespace YMM43D.Project.Shape
             SolidKind.Sphere => Primitives.Sphere(segments),
             SolidKind.Cylinder => Primitives.Cylinder(segments),
             SolidKind.Cone => Primitives.Cone(segments),
-            _ => Primitives.Torus(segments, thickness / 100f),
+            SolidKind.Torus => Primitives.Torus(segments, thickness / 100f),
+            _ => Primitives.Plane(),
         };
 
         private static (SolidKind, int, int) Key(SolidKind kind, int segments, int thickness)

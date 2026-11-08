@@ -24,7 +24,15 @@ namespace YMM43D.Commons
 
         RotateZ,
 
+        ScaleX,
+
+        ScaleY,
+
+        ScaleZ,
+
         ScaleAll,
+
+        Inflate,
 
         Free,
     }
@@ -45,6 +53,12 @@ namespace YMM43D.Commons
         Rotate,
 
         Scale,
+
+        Select,
+
+        LoopCut,
+
+        Inflate,
     }
 
     public enum GizmoSpace
@@ -78,6 +92,10 @@ namespace YMM43D.Commons
 
         public const float GrabThreshold = 9f;
 
+        public const float CenterGrab = 11f;
+
+        public const float CenterReach = 2.4f;
+
         public const float BoneRatio = 0.6f;
 
         public static TransformGizmo Create(
@@ -97,6 +115,12 @@ namespace YMM43D.Commons
         public static bool IsTurn(GizmoHandle handle)
             => handle is GizmoHandle.RotateX or GizmoHandle.RotateY or GizmoHandle.RotateZ;
 
+        public static bool IsScale(GizmoHandle handle)
+            => handle is GizmoHandle.ScaleX or GizmoHandle.ScaleY or GizmoHandle.ScaleZ;
+
+        public static bool ShowsHandles(GizmoMode mode)
+            => mode is not (GizmoMode.Select or GizmoMode.LoopCut or GizmoMode.Inflate);
+
         public static GizmoStyle StyleOf(GizmoMode mode) => mode switch
         {
             GizmoMode.Rotate => GizmoStyle.Turn,
@@ -106,9 +130,9 @@ namespace YMM43D.Commons
 
         public static Vector3 AxisDirection(GizmoHandle handle) => handle switch
         {
-            GizmoHandle.MoveX => Vector3.UnitX,
-            GizmoHandle.MoveY => Vector3.UnitY,
-            GizmoHandle.MoveZ => Vector3.UnitZ,
+            GizmoHandle.MoveX or GizmoHandle.ScaleX => Vector3.UnitX,
+            GizmoHandle.MoveY or GizmoHandle.ScaleY => Vector3.UnitY,
+            GizmoHandle.MoveZ or GizmoHandle.ScaleZ => Vector3.UnitZ,
             _ => Vector3.Zero,
         };
 

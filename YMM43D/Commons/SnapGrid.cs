@@ -32,12 +32,28 @@ namespace YMM43D.Commons
             return new Vector3(WorldScale.ToWorld(pixels.X), -WorldScale.ToWorld(pixels.Y), WorldScale.ToWorld(pixels.Z));
         }
 
+        public Vector2 SnapPoint(in Vector2 wanted)
+        {
+            if (!IsEnabled || Step <= 0f)
+                return wanted;
+
+            return new Vector2(Round(wanted.X, Step), Round(wanted.Y, Step));
+        }
+
         public float SnapScale(float startPercent, float ratio)
         {
             if (!IsEnabled || startPercent <= 0f)
                 return ratio;
 
             return MathF.Max(Round(startPercent * ratio, DefaultScaleStep), 0f) / startPercent;
+        }
+
+        public float SnapLength(float raw)
+        {
+            if (!IsEnabled || Step <= 0f)
+                return raw;
+
+            return WorldScale.ToWorld(Round(WorldScale.ToPixels(raw), Step));
         }
 
         public float SnapTurn(float startDegrees, float rawTurn)

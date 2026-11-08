@@ -169,6 +169,11 @@ namespace YMM43D.Player
             return at < 0 || at == last;
         }
 
+        public static bool ExpectsSolid(IVideoItem item)
+            => item is I3DProvider
+            || HasSolidEffect(item)
+            || (item is ShapeItem shape && shape.ShapeParameter is ShapeParameter3DBase);
+
         public static bool HasSolidEffect(IVideoItem item)
         {
             foreach (var effect in item.VideoEffects ?? [])

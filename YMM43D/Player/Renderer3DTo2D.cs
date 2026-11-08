@@ -23,7 +23,7 @@ namespace YMM43D.Player
         private Viewport[] previousViewports = new Viewport[8];
 
         public ID2D1Image RenderEmpty(IGraphicsDevicesAndContext ymmDevices)
-            => BuildCommandList(ymmDevices, null, Vector2.Zero);
+            => BuildEmpty(ymmDevices, Vector2.Zero);
 
         public ID2D1Image Render(
             IGraphicsDevicesAndContext ymmDevices,
@@ -35,10 +35,15 @@ namespace YMM43D.Player
             SceneLighting? lighting,
             IReadOnlyList<SceneDepthCollector.Occluder> shadowCasters,
             Color4 background,
-            Action<Render3DContext> draw)
+            Action<Render3DContext> draw,
+            float density = 1f)
         {
             if (width <= 0 || height <= 0)
-                return BuildCommandList(ymmDevices, null, offset);
+                return BuildEmpty(ymmDevices, offset);
+
+            var dense = float.IsFinite(density) ? MathF.Max(density, 1f) : 1f;
+            var pixelWidth = Math.Max(1, (int)MathF.Ceiling(width * dense));
+            var pixelHeight = Math.Max(1, (int)MathF.Ceiling(height * dense));
 
             using var lease = GraphicsDevicePool.Acquire();
             var context = lease.Context;
@@ -47,16 +52,16 @@ namespace YMM43D.Player
             lock (lease.Device)
             {
                 if (GraphicsDevicePool.IsDeviceLost(out _))
-                    return BuildCommandList(ymmDevices, null, offset);
+                    return BuildEmpty(ymmDevices, offset);
 
                 var d2dContext = privateContext.For(ymmDevices);
-                surface.Resize(ymmDevices, d2dContext, width, height);
+                surface.Resize(ymmDevices, d2dContext, pixelWidth, pixelHeight);
 
                 if (surface.RenderTargetView is null)
-                    return BuildCommandList(ymmDevices, null, offset);
+                    return BuildEmpty(ymmDevices, offset);
 
                 if (!surface.BeginWrite())
-                    return BuildCommandList(ymmDevices, null, offset);
+                    return BuildEmpty(ymmDevices, offset);
 
                 context.OMGetRenderTargets(1, previousTargets!, out var previousDepth);
                 var previousTarget = previousTargets[0];
@@ -82,7 +87,7 @@ namespace YMM43D.Player
                     if (surface.DepthStencilView is not null)
                         context.ClearDepthStencilView(surface.DepthStencilView, DepthStencilClearFlags.Depth, 1f, 0);
 
-                    context.RSSetViewport(new Viewport(0, 0, width, height));
+                    context.RSSetViewport(new Viewport(0, 0, pixelWidth, pixelHeight));
 
                     draw(new Render3DContext(lease.Device, context, view, projection, lit)
                     {
@@ -109,51 +114,78 @@ namespace YMM43D.Player
                     surface.EndWrite();
                 }
 
-                if (lost)
-                    return BuildCommandList(ymmDevices, null, offset);
+                if (lost || surface.Bitmap is not { } bitmap)
+                    return BuildEmpty(ymmDevices, offset);
 
-                return BuildCommandList(
-                    ymmDevices, surface.Bitmap, offset, new RawRectF(0, 0, width, height));
+                return BuildPacked(
+                    ymmDevices, bitmap, offset, new Vector2(width, height), pixelWidth, pixelHeight);
             }
         }
 
-        private ID2D1CommandList BuildCommandList(
-            IGraphicsDevicesAndContext ymmDevices,
-            ID2D1Bitmap1? bitmap,
-            Vector2 offset,
-            RawRectF? sourceRectangle = null)
+        private ID2D1CommandList BuildEmpty(IGraphicsDevicesAndContext ymmDevices, Vector2 offset)
         {
             lock (D2DGate.Sync)
             {
-                var deviceContext = privateContext.For(ymmDevices);
+                var deviceContext = OpenList(ymmDevices, out var commandList);
 
-                commandListIndex = (commandListIndex + 1) % commandLists.Length;
-                commandLists[commandListIndex]?.Dispose();
+                using var clear = deviceContext.CreateSolidColorBrush(new Color4(0f, 0f, 0f, 0f));
 
-                var commandList = commandLists[commandListIndex] = deviceContext.CreateCommandList();
+                deviceContext.FillRectangle(new RawRectF(offset.X, offset.Y, offset.X + 1f, offset.Y + 1f), clear);
 
-                deviceContext.Target = commandList;
-                deviceContext.BeginDraw();
-                deviceContext.Clear(null);
-
-                if (bitmap is not null)
-                {
-                    deviceContext.DrawImage(
-                        bitmap, offset, sourceRectangle, InterpolationMode.Linear, CompositeMode.SourceOver);
-                }
-                else
-                {
-                    using var clear = deviceContext.CreateSolidColorBrush(new Color4(0f, 0f, 0f, 0f));
-
-                    deviceContext.FillRectangle(new RawRectF(offset.X, offset.Y, offset.X + 1f, offset.Y + 1f), clear);
-                }
-
-                deviceContext.EndDraw();
-                deviceContext.Target = null;
-
-                commandList.Close();
-                return commandList;
+                return CloseList(deviceContext, commandList);
             }
+        }
+
+        private ID2D1CommandList BuildPacked(
+            IGraphicsDevicesAndContext ymmDevices,
+            ID2D1Bitmap1 bitmap,
+            Vector2 offset,
+            Vector2 span,
+            int pixelWidth,
+            int pixelHeight)
+        {
+            lock (D2DGate.Sync)
+            {
+                var deviceContext = OpenList(ymmDevices, out var commandList);
+
+                deviceContext.DrawBitmap(
+                    bitmap,
+                    new RawRectF(offset.X, offset.Y, offset.X + span.X, offset.Y + span.Y),
+                    1f,
+                    InterpolationMode.Linear,
+                    new RawRectF(0, 0, pixelWidth, pixelHeight),
+                    null);
+
+                return CloseList(deviceContext, commandList);
+            }
+        }
+
+        private ID2D1DeviceContext OpenList(
+            IGraphicsDevicesAndContext ymmDevices, out ID2D1CommandList commandList)
+        {
+            var deviceContext = privateContext.For(ymmDevices);
+
+            commandListIndex = (commandListIndex + 1) % commandLists.Length;
+            commandLists[commandListIndex]?.Dispose();
+
+            commandList = commandLists[commandListIndex] = deviceContext.CreateCommandList();
+
+            deviceContext.Target = commandList;
+            deviceContext.BeginDraw();
+            deviceContext.Clear(null);
+
+            return deviceContext;
+        }
+
+        private static ID2D1CommandList CloseList(
+            ID2D1DeviceContext deviceContext, ID2D1CommandList commandList)
+        {
+            deviceContext.EndDraw();
+            deviceContext.Target = null;
+
+            commandList.Close();
+
+            return commandList;
         }
 
         public void Dispose()

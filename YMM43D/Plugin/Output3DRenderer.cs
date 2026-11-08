@@ -17,6 +17,8 @@ namespace YMM43D.Plugin
 
         private const float VisibleMargin = 0.5f;
 
+        private const float MaxDensity = 32f;
+
         private readonly Renderer3DTo2D renderer = new();
 
         public ID2D1Image Render(
@@ -85,7 +87,21 @@ namespace YMM43D.Plugin
                 {
                     DrawOccluders(render, scene.Occluders);
                     draw(render, item);
-                });
+                },
+                Density(screenPlacement.HostScale, target));
+        }
+
+        public static float Density(float hostScale, in RenderArea target)
+        {
+            if (!float.IsFinite(hostScale) || hostScale <= 1f)
+                return 1f;
+
+            var longest = Math.Max(target.Width, target.Height);
+
+            if (longest <= 0)
+                return 1f;
+
+            return Math.Clamp(MathF.Min(hostScale, MaxRenderSize / (float)longest), 1f, MaxDensity);
         }
 
         private static bool CoversScreen(IVideoItem? owner) => owner is EffectItem;

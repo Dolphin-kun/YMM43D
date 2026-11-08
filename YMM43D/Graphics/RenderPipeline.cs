@@ -82,7 +82,8 @@ namespace YMM43D.Graphics
 
             context.OMSetDepthStencilState(DepthStateFor(settings));
 
-            context.RSSetState(states.Rasterizer(settings.Culling));
+            context.RSSetState(
+                settings.LiftsLines ? states.LiftedLines : states.Rasterizer(settings.Culling));
 
             context.VSSetShader(Material.VertexShader);
             context.PSSetShader(Material.PixelShader);

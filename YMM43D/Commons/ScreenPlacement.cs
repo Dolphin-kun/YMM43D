@@ -55,6 +55,16 @@ namespace YMM43D.Commons
             }
         }
 
+        public float HostScale
+        {
+            get
+            {
+                var zoom = float.IsFinite(Zoom) && Zoom > 0f ? Zoom : 1f;
+
+                return zoom * PerspectiveScale;
+            }
+        }
+
         public Matrix3x2 ToImageSpace()
         {
             var zoom = float.IsFinite(Zoom) && Zoom > 0f ? Zoom : 1f;

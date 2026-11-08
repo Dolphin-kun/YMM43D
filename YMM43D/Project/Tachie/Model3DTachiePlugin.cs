@@ -1,3 +1,4 @@
+using YukkuriMovieMaker.Plugin;
 using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Exo;
 using YukkuriMovieMaker.Plugin.Tachie;
@@ -28,5 +29,8 @@ namespace YMM43D.Project.Tachie
         public void CreateScriptFile(string scriptDirectoryPath)
         {
         }
+
+        public PluginDetailsAttribute Details
+            => new() { AuthorName = "いるかぁぁ", ContentId = "nc504835" };
     }
 }

@@ -16,16 +16,16 @@ using YukkuriMovieMaker.Settings;
 
 namespace YMM43D.Project.Model
 {
-    internal sealed class Model3DParameter : ShapeParameter3DBase, IModelLook, ISceneRotation3D
+    internal sealed class Model3DParameter : ShapeParameter3DBase, IModelLook, ISceneRotation3D, ISceneScale3D
     {
         private const string Body = "";
         private const string Rotation = "3D回転";
+        private const string Stretch = "軸ごとの拡大";
         private const string Move = "動き";
         private const string Paint = "色";
         private const string Toon = "トーン";
         private const string Feel = "質感";
         private const string Pattern = "模様";
-                private const string Face = "表情";
         private const string Parts = "材質・ボーン・表情";
 
         [Display(GroupName = Body, Name = "ファイル", Description = "obj / gltf / glb / vrm / fbx のファイル")]
@@ -37,7 +37,7 @@ namespace YMM43D.Project.Model
             {
                 Set(ref file, value ?? string.Empty);
 
-                OnPropertyChanged(nameof(HasMotion));
+                TouchModel();
             }
         }
         private string file = string.Empty;
@@ -58,12 +58,6 @@ namespace YMM43D.Project.Model
         [ShowPropertyEditorWhen(nameof(IsActualSize), true)]
         public Animation Scale { get; } = new(100, 0, 100000);
 
-        [Display(GroupName = Body, Name = "奥行き",
-            Description = "カメラに近づけます。アイテムの「Z」と同じ見え方になりますが、"
-                + "3D のまま動かすので、寄っても画質が落ちません")]
-        [AnimationSlider("F1", "px", -1000, 1000)]
-        public Animation Depth { get; } = new(0, -100000, 100000);
-
         [Display(GroupName = Rotation, Name = "X")]
         [AnimationSlider("F1", "°", -360, 360)]
         public Animation RotationX { get; } = new(0, -100000, 100000);
@@ -76,9 +70,49 @@ namespace YMM43D.Project.Model
         [AnimationSlider("F1", "°", -360, 360)]
         public Animation RotationZ { get; } = new(0, -100000, 100000);
 
+        [Display(GroupName = Stretch, Name = "X", Description = "横に引き伸ばします。100% でそのまま")]
+        [AnimationSlider("F1", "%", 0, 400)]
+        public Animation ScaleX { get; } = new(100, 0, 100000);
+
+        [Display(GroupName = Stretch, Name = "Y", Description = "縦に引き伸ばします。100% でそのまま")]
+        [AnimationSlider("F1", "%", 0, 400)]
+        public Animation ScaleY { get; } = new(100, 0, 100000);
+
+        [Display(GroupName = Stretch, Name = "Z", Description = "奥行きに引き伸ばします。100% でそのまま")]
+        [AnimationSlider("F1", "%", 0, 400)]
+        public Animation ScaleZ { get; } = new(100, 0, 100000);
+
         [Browsable(false)]
         [EditorBrowsable(EditorBrowsableState.Never)]
         public bool HasMotion => Model is { Animations.Length: > 0 };
+
+        [Browsable(false)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public bool HasBones => Model is { HasBones: true };
+
+        [Browsable(false)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public bool HasFaces => Model is { HasMorphs: true };
+
+        [Browsable(false)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public bool HasParts => HasBones || HasFaces;
+
+        [Browsable(false)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public bool ShowsSwing => HasBones && Swings;
+
+        private void TouchModel()
+        {
+            OnPropertyChanged(nameof(HasMotion));
+            OnPropertyChanged(nameof(HasBones));
+            OnPropertyChanged(nameof(HasFaces));
+            OnPropertyChanged(nameof(HasParts));
+            OnPropertyChanged(nameof(ShowsSwing));
+            OnPropertyChanged(nameof(ShowsMaterials));
+            OnPropertyChanged(nameof(ShowsBones));
+            OnPropertyChanged(nameof(ShowsFaces));
+        }
 
         [Display(GroupName = Move, Name = "動き", Description = "ファイルに入っている動きから選びます")]
         [MotionSelector]
@@ -105,6 +139,7 @@ namespace YMM43D.Project.Model
         [Display(GroupName = Move, Name = "揺らす",
             Description = "モデルに書かれている揺れもの（髪やスカートなど）を揺らします")]
         [ToggleSlider]
+        [ShowPropertyEditorWhen(nameof(HasBones), true)]
         public bool Swings
         {
             get => swings;
@@ -112,6 +147,8 @@ namespace YMM43D.Project.Model
             {
                 Set(ref swings, value);
                 springs.Forget();
+
+                OnPropertyChanged(nameof(ShowsSwing));
             }
         }
         private bool swings = true;
@@ -119,13 +156,13 @@ namespace YMM43D.Project.Model
         [Display(GroupName = Move, Name = "やわらかさ",
             Description = "大きいほど、もとの形に戻る力が弱くなり、大きく揺れます。100% でモデルに書かれたとおり")]
         [AnimationSlider("F0", "%", 0, 300)]
-        [ShowPropertyEditorWhen(nameof(Swings), true)]
+        [ShowPropertyEditorWhen(nameof(ShowsSwing), true)]
         public Animation Softness { get; } = new(100, 0, 100000);
 
         [Display(GroupName = Move, Name = "揺れの長さ",
             Description = "大きいほど、揺れが長く続きます。100% でモデルに書かれたとおり")]
         [AnimationSlider("F0", "%", 0, 300)]
-        [ShowPropertyEditorWhen(nameof(Swings), true)]
+        [ShowPropertyEditorWhen(nameof(ShowsSwing), true)]
         public Animation Sway { get; } = new(200, 0, 100000);
 
         private readonly ModelSpringState springs = new();
@@ -288,6 +325,7 @@ namespace YMM43D.Project.Model
 
         [Display(GroupName = Parts, Name = "")]
         [ModelTabs]
+        [ShowPropertyEditorWhen(nameof(HasParts), true)]
         public object? TabRow => null;
 
         [Browsable(false)]
@@ -305,17 +343,24 @@ namespace YMM43D.Project.Model
         }
         private ModelTab tab = ModelTab.Materials;
 
-        [Browsable(false)]
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        public bool ShowsMaterials => Tab == ModelTab.Materials;
+        private ModelTab ShownTab => Tab switch
+        {
+            ModelTab.Bones when !HasBones => ModelTab.Materials,
+            ModelTab.Faces when !HasFaces => ModelTab.Materials,
+            _ => Tab,
+        };
 
         [Browsable(false)]
         [EditorBrowsable(EditorBrowsableState.Never)]
-        public bool ShowsBones => Tab == ModelTab.Bones;
+        public bool ShowsMaterials => ShownTab == ModelTab.Materials;
 
         [Browsable(false)]
         [EditorBrowsable(EditorBrowsableState.Never)]
-        public bool ShowsFaces => Tab == ModelTab.Faces;
+        public bool ShowsBones => ShownTab == ModelTab.Bones;
+
+        [Browsable(false)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public bool ShowsFaces => ShownTab == ModelTab.Faces;
 
         [Display(GroupName = Parts, Name = "")]
         [MaterialList]
@@ -348,6 +393,7 @@ namespace YMM43D.Project.Model
 
             SyncMaterials();
             SyncExpressions();
+            TouchModel();
         }
 
         private void SyncExpressions()
@@ -698,16 +744,17 @@ namespace YMM43D.Project.Model
                 : longest > 1e-9f ? WorldScale.ToWorld(Size.GetFloat(time)) / longest : 1f;
 
             return Matrix4x4.CreateTranslation(-bounds.Center)
-                 * Matrix4x4.CreateScale(scale)
-                 * Rotation3D.ForObject(RotationX.GetFloat(time), RotationY.GetFloat(time), RotationZ.GetFloat(time))
-                 * Matrix4x4.CreateTranslation(0f, 0f, WorldScale.ToWorld(Depth.GetFloat(time)));
+                 * Stretch3D.Matrix(
+                       scale, ScaleX.GetFloat(time), ScaleY.GetFloat(time), ScaleZ.GetFloat(time))
+                 * Rotation3D.ForObject(RotationX.GetFloat(time), RotationY.GetFloat(time), RotationZ.GetFloat(time));
         }
 
         protected override Shape3DSourceBase Create3DSource(IGraphicsDevicesAndContext devices)
             => new Model3DSource(devices, this);
 
         protected override IEnumerable<IAnimatable> GetAnimatables()
-            => [Size, Scale, Depth, RotationX, RotationY, RotationZ, MotionSpeed, MotionStart, Softness, Sway,
+            => [Size, Scale, RotationX, RotationY, RotationZ, ScaleX, ScaleY, ScaleZ,
+                MotionSpeed, MotionStart, Softness, Sway,
                 Gloss, GlossSharpness, ToonShift, ToonFeather, Bump, Glow, Metallic, Smoothness, Mirror,
                 PatternScale, PatternX, PatternY, PatternSpin,
                 CameraSyncAnimation, .. Bones, .. Expressions];
@@ -740,6 +787,9 @@ namespace YMM43D.Project.Model
             public Animation RotationX { get; } = new(0, -100000, 100000);
             public Animation RotationY { get; } = new(0, -100000, 100000);
             public Animation RotationZ { get; } = new(0, -100000, 100000);
+            public Animation ScaleX { get; } = new(100, 0, 100000);
+            public Animation ScaleY { get; } = new(100, 0, 100000);
+            public Animation ScaleZ { get; } = new(100, 0, 100000);
             public Animation Gloss { get; } = new(0, 0, 1000);
             public Animation GlossSharpness { get; } = new(50, 0, 100);
             public Color Tint { get; set; } = Colors.White;
@@ -779,6 +829,9 @@ namespace YMM43D.Project.Model
                 RotationX.CopyFrom(parameter.RotationX);
                 RotationY.CopyFrom(parameter.RotationY);
                 RotationZ.CopyFrom(parameter.RotationZ);
+                ScaleX.CopyFrom(parameter.ScaleX);
+                ScaleY.CopyFrom(parameter.ScaleY);
+                ScaleZ.CopyFrom(parameter.ScaleZ);
                 Gloss.CopyFrom(parameter.Gloss);
                 GlossSharpness.CopyFrom(parameter.GlossSharpness);
                 Tint = parameter.Tint;
@@ -819,6 +872,9 @@ namespace YMM43D.Project.Model
                 parameter.RotationX.CopyFrom(RotationX);
                 parameter.RotationY.CopyFrom(RotationY);
                 parameter.RotationZ.CopyFrom(RotationZ);
+                parameter.ScaleX.CopyFrom(ScaleX);
+                parameter.ScaleY.CopyFrom(ScaleY);
+                parameter.ScaleZ.CopyFrom(ScaleZ);
                 parameter.Gloss.CopyFrom(Gloss);
                 parameter.GlossSharpness.CopyFrom(GlossSharpness);
                 parameter.Tint = Tint;

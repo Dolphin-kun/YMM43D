@@ -26,6 +26,38 @@
             <Setter Property="Height" Value="15"/>
         </Style>
 
+        <Style x:Key="ModeToggle" TargetType="ToggleButton">
+            <Setter Property="Width" Value="30"/>
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="Margin" Value="0,0,0,5"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Grid>
+                            <Ellipse x:Name="Back"
+                                     Fill="#B2202020"
+                                     Stroke="#40FFFFFF"
+                                     StrokeThickness="1"/>
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Back" Property="Stroke" Value="#C0FFFFFF"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Back" Property="Fill" Value="#CCF57C00"/>
+                                <Setter TargetName="Back" Property="Stroke" Value="#FFFFCC80"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.35"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style x:Key="ModeButton" TargetType="RadioButton">
             <Setter Property="Width" Value="30"/>
             <Setter Property="Height" Value="30"/>
@@ -54,6 +86,12 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <Style x:Key="PartButton" TargetType="RadioButton" BasedOn="{StaticResource ModeButton}">
+            <Setter Property="Width" Value="24"/>
+            <Setter Property="Height" Value="24"/>
+            <Setter Property="Margin" Value="3,0,3,4"/>
+        </Style>
         </ResourceDictionary>
     </UserControl.Resources>
     <Grid x:Name="RootGrid">
@@ -63,7 +101,15 @@
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <Menu Grid.Row="0" Background="Transparent" Margin="0" Padding="0">
+        <Menu Grid.Row="0"
+              Background="Transparent"
+              Margin="0"
+              Padding="0"
+              Focusable="False"
+              IsTabStop="False"
+              KeyboardNavigation.TabNavigation="None"
+              KeyboardNavigation.ControlTabNavigation="None"
+              KeyboardNavigation.DirectionalNavigation="None">
             <MenuItem Header="追加">
                 <MenuItem Header="3Dカメラ"
                           Command="{Binding AddCameraCommand}"
@@ -137,6 +183,86 @@
                           IsChecked="{Binding UsesLocalSpace}"
                           InputGestureText="{Binding Keys[ToggleLocalSpace]}"
                           ToolTip="入れると、軸ハンドルと回転の輪がそのアイテムの向きに沿います。外すと世界の軸に沿います。回したものを「その正面へ出す」ときに使ってください。"/>
+
+                <Separator/>
+
+                <MenuItem Header="編集モード"
+                          IsCheckable="True"
+                          IsChecked="{Binding IsEditingMesh}"
+                          IsEnabled="{Binding CanEditMesh}"
+                          InputGestureText="{Binding Keys[ToggleEditMode]}"
+                          ToolTip="3Dアイテムを1つだけ選んでいるとき、その形そのものを編集します。頂点をドラッグすると形が変わります。"/>
+
+                <MenuItem Header="選ぶ単位" IsEnabled="{Binding IsEditingMesh}">
+                    <MenuItem Header="頂点" IsCheckable="True" IsChecked="{Binding EditsVertices}"
+                              InputGestureText="{Binding Keys[EditVertices]}"/>
+                    <MenuItem Header="辺" IsCheckable="True" IsChecked="{Binding EditsEdges}"
+                              InputGestureText="{Binding Keys[EditEdges]}"/>
+                    <MenuItem Header="面" IsCheckable="True" IsChecked="{Binding EditsFaces}"
+                              InputGestureText="{Binding Keys[EditFaces]}"/>
+                </MenuItem>
+
+                <MenuItem Header="形をいじる" IsEnabled="{Binding IsEditingMesh}">
+                    <MenuItem Header="押し出す"
+                              Command="{Binding ExtrudeCommand}"
+                              InputGestureText="{Binding Keys[Extrude]}"
+                              ToolTip="選んでいる面をそのまま引き出します。押し出したあと、矢ハンドルで動かしてください。"/>
+
+                    <MenuItem Header="面を張る"
+                              Command="{Binding MakeFaceCommand}"
+                              InputGestureText="{Binding Keys[MakeFace]}"
+                              ToolTip="選んでいる 3〜8 点をつないで、新しい面を 1 枚作ります。"/>
+
+                    <MenuItem Header="くっつける"
+                              Command="{Binding MergeMeshCommand}"
+                              InputGestureText="{Binding Keys[MergeMesh]}"
+                              ToolTip="選んでいる頂点を、まん中の 1 点にまとめます。潰れた面は消えます。"/>
+
+                    <MenuItem Header="消す"
+                              Command="{Binding DeleteMeshCommand}"
+                              InputGestureText="{Binding Keys[DeleteMesh]}"
+                              ToolTip="選んでいる頂点と、それを使っている面を消します。"/>
+
+                    <Separator/>
+
+                    <MenuItem Header="ループカット"
+                              Command="{Binding CutLoopCommand}"
+                              InputGestureText="{Binding Keys[CutLoop]}"
+                              ToolTip="選んでいる辺の並びに沿って、1周ぶんの切れ目を入れます。切れ目は辺の真ん中に入ります。"/>
+
+                    <MenuItem Header="細かく分ける"
+                              Command="{Binding SubdivideCommand}"
+                              ToolTip="すべての面を、辺の真ん中と面のまん中で割ります。1 回ごとに面の数が角の数だけ増えます。"/>
+
+                    <MenuItem Header="スライド"
+                              IsCheckable="True"
+                              IsChecked="{Binding SlidesMesh}"
+                              InputGestureText="{Binding Keys[ToggleSlide]}"
+                              ToolTip="入れている間、ドラッグすると選んだところが隣の辺に沿って滑ります。ループカットの位置をずらすときに使ってください。"/>
+                </MenuItem>
+
+                <MenuItem Header="選び方" IsEnabled="{Binding IsEditingMesh}">
+                    <MenuItem Header="つながりを選ぶ"
+                              Command="{Binding SelectLinkedCommand}"
+                              InputGestureText="{Binding Keys[SelectLinked]}"/>
+
+                    <MenuItem Header="選択を反転"
+                              Command="{Binding InvertSelectionCommand}"
+                              InputGestureText="{Binding Keys[InvertSelection]}"/>
+
+                    <MenuItem Header="広げる"
+                              Command="{Binding GrowSelectionCommand}"
+                              InputGestureText="{Binding Keys[GrowSelection]}"/>
+
+                    <MenuItem Header="狭める"
+                              Command="{Binding ShrinkSelectionCommand}"
+                              InputGestureText="{Binding Keys[ShrinkSelection]}"/>
+                </MenuItem>
+
+                <MenuItem Header="メッシュの編集を捨てる"
+                          Command="{Binding ResetMeshCommand}"
+                          IsEnabled="{Binding CanEditMesh}"
+                          ToolTip="編集した形を捨てて、選んでいる「形」のもとの姿に戻します。"/>
 
                 <Separator/>
 
@@ -228,6 +354,19 @@
                 <StackPanel VerticalAlignment="Top">
                 <RadioButton Style="{StaticResource ModeButton}"
                              GroupName="GizmoMode"
+                             IsChecked="{Binding IsSelectingMode, Mode=TwoWay}">
+                    <RadioButton.ToolTip>
+                        <TextBlock>
+                            <Run Text="選ぶ"/><LineBreak/>
+                            <Run Text="ハンドルを出しません。クリックで選び、そのままドラッグで動かします。"/><LineBreak/>
+                            <Run Text="Blender の「ツイーク」と同じです。"/>
+                        </TextBlock>
+                    </RadioButton.ToolTip>
+                    <Path Style="{StaticResource ModeIcon}" Data="{StaticResource SelectIcon}"/>
+                </RadioButton>
+
+                <RadioButton Style="{StaticResource ModeButton}"
+                             GroupName="GizmoMode"
                              IsChecked="{Binding IsMovingMode, Mode=TwoWay}">
                     <RadioButton.ToolTip>
                         <TextBlock>
@@ -262,10 +401,92 @@
                     </RadioButton.ToolTip>
                     <Path Style="{StaticResource ModeIcon}" Data="{StaticResource ScaleIcon}"/>
                 </RadioButton>
+
+                <Border Height="1" Background="#40FFFFFF" Margin="2,4,2,9"/>
+
+                <ToggleButton Style="{StaticResource ModeToggle}"
+                              IsChecked="{Binding IsEditingMesh, Mode=TwoWay}"
+                              IsEnabled="{Binding CanEditMesh}">
+                    <ToggleButton.ToolTip>
+                        <TextBlock>
+                            <Run Text="編集モード"/><LineBreak/>
+                            <Run Text="3Dアイテムを1つだけ選んでいるとき、その形そのものを編集します。"/><LineBreak/>
+                            <Run Text="入れていないときは「オブジェクトモード」で、アイテムごと動かします。"/>
+                        </TextBlock>
+                    </ToggleButton.ToolTip>
+                    <Path Style="{StaticResource ModeIcon}" Data="{StaticResource EditIcon}"/>
+                </ToggleButton>
+
+                <StackPanel Visibility="{Binding IsEditingMesh, Converter={StaticResource VisibleWhenTrue}}">
+                    <RadioButton Style="{StaticResource PartButton}"
+                                 GroupName="MeshPart"
+                                 IsChecked="{Binding EditsVertices, Mode=TwoWay}"
+                                 ToolTip="頂点で選ぶ">
+                        <Path Style="{StaticResource ModeIcon}" Width="12" Height="12"
+                              Data="{StaticResource VertexIcon}"/>
+                    </RadioButton>
+
+                    <RadioButton Style="{StaticResource PartButton}"
+                                 GroupName="MeshPart"
+                                 IsChecked="{Binding EditsEdges, Mode=TwoWay}"
+                                 ToolTip="辺で選ぶ">
+                        <Path Style="{StaticResource ModeIcon}" Width="12" Height="12"
+                              Data="{StaticResource EdgeIcon}"/>
+                    </RadioButton>
+
+                    <RadioButton Style="{StaticResource PartButton}"
+                                 GroupName="MeshPart"
+                                 IsChecked="{Binding EditsFaces, Mode=TwoWay}"
+                                 ToolTip="面で選ぶ">
+                        <Path Style="{StaticResource ModeIcon}" Width="12" Height="12"
+                              Data="{StaticResource FaceIcon}"/>
+                    </RadioButton>
+
+                    <Border Height="1" Background="#40FFFFFF" Margin="2,5,2,9"/>
+
+                    <RadioButton Style="{StaticResource ModeButton}"
+                                 GroupName="GizmoMode"
+                                 IsChecked="{Binding IsCuttingLoops, Mode=TwoWay}">
+                        <RadioButton.ToolTip>
+                            <TextBlock>
+                                <Run Text="ループカット"/><LineBreak/>
+                                <Run Text="切りたいところにカーソルを置くと、黄色い線で切れ目が出ます。"/><LineBreak/>
+                                <Run Text="そこでクリックすると、1 周ぶんの切れ目が入ります。"/><LineBreak/>
+                                <Run Text="続けて Shift+G を押すと、入れた切れ目を滑らせて位置を決められます。"/>
+                            </TextBlock>
+                        </RadioButton.ToolTip>
+                        <Path Style="{StaticResource ModeIcon}" Data="{StaticResource LoopCutIcon}"/>
+                    </RadioButton>
+
+                    <RadioButton Style="{StaticResource ModeButton}"
+                                 GroupName="GizmoMode"
+                                 IsChecked="{Binding IsInflating, Mode=TwoWay}">
+                        <RadioButton.ToolTip>
+                            <TextBlock>
+                                <Run Text="収縮／膨張"/><LineBreak/>
+                                <Run Text="選んでいるところを、面の向きに沿って膨らませたり縮めたりします。"/><LineBreak/>
+                                <Run Text="黄色い丸をドラッグしてください。外へ引くと膨らみ、内へ引くと縮みます。"/>
+                            </TextBlock>
+                        </RadioButton.ToolTip>
+                        <Path Style="{StaticResource ModeIcon}" Data="{StaticResource InflateIcon}"/>
+                    </RadioButton>
+                </StackPanel>
                 </StackPanel>
             </Border>
 
             <ContentControl Grid.Column="1" Content="{Binding D3DHost}"/>
+
+            <Border Grid.Column="1"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Bottom"
+                    Margin="8,8,8,34"
+                    Padding="6,2"
+                    Background="#99000000"
+                    CornerRadius="3"
+                    IsHitTestVisible="False"
+                    Visibility="{Binding HasEditHint, Converter={StaticResource VisibleWhenTrue}}">
+                <TextBlock Text="{Binding EditHint}" Foreground="#FFB74D"/>
+            </Border>
 
             <Border Grid.Column="1"
                     HorizontalAlignment="Left"

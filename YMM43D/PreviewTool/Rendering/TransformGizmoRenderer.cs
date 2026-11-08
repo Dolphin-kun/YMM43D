@@ -13,6 +13,7 @@ namespace YMM43D.PreviewTool.Rendering
         private static readonly Color4 AxisXColor = new(1f, 0.25f, 0.3f, 1f);
         private static readonly Color4 AxisYColor = new(0.4f, 0.9f, 0.3f, 1f);
         private static readonly Color4 AxisZColor = new(0.3f, 0.55f, 1f, 1f);
+        private static readonly Color4 CenterColor = new(0.9f, 0.9f, 0.9f, 1f);
 
         private const float IdleOpacity = 0.4f;
 
@@ -53,7 +54,7 @@ namespace YMM43D.PreviewTool.Rendering
         {
             GizmoStyle.Turn => TransformGizmo.IsTurn(handle)
                 && (turnsInThreeAxes || handle is GizmoHandle.RotateZ),
-            GizmoStyle.Scale => handle is GizmoHandle.ScaleAll,
+            GizmoStyle.Scale => TransformGizmo.IsScale(handle) || handle is GizmoHandle.ScaleAll,
             _ => TransformGizmo.IsAxis(handle) || TransformGizmo.IsPlane(handle),
         };
 
@@ -112,6 +113,30 @@ namespace YMM43D.PreviewTool.Rendering
             (0, 4), (1, 5), (2, 6), (3, 7),
         ];
 
+        private static Vector3[] BuildCenterBox()
+        {
+            var half = TransformGizmo.ScaleBox * 1.15f;
+            var corners = new Vector3[8];
+
+            for (var i = 0; i < 8; i++)
+            {
+                corners[i] = new Vector3(
+                    (i & 1) == 0 ? -half : half,
+                    (i & 2) == 0 ? -half : half,
+                    (i & 4) == 0 ? -half : half);
+            }
+
+            var points = new List<Vector3>();
+
+            foreach (var (from, to) in BoxEdges)
+            {
+                points.Add(corners[from]);
+                points.Add(corners[to]);
+            }
+
+            return [.. points];
+        }
+
         private static Vector3[] BuildPlane(GizmoHandle handle)
         {
             var points = new List<Vector3>();
@@ -156,9 +181,10 @@ namespace YMM43D.PreviewTool.Rendering
                     (GizmoHandle.RotateX, new LineMesh(device, BuildRing(GizmoHandle.RotateX), AxisXColor)),
                     (GizmoHandle.RotateY, new LineMesh(device, BuildRing(GizmoHandle.RotateY), AxisYColor)),
                     (GizmoHandle.RotateZ, new LineMesh(device, BuildRing(GizmoHandle.RotateZ), AxisZColor)),
-                    (GizmoHandle.ScaleAll, new LineMesh(device, BuildScaleBar(Vector3.UnitX), AxisXColor)),
-                    (GizmoHandle.ScaleAll, new LineMesh(device, BuildScaleBar(Vector3.UnitY), AxisYColor)),
-                    (GizmoHandle.ScaleAll, new LineMesh(device, BuildScaleBar(Vector3.UnitZ), AxisZColor)),
+                    (GizmoHandle.ScaleX, new LineMesh(device, BuildScaleBar(Vector3.UnitX), AxisXColor)),
+                    (GizmoHandle.ScaleY, new LineMesh(device, BuildScaleBar(Vector3.UnitY), AxisYColor)),
+                    (GizmoHandle.ScaleZ, new LineMesh(device, BuildScaleBar(Vector3.UnitZ), AxisZColor)),
+                    (GizmoHandle.ScaleAll, new LineMesh(device, BuildCenterBox(), CenterColor)),
                 ];
 
             public void Dispose()
