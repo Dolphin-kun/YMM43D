@@ -23,7 +23,6 @@ namespace YMM43D.Player
             public static SceneView None
                 => new(null, default, Matrix4x4.Identity, ScreenPlacement.None, [], []);
 
-            // 持ち主を囲むグループ制御の配置。3D では親として掛け、YMM4 が後から 2D で掛ける分は打ち消す。
             public Matrix4x4 OwnerGroupTransform { get; init; } = Matrix4x4.Identity;
 
             public ScreenPlacement OwnerGroupScreen { get; init; } = ScreenPlacement.None;
@@ -169,6 +168,11 @@ namespace YMM43D.Player
 
             return at < 0 || at == last;
         }
+
+        public static bool ExpectsSolid(IVideoItem item)
+            => item is I3DProvider
+            || HasSolidEffect(item)
+            || (item is ShapeItem shape && shape.ShapeParameter is ShapeParameter3DBase);
 
         public static bool HasSolidEffect(IVideoItem item)
         {

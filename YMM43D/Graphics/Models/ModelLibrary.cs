@@ -14,7 +14,7 @@ namespace YMM43D.Graphics.Models
         private static readonly List<(string Key, ModelImage? Image)> imageCache = [];
 
         public static bool IsSupported(string? path)
-            => Path.GetExtension(path ?? string.Empty).ToLowerInvariant() is ".obj" or ".gltf" or ".glb";
+            => Path.GetExtension(path ?? string.Empty).ToLowerInvariant() is ".obj" or ".gltf" or ".glb" or ".vrm" or ".fbx";
 
         public static ModelData? Find(string? path)
         {
@@ -94,8 +94,9 @@ namespace YMM43D.Graphics.Models
         public static ModelData Load(string path) => Path.GetExtension(path).ToLowerInvariant() switch
         {
             ".obj" => ObjModelLoader.Load(path),
-            ".gltf" or ".glb" => GltfModelLoader.Load(path),
-            var other => throw new NotSupportedException($"{other} は読み込めません。obj / gltf / glb を選んでください。"),
+            ".gltf" or ".glb" or ".vrm" => GltfModelLoader.Load(path),
+            ".fbx" => FbxModelLoader.Load(path),
+            var other => throw new NotSupportedException($"{other} は読み込めません。obj / gltf / glb / vrm / fbx を選んでください。"),
         };
 
         private static ModelData? TryLoad(string path)

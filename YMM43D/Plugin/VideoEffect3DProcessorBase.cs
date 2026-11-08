@@ -10,7 +10,8 @@ using YukkuriMovieMaker.Player.Video;
 namespace YMM43D.Plugin
 {
     public abstract class VideoEffect3DProcessorBase(VideoEffect3DBase? owner, IGraphicsDevicesAndContext devices)
-                : IVideoEffectProcessor, I3DVideoEffect, I3DSizeProvider, I3DLocalTransform, I3DBounds, I3DPlacedInstance
+                : IVideoEffectProcessor, I3DVideoEffect, I3DSizeProvider, I3DLocalTransform, I3DBounds, I3DPlacedInstance,
+                  I3DAlive
     {
         private readonly VideoEffect3DBase? owner = owner;
         private readonly D2DTextureBridge textureBridge = new();
@@ -26,7 +27,23 @@ namespace YMM43D.Plugin
         private nint bakedDeviceKey;
         private bool isDisposed;
 
+        private VideoEffect3DProcessorBase? groupMemberProcessor;
+
         protected IGraphicsDevicesAndContext Devices { get; } = devices;
+
+        public bool IsAlive => !isDisposed;
+
+        protected virtual bool KeepsGroupMemberSolid => false;
+
+        protected virtual bool ParentsGroupMembers => false;
+
+        protected virtual Matrix4x4 GetGroupParentMatrix(in FrameContext time) => Matrix4x4.Identity;
+
+        protected bool IsGroupEffect { get; private set; }
+
+        protected I3DProvider? GroupMemberSolid { get; private set; }
+
+        protected VideoEffect3DProcessorBase? GroupMemberProcessor => groupMemberProcessor;
 
         internal IGraphicsDevicesAndContext SourceDevices => Devices;
 
@@ -45,7 +62,14 @@ namespace YMM43D.Plugin
 
         protected abstract WorldBounds GetLocalBounds(in FrameContext itemTime);
 
-        WorldBounds I3DBounds.GetLocalBounds(in FrameContext itemTime) => GetLocalBounds(itemTime);
+        WorldBounds I3DBounds.GetLocalBounds(in FrameContext itemTime) => Bounds(itemTime);
+
+        protected virtual bool UsesGroupMemberBounds => true;
+
+        private WorldBounds Bounds(in FrameContext itemTime)
+            => UsesGroupMemberBounds && GroupMemberSolid is I3DBounds bounded
+                ? bounded.GetLocalBounds(itemTime)
+                : GetLocalBounds(itemTime);
 
         public DrawDescription Update(EffectDescription effectDescription)
         {
@@ -53,6 +77,7 @@ namespace YMM43D.Plugin
             owner?.ReportInput(this, effectDescription.Layer, effectDescription.InputIndex, effectDescription.InputCount);
 
             BakeInput();
+            FindGroupMemberSolid(effectDescription);
             OnUpdating(effectDescription);
 
             var itemTime = FrameContext.FromItem(effectDescription);
@@ -78,7 +103,7 @@ namespace YMM43D.Plugin
             localMatrix = world;
 
             output = renderer.Render(
-                Devices, effectDescription, GetLocalBounds(itemTime), world, Draw,
+                Devices, effectDescription, Bounds(itemTime), world, Draw,
                 out var imageReach,
                 self: (I3DProvider?)owner ?? this,
                 placement: placement);
@@ -94,9 +119,65 @@ namespace YMM43D.Plugin
 
         protected virtual bool TryInheritTransform(out Matrix4x4 local, out Matrix4x4 world)
         {
+            if (IsGroupEffect
+                && (GroupMemberSolid is not null || ParentsGroupMembers)
+                && EffectDescription is { } description)
+            {
+                var parent = GetGroupParentMatrix(FrameContext.FromItem(description));
+
+                if (groupMemberProcessor is { } source
+                    && source.TryGetLocalMatrix(out local)
+                    && source.TryGetPlacement(out var sourcePlacement))
+                {
+                    world = sourcePlacement * parent;
+                    return true;
+                }
+
+                local = Matrix4x4.Identity;
+                world = ItemPlacement.GetWorldMatrix(description.DrawDescription) * parent;
+                return true;
+            }
+
             local = Matrix4x4.Identity;
             world = Matrix4x4.Identity;
             return false;
+        }
+
+        private void FindGroupMemberSolid(EffectDescription description)
+        {
+            IsGroupEffect = false;
+            GroupMemberSolid = null;
+            groupMemberProcessor = null;
+
+            if (!KeepsGroupMemberSolid
+                || owner is null
+                || SceneDepthCollector.FindOwner(description) is not { } item
+                || !GroupEffectSource.IsOnGroup(item, owner))
+            {
+                return;
+            }
+
+            IsGroupEffect = true;
+            GroupMemberSolid = GroupEffectSource.Find(item, description, owner, Devices, this);
+            groupMemberProcessor = GroupMemberSolid as VideoEffect3DProcessorBase;
+        }
+
+        protected bool TryDrawGroupMemberSolid(in Render3DContext render, in DrawContext3D item)
+        {
+            if (GroupMemberSolid is not { } source)
+                return false;
+
+            source.Draw(render, new DrawContext3D
+            {
+                World = item.World,
+                Opacity = item.Opacity,
+                Blend = item.Blend,
+                IsAlwaysOnTop = item.IsAlwaysOnTop,
+                DepthOnly = item.DepthOnly,
+                Time = item.Time,
+            });
+
+            return true;
         }
 
         private static DrawDescription Neutralize(DrawDescription draw, float imageReach) => draw with

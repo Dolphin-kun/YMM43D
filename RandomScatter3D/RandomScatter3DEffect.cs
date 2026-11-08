@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Numerics;
 using YMM43D.Commons;
@@ -70,9 +71,27 @@ namespace RandomScatter3D
         [AnimationSlider("F1", "°/f", 0, 20)]
         public Animation MaxSpin { get; } = new(0, 0, 10000);
 
-        [Display(GroupName = Look, Name = "陰影をつけない", Description = "光源を無視して、元の絵のまま置きます", Order = 100)]
+        [Display(GroupName = Movement, Name = "端でうすくする",
+            Description = "範囲の端に近づいたものを薄くして、反対側から出てくるときに急に現れないようにします。"
+                + "0 で薄くしません。動いていないものには効きません", Order = 300)]
+        [AnimationSlider("F0", "%", 0, 100)]
+        public Animation EdgeFade { get; } = new(20, 0, 100);
+
+        [Display(GroupName = Look, Name = "陰影", Description = "光源にしたがって陰影をつけます。切ると、元の絵のまま置きます", Order = 100)]
         [ToggleSlider]
-        public bool IsUnlit { get => isUnlit; set => Set(ref isUnlit, value); }
+        public bool IsLit { get => !IsUnlit; set => IsUnlit = !value; }
+
+        [Browsable(false)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public bool IsUnlit
+        {
+            get => isUnlit;
+            set
+            {
+                Set(ref isUnlit, value);
+                OnPropertyChanged(nameof(IsLit));
+            }
+        }
         private bool isUnlit;
 
         [Display(GroupName = Look, Name = "つや", Description = "光が映り込んだ明るい点の強さ。0 でつやなし", Order = 200)]
@@ -95,7 +114,8 @@ namespace RandomScatter3D
             => AttachProcessor(new RandomScatter3DProcessor(this, devices));
 
         protected override IEnumerable<IAnimatable> GetAnimatables()
-            => [RangeX, RangeY, RangeZ, MaxAngle, SizeVariation, MaxSpeed, MaxSpin, Gloss, GlossSharpness, CameraSyncAnimation];
+            => [RangeX, RangeY, RangeZ, MaxAngle, SizeVariation, MaxSpeed, MaxSpin, EdgeFade,
+                Gloss, GlossSharpness, CameraSyncAnimation];
 
         public override IEnumerable<string> CreateExoVideoFilters(
             int keyFrameIndex, ExoOutputDescription exoOutputDescription) => [];

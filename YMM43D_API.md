@@ -272,6 +272,18 @@ public class ExtrusionEffect : VideoEffect3DBase
 | `Draw(in Render3DContext, DrawContext3D)` | 3D 空間への描画。プレビューと出力の両方から呼ばれる |
 | `GetLocalBounds(in FrameContext)` | 描くものが占める範囲。`Update` が組み立てるワールド行列を掛ける前の座標系で答える |
 
+グループ制御に付けられたときに、中のアイテムが持っている 3D をそのまま使いたい場合は、次の口を使います。`KeepsGroupMemberSolid` を `true` にすると、基底クラスが `GroupEffectSource` で中身を探し、範囲と配置をその中身から引き継ぎます。探す順は、同じグループ制御に並べた 1 つ前の 3D エフェクトがそのアイテムのために作った処理側、無ければ中のアイテム自身が持つ 3D（最後の 3D エフェクト、無ければ 3D の図形）です。
+
+| メンバー | 役割 |
+|---|---|
+| `KeepsGroupMemberSolid` | グループ制御に付けたとき、中のアイテムの 3D を板に潰さずそのまま使うか（既定は `false`） |
+| `TryDrawGroupMemberSolid(in Render3DContext, in DrawContext3D)` | その 3D をそのまま描く。`Draw` の先頭で呼び、`true` なら自前の描画はしない |
+| `ParentsGroupMembers` | 中に 3D が無いときも、グループ制御の中心を軸にした親として掛けるか（「3D空間に置く」だけ `true`） |
+| `GetGroupParentMatrix(in FrameContext)` | 親として掛ける行列。回転を持つエフェクトはここで返す |
+| `IsGroupEffect` / `GroupMemberSolid` | グループ制御に付けられたか / 見つかった中身 |
+| `GroupMemberProcessor` | その中身がこのプラグインのエフェクトのときの処理側。配置だけ引き継ぎたいときに使う |
+| `UsesGroupMemberBounds` | 占める範囲もその中身に合わせるか。縁や複製で外に広がるものは `false` にする（既定は `true`） |
+
 ```csharp
 internal sealed class ExtrusionProcessor : VideoEffect3DProcessorBase
 {
@@ -393,6 +405,10 @@ pipeline.Draw(context, constants, new DrawSettings
 | `SkipDepthWrite` | 深度テストは行うが書き込まない。半透明な板を描くときに使う |
 | `Texture` | ピクセルシェーダーのスロット 0 に設定するテクスチャ |
 | `Sampler` | 省略時はリニア補間のサンプラー |
+| `Bump` / `Glow` / `Feel` / `Shade` | 3Dモデルの材質ごとの画像（凹凸・発光・質感・影の色）。t5〜t8 に入る |
+| `Mirror` | 映り込みに使う風景の画像。t9 に入る |
+
+`Bump` 以下はモデル描画が使うもので、自作のマテリアルでは渡す必要はありません。入れたものだけが割り当てられます。
 
 `DrawContext3D.ToDrawSettings()` を使うと、アイテムの合成モードと「最前面に表示」が反映された `DrawSettings` が得られます。カリングとテクスチャだけを足してください。
 
@@ -435,6 +451,34 @@ using var mesh = new SurfaceMesh(device, solid, [new Color4(1f, 1f, 1f, 1f)]);
 ```
 
 よく使う形は `Primitives` にあります。`Plane` / `Tetrahedron` / `Cube` / `Octahedron` / `Dodecahedron` / `Icosahedron` / `Sphere(分割数)` / `Cylinder(分割数)` / `Cone(分割数)` / `Torus(分割数, 太さ)`。どれも差し渡し 1 に揃えてあります。
+
+面のつながりを辿ったり組み替えたりするときは `MeshTopology` を使います。`SurfaceGeometry` との行き来のほか、辺・頂点・面の隣り合わせを持ちます。
+
+| メンバー | 説明 |
+|---|---|
+| `FromGeometry(geometry)` | 同じ位置の頂点を溶接してトポロジにする |
+| `ToGeometry()` | 面ごとの向きと、なめらかに繋ぐ面の頂点法線を作り直して戻す |
+| `Edges` / `EdgeFaces` / `VertexEdges` / `FaceEdges` | 隣り合わせの表 |
+| `EdgeLoop(edge)` | 辺のループ。頂点に 4 本集まるところは向かいの辺へ、集まらないところは面の輪郭か、同じ並びの輪へ |
+| `EdgeRing(edge)` | 四角い面の向かいの辺をたどる輪 |
+| `CutLoop(edge)` | 輪に沿って面を半分に割り、増えた頂点を返す |
+| `WithPoints(points)` | つながりはそのままに、頂点の位置だけ入れ替える（表は作り直しません） |
+
+形を組み替える操作は `MeshEdit` の拡張メソッドです。どれも新しい `MeshTopology` を返し、もとは変えません。
+
+| メソッド | 説明 |
+|---|---|
+| `Extrude(selection)` | 選んだ面を複製して持ち上げ、ふちに側面を張る。増えた頂点を返す |
+| `Delete(selection)` | 選んだ頂点を使う面を消し、余った頂点を詰める |
+| `MakeFace(selection)` | 3〜8 点を、まん中まわりの角度順に並べて面を 1 枚作る |
+| `Merge(selection)` | 選んだ頂点をまん中の 1 点にまとめ、潰れた面を落とす |
+| `Subdivide()` | すべての面を、辺の真ん中と面のまん中で割る（n 角形 → n 枚の四角） |
+| `LinkedTo` / `Grown` / `Shrunk` | つながりを辿る / 隣まで広げる / ふちを外す |
+| `SlideRails(selection)` | 頂点ごとに、滑らせる先の 2 点を返す |
+
+2D の輪郭から立体を作るときは `OutlineSolid` を使います。`Build(点, OutlineForm, 厚み, 分割数)` が、押し出し（`Extrude`）か回転体（`Lathe`）の `SurfaceGeometry` を返します。へこんだ形も耳切りで三角に割ります。`UnitScale(点, 形, 厚み)` は、`ScaledToUnit()` が掛ける倍率と同じ値を先に返すので、**元の点がどこへ行くかを、形を作らずに知る**ことができます。
+
+> `OutlineSolid` は**まだ 3Dアイテムの「形」には出していません**（使い勝手を作り直すため）。自作のプラグインからは今のまま呼べます。
 
 > 法線の向きは、絵には出ません。シェーダーが必ずカメラ側へ向け直してから陰影を計算するためです。それでも `Normals` は外向きで揃えてあります。裏返っていると、面の並び順を揃える `FacingOutward()` が逆に働くためです。
 
@@ -479,6 +523,7 @@ YMM43D が持っている部品です。**どれも単体で完結している**
 | `Lighting.hlsli` | `ApplyLight` と `ApplyFog` |
 | `Texture.hlsli` | 乗算済みアルファを割り戻す `Unpremultiply` |
 | `Light.hlsli` | 光 1 つぶんの `struct Light` と、その並び `Lights`（register **t1**） |
+| `Model.hlsli` | 3Dモデル専用。材質ごとの `cbuffer`（register **b1**）と画像（t5〜t9）、それらをまとめて塗る `ShadeModel` |
 
 `Standard.hlsli` を取り込むと、場の `cbuffer`、頂点入力 `VS_IN`（`Pos` / `Col` / `Tex` / `Nrm`）、ピクセル入力 `PS_IN`（`Pos` / `Col` / `Tex` / `Nrm` / `World`）、座標変換と法線変換を行う `VSMain`、陰影と霧と不透明度をまとめた `Shade` が揃います。
 
@@ -498,6 +543,8 @@ float4 PSMain(PS_IN input) : SV_TARGET
 **b0 は場のもの、b1 はあなたのもの**です。自前の値は `register(b1)` に置いてください。b0 には触らなくてよく、並び順を合わせる必要もありません（「立体化3D」と「点群3D」がこの形です）。
 
 同じように、**テクスチャの t0 はアイテムの絵、t1 は光の並び、t2 は影の板**です。自前のテクスチャは `t3` から、サンプラーは `s2` から使ってください（s0 は絵、s1 は影の比較用）。t1 と t2 は描画の頭でまとめて割り当てられるので、あなたが渡す必要はありません。
+
+なお 3Dモデルの描画は t3〜t9 まで使います（骨・表情・凹凸・発光・質感・影の色・風景）。これはモデル専用のシェーダーの中だけの取り決めなので、**自前のシェーダーが t3 から使うのは変わりません。**
 
 ```hlsl
 #include "Standard.hlsli"
@@ -587,6 +634,7 @@ var pipeline = pipelines.Get(render.Device);
 | `Render3DContext` | struct | 描画先のデバイス・コンテキストとカメラ行列 |
 | `DrawContext3D` | class | 1 つのアイテムを描画するための情報 |
 | `Provider3DRegistry` | static class | パラメータとプロバイダーの対応表 |
+| `GroupEffectSource` | static class | グループ制御に付けたエフェクトかどうかの判定と、受け取る 3D の中身（同じグループの前のエフェクトの結果、または中のアイテムの 3D）の取得 |
 
 #### 座標と時間
 
@@ -600,6 +648,10 @@ var pipeline = pipelines.Get(render.Device);
 | `EditScope` | struct | ドラッグの結果をアニメーションのどこに書き込むか（全体か、中間点か）。`NudgePosition` で位置3つをまとめて動かす |
 | `SnapGrid` | struct | ドラッグの吸い付き。位置は間隔の倍数、回転は角度の倍数に丸める |
 | `SurfaceGloss` | struct | 光の映り込みの強さと鋭さ |
+| `ScreenPlacement` | struct | YMM4 が出来上がった絵に掛ける配置（位置・拡大率・回転・Z）。`ToImageSpace` がその逆変換、`HostScale` が後から掛かる倍率 |
+| `ImageArea` | struct | 画像座標での範囲。`ForScreen` が画面の見える範囲を画像座標へ移す |
+| `RenderArea` | struct | 作る絵の大きさと原点。`Measure` がワールドの範囲から決め、`Reach` が絵の届く先を返す |
+| `ImageProjection` | static class | 接平面座標から画像座標への変換と、そこからの射影行列の組み立て |
 
 #### カメラと光
 
@@ -622,13 +674,98 @@ var pipeline = pipelines.Get(render.Device);
 | `ShadowPlacement` | struct | 影の濃さと、その光に割り当てられた板の番号・行列 |
 | `SceneShadows` | static class | 光源から場を描き直して影の板を作る |
 
+#### 3Dプレビューの回転の輪に乗る
+
+パラメータや映像エフェクトに `ISceneRotation3D` を付けると、3Dプレビューの軸ハンドルに**回転の輪が 3 本**出て、そのまま 3D で回せるようになります。実装するのは 3 つの `Animation` を返すだけで、**すでに `RotationX` / `RotationY` / `RotationZ` という名前で持っているなら、宣言に足すだけです**。
+
+```csharp
+public class MyEffect : VideoEffect3DBase, ISceneRotation3D
+{
+    public Animation RotationX { get; } = new(0, -100000, 100000);
+    public Animation RotationY { get; } = new(0, -100000, 100000);
+    public Animation RotationZ { get; } = new(0, -100000, 100000);
+}
+```
+
+回したぶんは**掴んだ輪の軸まわりの回転として向きに掛け、オイラー角に分解し直して 3 つの `Animation` に書き戻します**。軸がどの向きでも、角度の組み合わせがどうなっていても、掴んだところがカーソルについてきます。
+
+**角度を反転して使っているときは、そのことを宣言してください。** 既定では `Rotation3D.ForObject(x, y, z)` で向きを作るものとして扱います。`ForObject(-x, -y, -z)` のように使っているなら、2 つを上書きします。これを忘れると、回る向きが逆になります。
+
+```csharp
+Matrix4x4 ISceneRotation3D.ToOrientation(float x, float y, float z)
+    => Rotation3D.ForObject(-x, -y, -z);
+
+Vector3 ISceneRotation3D.ToAngles(in Matrix4x4 orientation)
+    => -Rotation3D.ToAngles(orientation);
+```
+
+輪が 3 本出るのは、**それを持つものを 1 つだけ選んでいるとき**かつ**「回す」モードのとき**です。複数選んでいるときは、これまでどおりアイテムの「回転」だけが輪になります。
+
+ハンドルは `GizmoMode`（動かす / 回す / 大きさ）で出し分けます。`TransformGizmo.StyleOf(mode)` が、そのモードで出す `GizmoStyle` を返します。
+
+`,`（ローカル軸）を入れると、輪と矢がそのものの向きに沿います。このとき回転は**そのもの自身の軸**まわり、外しているときは**世界の軸**まわりです。
+
+#### カメラの回転の中心を教える
+
+`ISceneCamera` に `GetPivot` を足すと、3Dプレビューでそのカメラを回したときの**回転の中心**になります。返さなければ（既定）、これまでどおり画面の奥にある面までの距離を中心に使います。
+
+```csharp
+public Vector3? GetPivot(in FrameContext itemTime)
+    => AimMode is CameraAim.Target or CameraAim.Orbit
+        ? ToWorld(TargetX, TargetY, TargetZ, itemTime)
+        : null;
+```
+
+渡した点は `FreeCameraController.AimAt` が**視線に沿った距離**に直して覚えます（`Vector3.Dot(pivot - position, forward)`）。見つめる点は視線の上にあるので、そのまま回転の中心になります。
+
+ホイールで寄るときも中心は動きません。`Dolly` は距離の一定割合（`DollyRatio`）ずつ詰めるので、いくら回しても中心を追い越しません。**一定の長さずつ動かすと、近づいたところで下限に引っかかって中心だけが置き去りになります**（手元で測ると、12 ノッチで 14 単位＝1400px ずれました）。
+
+#### 3Dプレビューの拡大の棒に乗る
+
+パラメータや映像エフェクトに `ISceneScale3D` を付けると、「大きさを変える」モードの 3 本の棒が、**軸ごとに別々の倍率**を動かすようになります。付けないものは、これまでどおり YMM4 の「拡大率」が一様に変わります。
+
+**形を直に編集できるものには付けません。** 3D図形アイテム（`Shape3DParameter`）は `ISceneScale3D` を持たず、棒を引くと `MeshDragController.BeginWhole` が**メッシュの頂点そのもの**を原点中心に伸ばします。編集モードで全部選んで伸ばすのと同じ操作で、結果も `Stretch3D.Matrix` と一致します。倍率の欄とメッシュ編集の二重持ちを避けるためです。
+
+```csharp
+public class MyParameter : ShapeParameter3DBase, ISceneScale3D
+{
+    public Animation ScaleX { get; } = new(100, 0, 100000);
+    public Animation ScaleY { get; } = new(100, 0, 100000);
+    public Animation ScaleZ { get; } = new(100, 0, 100000);
+}
+```
+
+値は**百分率**です。100 でそのまま。行列に掛けるときは `Stretch3D.Matrix(uniform, x, y, z)` を使ってください。等倍と軸ごとの倍率を 1 つの `CreateScale` にまとめます。3Dプレビューが棒の長さを決めるのにも同じ式を使うので、ずれません。
+
+```csharp
+Matrix4x4.CreateTranslation(-bounds.Center)
+    * Stretch3D.Matrix(size, ScaleX.GetFloat(time), ScaleY.GetFloat(time), ScaleZ.GetFloat(time))
+    * Rotation3D.ForObject(RotationX.GetFloat(time), RotationY.GetFloat(time), RotationZ.GetFloat(time))
+```
+
+**拡大の棒は、いつもその物の向きに沿います**（ローカル軸の入切に関係ありません）。3 つの数で表せるのは、その物自身の軸に沿った拡大だけだからです。
+
+#### 形そのものを引き延ばす
+
+`MeshDragController` は、編集モードの選択を動かすのと同じしくみで**オブジェクトモードの拡大の棒**も受け持ちます。入口が 2 つあります。
+
+| 入口 | 動かす範囲 | 中心 |
+|---|---|---|
+| `Begin(target, selection, …)` | 選んでいる頂点だけ | 選択のまん中 |
+| `BeginWhole(target, …)` | 頂点ぜんぶ | その物の原点 |
+
+原点を中心にするのは、**棒が出ているのがその物の原点**だからです。選択のまん中にすると、掴んだところと伸びる向きがずれます。
+
+**焼くのは、実際に動いた時点です。** `Start` では `ShownMesh` を読むだけで、`Apply` が初めて呼ばれたときに `StoreMesh`（2 回目以降は `StorePoints`）を呼びます。棒を掴んだだけ・頂点を選んだだけで形が焼かれると、「形」や「分割数」が黙って効かなくなるためです。
+
 #### 3Dプレビューで掴む
 
 | 型 | 種別 | 説明 |
 |---|---|---|
 | `PickRay` | struct | 画面上の1点から伸ばす半直線 |
-| `TransformGizmo` | struct | アイテムを動かす向きの案内。矢印と輪の当たり判定 |
-| `GizmoHandle` | enum | 案内のどこを掴んでいるか |
+| `TransformGizmo` | struct | アイテムを動かす向きの案内。矢印と輪の当たり判定。`Orientation` で傾けて出せる |
+| `GizmoHandle` | enum | 案内のどこを掴んでいるか。動かす `MoveX/Y/Z`、面の `PlaneXY/YZ/ZX`、回す `RotateX/Y/Z`、軸ごとに拡大する `ScaleX/Y/Z`、全体を拡大する `ScaleAll` |
+| `GizmoStyle` | enum | 案内の出し方。矢印だけ・矢印と輪・3本の輪だけ（骨） |
 | `ISceneMarkerSource` | interface | 3Dプレビューに目印を出すアイテム。掴んで動かされたら差分を受け取る |
 | `SceneMarker` | struct | 目印の見た目と場所 |
 | `MarkerKind` | enum | 目印の絵柄。平行光・点光源・スポットライト・カメラ |
@@ -671,6 +808,41 @@ public interface I3DProvider
 }
 ```
 
+#### 前に見つけた立体を覚えておく
+
+`I3DAlive` は「この描き手はまだ生きているか」を答えるだけの印です。`Shape3DSourceBase` と `VideoEffect3DProcessorBase` が実装しています。
+
+ほかのアイテムの立体を探して描くエフェクト（縁取り3D・ランダム配置3D など）では、**再生を始めた直後などに、探しものが 1 フレームだけ見つからないこと**があります。そのまま「立体が無い」と判断すると、その 1 フレームだけ板として描いてしまい、大きさが跳ねて見えます。
+
+`Live3D.KeepLast(見つけたもの, 前に見つけたもの)` を通すと、見つからなかったときに前のものを返します。捨てられたもの（`IsAlive` が false）は返しません。
+
+```csharp
+protected override void OnUpdating(EffectDescription description)
+    => solidSource = Live3D.KeepLast(FindSolidSource(description), solidSource);
+```
+
+#### 中間点のある値を、見えているとおりに動かす
+
+3Dプレビューで掴んで動かした分は `EditScope` 経由で書き戻します。中間点（キーフレーム）があるときの書き戻し方は 3 通りです。
+
+| 作り方 | 書き戻し方 |
+|---|---|
+| `EditScope.Whole` | すべての値に同じ分を足す（`Animation.Nudge`） |
+| `EditScope.AtFrame(frame)` | その位置に中間点を作って、そこだけ動かす（`K` を入れたとき） |
+| `EditScope.InSegment(time)` | **今いる区間の、次の中間点だけ**動かす（既定） |
+
+`InSegment` は、再生位置が入っている区間の**終わり側の値**（次の中間点）だけを動かします。中間点にぴったり重なっていれば、その中間点そのものです。区間の途中にいるときは、**画面上の値がドラッグした分だけ動くように**、補間の重みで割った分を足します。
+
+```csharp
+var moved = animation.GetValue(time);   // 動かす前
+
+EditScope.InSegment(time).Nudge(animation, 30);
+
+animation.GetValue(time) == moved + 30; // 次の中間点だけが変わり、手前の値は動かない
+```
+
+重みは `Animation.WeightOf(index, time)` が実測します（補間の種類を問いません）。区間の頭に近く、終わり側の重みが **2 割**を切るときは、代わりに頭側の値を動かします。掛かり方は **5 倍まで**で頭打ちです。中間点が無い値では `Nudge` と同じです。
+
 #### I3DBounds
 
 3Dプレビューでアイテムを掴む範囲は、これで決まります。実装していないプロバイダーはアイテム本来の 2D の大きさで判定されるため、立体化した部分や 2D より大きな図形は見えているのに掴めません。
@@ -712,6 +884,14 @@ var constants = render.CreateConstants(world, item, unlit: false, gloss: Surface
 ```
 
 `ApplyLight` を通していれば、自作のマテリアルでもそのまま効きます。`SurfaceGloss.None`（既定）なら、これまでどおり映り込みは乗りません。
+
+#### 回り込む光と、まわりの景色
+
+回り込む光（環境光）は、既定では一色です。`SceneLighting` に `ground` を渡すと、**上から当たる色と下から当たる色を面の向きで混ぜます**。地面の照り返しを入れたいときに使います。`null`（既定）なら一色のままで、見た目は変わりません。
+
+`SceneMirror(画像のパス, 回り込む光に混ぜる強さ)` を渡すと、その画像を**まわりの景色**として扱えます。左右ぐるり 360 度・上下 180 度に引き伸ばした横長の 1 枚絵として読み、反射の向きで引きます。粗い面ほどぼけた段（ミップマップ）を読むので、「つるつる」の度合いで映り方が変わります。
+
+どちらも 3D環境のアイテムから `SceneLightingResolver` が集めます。**いまのところ景色を映すのは 3Dモデルだけ**で、自作のマテリアルで使うには `Model.hlsli` と同じように t9 を自分で引く必要があります。
 
 #### 影
 
@@ -780,12 +960,13 @@ public void MoveMarker(in Vector3 shift, in FrameContext itemTime, in EditScope 
 | `DrawSettings` | struct | 1 回の描画ごとに変わる設定 |
 | `RenderStates` | class | デバイス上で共有される描画ステート一式 |
 | `IMesh` / `IMaterial` | interface | 形状とシェーダー。頂点が 65536 個を超える形状は `IndexFormat` に `R32_UInt` を返す |
-| `Vertex` | struct | 位置・色・UV・法線を持つ標準頂点。法線が 0 の頂点は陰影を付けない |
+| `Vertex` | struct | 位置・色・UV・法線・接線を持つ標準頂点。法線が 0 の頂点は陰影を付けない。接線は法線マップ用で、長さ 0 なら凹凸を付けない |
+| `ISceneRotation3D` | interface | `RotationX` / `RotationY` / `RotationZ` を持つことの宣言。付けると 3Dプレビューの回転の輪から 3D で回せる |
 | `SurfaceGeometry` | record | 面の並びで表した形。頂点・法線・面・面グループ数 |
 | `SurfaceFace` | struct | 面 1 枚。頂点の並び・色を塗るグループ番号・なめらかに繋ぐかどうか |
 | `Primitives` | static class | 基本の形を作る。平面・正多面体5種・球・円柱・円錐・ドーナツ |
 | `SurfaceMesh` | class | `SurfaceGeometry` を GPU の頂点バッファにする |
-| `TransformConstants` | struct | 変換行列・不透明度・光・霧を持つ標準定数バッファ |
+| `TransformConstants` | struct | 変換行列・不透明度・光・霧・環境光（上下）・塗り方を持つ標準定数バッファ |
 | `ShaderLibrary` | static class | 埋め込んだ hlsl の読み出しと `#include` の展開 |
 | `ShaderCompiler` | static class | HLSL の実行時コンパイル |
 | `ShaderMaterial` | class | 自分のアセンブリに埋め込んだ hlsl から作るマテリアル。1つのファイルの `VSMain` / `PSMain` からでも、別々のファイルと入口からでも作れる |
@@ -795,8 +976,11 @@ public void MoveMarker(in Vector3 shift, in FrameContext itemTime, in EditScope 
 | `BlendMode` / `FaceCulling` | enum | 合成方法とカリング。`Accumulate` は乗算済みアルファのまま足し込む |
 | `SceneLightBuffer` | class | 光の並びを t1 に置く。`Render3DContext.BindLights` から使われる |
 | `ShadowMapArray` | class | 影の板。t2 に置く。解像度と枚数は場に合わせて作り直す |
-| `ModelLibrary` / `ObjModelLoader` / `GltfModelLoader` | static class | `.obj` / `.gltf` / `.glb` の読み込みと、読んだ結果の使い回し |
+| `ModelLibrary` / `ObjModelLoader` / `GltfModelLoader` / `FbxModelLoader` | static class | `.obj` / `.gltf` / `.glb` / `.vrm` / `.fbx` の読み込みと、読んだ結果の使い回し |
 | `ModelMesh` | class | 読んだモデルを GPU へ載せたもの。材質ごとの部品と画像を持つ |
+| `ModelSurface` | record | 材質 1 つの表面の性質。凹凸・発光・質感・影の色・模様のずらし |
+| `ModelConstants` | struct | `ModelSurface` と `ModelPaint` をシェーダーの b1 の形にしたもの |
+| `ModelTextures` | struct | 材質 1 つに貼る画像のひとまとめ |
 
 ### FrameContext と Animation
 
@@ -908,6 +1092,85 @@ public Animation X { get; } = new(0, -1000000, 1000000);
 
 `OnPropertyChanged` を忘れると、種類を切り替えても編集欄が開き閉じしません。
 
+**読み込んだファイルの中身で出し分けるときも、同じ書き方です。** 条件を bool のプロパティにして、ファイルを指す欄のセッターから知らせます。`Model3DParameter` は `HasMotion` / `HasBones` / `HasFaces` をこうして作り、動きや揺れ、ボーン・表情の欄を、そのモデルに中身があるときだけ出します。
+
+```csharp
+public string File
+{
+    get => file;
+    set
+    {
+        Set(ref file, value ?? string.Empty);
+
+        TouchModel();
+    }
+}
+
+[Browsable(false)]
+[EditorBrowsable(EditorBrowsableState.Never)]
+public bool HasBones => Model is { HasBones: true };
+```
+
+**ファイルを読み直したあとにも知らせてください。** `EndEditAsync` で読み込みが終わるものは、そこでもう一度呼ばないと、欄が前のファイルのままになります。
+
+**隠した側が選ばれたままになる場合に備えてください。** タブのように「いまどれを見ているか」を持つなら、中身がなくなった行き先は、出せるものへ読み替えてから返します。
+
+```csharp
+private ModelTab ShownTab => Tab switch
+{
+    ModelTab.Bones when !HasBones => ModelTab.Materials,
+    ModelTab.Faces when !HasFaces => ModelTab.Materials,
+    _ => Tab,
+};
+```
+
+### 自前の編集欄を作る
+
+`PropertyEditorAttribute` を継承すると、そのプロパティの編集欄を自分で作れます。`Create()` で中身を返し、`SetBindings` で値とつなぎ、`ClearBindings` で外します。`IPropertyEditorControl`（`BeginEdit` / `EndEdit`）と `IPropertyEditorControl2`（`SetEditorInfo`）を実装しておくと、中間点や取り消し・やり直しがいつもどおり効きます。
+
+```csharp
+internal sealed class BonePoseListAttribute : PropertyEditorAttribute
+{
+    public BonePoseListAttribute() => PropertyEditorSize = PropertyEditorSize.FullWidth;
+
+    public override FrameworkElement Create() => new BonePoseListEditor();
+
+    public override void SetBindings(
+        FrameworkElement control, object item, object propertyOwner, PropertyInfo propertyInfo)
+    { ... }
+}
+```
+
+中に**いつもの編集欄**（`AnimationSlider` など）を並べたいときは、そのプロパティに付いている属性をそのまま使います。`PropertyEditorAttribute2.SetBindings` に `ItemProperty` を渡すだけで、本体と同じ見た目の編集欄になります。`PropertiesCache` は `new` して使い回せます。
+
+```csharp
+var info = typeof(ModelBonePose).GetProperty(nameof(ModelBonePose.RotationX))!;
+var attribute = cache.GetCustomAttribute<PropertyEditorAttribute2>(info)!;
+var control = attribute.Create();
+
+attribute.SetBindings(control, [new ItemProperty(item, pose, info, cache)]);
+```
+
+`PropertiesEditor`（対象の編集欄をまとめて作るコントロール）でも同じことはできますが、**そのままだとグループの見出しが中に入れ子で出ます**。`ParentGroup` を合わせても消えないので、見出しを出したくないときは上のように 1 つずつ並べてください。
+
+> 横に置く見出しは**上詰め**（`VerticalAlignment.Top`）にしてください。`AnimationSlider` は中間点を打つとその数だけ縦に伸びるので、中央揃えにしていると見出しだけが真ん中に降りてきます。
+
+> `[Display]` の `Name` を空にすると、左の見出しが消えて編集欄が横いっぱいに広がります。グループ名と同じ言葉を二重に出したくないときに使えます。
+
+YMM4 本体のアイコンは `YukkuriMovieMaker.Resources.Icons` の鍵で引けます。`GeometryKeys` が図形（`Geometry`）、`IconKeys` が絵（`Viewbox`）です。図形のほうは何度でも使い回せるので、`Path` に入れて色をボタンの文字色に合わせるのが楽です。
+
+```xml
+<Path Data="{DynamicResource {x:Static icons:GeometryKeys.TrashCanOutline}}"/>
+```
+
+コードから組み立てるときは `SetResourceReference` が `DynamicResource` にあたります。
+
+```csharp
+mark.SetResourceReference(Path.DataProperty, GeometryKeys.TrashCanOutline);
+```
+
+> 辞書そのもの（`MaterialDesignIconGeometries.g.xaml`）を読み込むと 7400 個あって 2 秒以上かかります。**自分で読み込まず、本体が読み込んだものを引いてください。**
+
 ### 3Dプレビューに反映されないもの
 
 3D 図形アイテムは本物の立体として描かれるため、平面化されたピクセルを加工するエフェクト（グリッチノイズやモザイクなど）は 3Dプレビューには現れません。動画出力では一度 2D 画像に焼かれてから適用されるため、出力には反映されます。
@@ -990,3 +1253,50 @@ public override void Draw(in Render3DContext render, DrawContext3D item)
 小さな立体では既定の 1000 のままなので、これまでの見え方は変わりません。上流のカメラがより遠い距離を指定していれば、そちらを残します。
 
 3D 図形アイテム（`Shape3DSourceBase`）にはこの手当てがありません。`IShapeSource2` は `DrawDescription` を返さないため、後ろに置かれたカメラへ渡す値がないためです。
+
+### アイテムの「Z」は、もう 3D の移動になっている
+
+3D 図形アイテムは `hostAppliesPlacement: true` で描きます。アイテムの X・Y・Z・拡大率・回転は、まず `SceneDepthCollector` の `OwnerPlacement` として**3D の世界に持ち込まれ**、そのあと YMM4 が平らな絵に掛けるのと同じ変換を `ScreenPlacement.ToImageSpace` で**先に打ち消して**から描かれます。打ち消したぶんが後から掛かり直るので、**アイテムの Z は本物の 3D の前後移動**です。遠近のつき方も、ほかの立体との前後関係も正しく出ます。
+
+残るのは**絵の細かさ**です。YMM4 は出来上がった絵を `1000 / (1000 - Z)` 倍に引き伸ばすので、打ち消すこちらの絵はそのぶん小さく描かれます（`RenderArea.Measure` に渡す `tangentToImage` に `1 / PerspectiveScale` が入っています）。そのまま描くと、寄るほど少ない画素を引き伸ばした絵になります。アイテムの「拡大率」もまったく同じ仕組みです。
+
+#### 引き伸ばされるぶんだけ濃く描く
+
+`IShapeSource2` は `DrawDescription` を返さないので、**引き伸ばしそのものは止められません**。代わりに、引き伸ばされても困らない絵を渡します。
+
+`Output3DRenderer.Density` が、**後から掛かる倍率**（`ScreenPlacement.HostScale` = 拡大率 × `PerspectiveScale`）を求めます。`Renderer3DTo2D.Render` はその倍率ぶんだけ**多い画素**で 3D を描き、コマンドリストには**もとの大きさの枠に詰めて**記録します。
+
+```
+絵の枠（画像座標）: width × height          ← 記録される大きさ。変わらない
+描く画素数        : width × density ピクセル ← 中身の細かさ
+```
+
+`ID2D1CommandList` は記録しておいた描画を**あとから本体の変換ごと焼き直す**ので、本体が `density` 倍に引き伸ばしたときに、詰めておいた画素がちょうど 1 対 1 で並びます。細かい縞で測ると、明暗の振れは小さく描いたときの **19%** に対して、詰めて記録すると **100%** 残りました。記録した絵の位置と大きさは、濃さを変えても動きません。
+
+ビューポートだけを画素数に合わせ、**射影行列は変えません**。`ImageProjection.Compose` に渡すのは画像座標の `width` / `height` のままです。NDC は正規化されているので、これで中身の細かさだけが上がります。
+
+```csharp
+var dense = float.IsFinite(density) ? MathF.Max(density, 1f) : 1f;
+var pixelWidth = Math.Max(1, (int)MathF.Ceiling(width * dense));
+
+surface.Resize(ymmDevices, d2dContext, pixelWidth, pixelHeight);
+context.RSSetViewport(new Viewport(0, 0, pixelWidth, pixelHeight));
+```
+
+記録のほうは `Renderer3DTo2D.BuildPacked` です。**行き先は画像座標の枠、切り取る元は画素の数**で渡します。
+
+```csharp
+deviceContext.DrawBitmap(
+    bitmap,
+    new RawRectF(offset.X, offset.Y, offset.X + span.X, offset.Y + span.Y),
+    1f,
+    InterpolationMode.Linear,
+    new RawRectF(0, 0, pixelWidth, pixelHeight),
+    null);
+```
+
+倍率は `MaxRenderSize / いちばん長い辺`（と、念のため 32 倍）で止めます。絵の枠は画面の見える範囲（`ImageArea.ForScreen`）で切られていて、その枠はだいたい `画面 ÷ 倍率` なので、**濃くした結果は画面の大きさに落ち着きます**。どれだけ寄っても作る絵は 4096 画素までです。
+
+この手当ては `hostAppliesPlacement` の有無にかかわらず入ります。映像エフェクトでは `ScreenPlacement` が素のままなので倍率は 1 で、これまでどおりの画素数です。グループ制御の拡大が掛かっているときだけ、そのぶん濃くなります。
+
+**このおかげで、パラメータに「奥行き」のような自前の前後移動は要りません。** アイテムの Z だけで、位置・遠近・前後関係・細かさのすべてが揃います。

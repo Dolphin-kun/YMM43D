@@ -42,5 +42,19 @@ namespace YMM43D.Commons
         bool TryGetPlacement(out Matrix4x4 world);
     }
 
+    public interface I3DAlive
+    {
+        bool IsAlive { get; }
+    }
+
+    public static class Live3D
+    {
+        public static I3DProvider? KeepLast(I3DProvider? found, I3DProvider? last)
+            => found ?? (last is I3DAlive { IsAlive: false } ? null : last);
+
+        public static bool IsAlive(object? provider)
+            => provider is not null && provider is not I3DAlive { IsAlive: false };
+    }
+
     public interface I3DVideoEffect : I3DProvider, I3DTextureProvider;
 }

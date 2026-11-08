@@ -1,3 +1,4 @@
+using System.Numerics;
 
 namespace YMM43D.Commons
 {
@@ -6,5 +7,7 @@ namespace YMM43D.Commons
         CameraState GetState(in FrameContext itemTime);
 
         void Move(in CameraMove move, in FrameContext itemTime, in EditScope scope);
+
+        Vector3? GetPivot(in FrameContext itemTime) => null;
     }
 }

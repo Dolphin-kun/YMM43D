@@ -13,7 +13,7 @@ using YukkuriMovieMaker.Project;
 
 namespace BeamLight3D
 {
-    public sealed class BeamLight3DParameter : ShapeParameter3DBase, IPlacedSceneLightSource
+    public sealed class BeamLight3DParameter : ShapeParameter3DBase, IPlacedSceneLightSource, ISceneRotation3D
     {
         private const string Beam = "";
         private const string Rotation = "3D回転";

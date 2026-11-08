@@ -16,8 +16,13 @@ namespace Extrusion3D
                     BoxMesh.CreateExtrusionBox(device),
                     new ExtrusionMaterial(device)));
 
+        protected override bool KeepsGroupMemberSolid => true;
+
         public override void Draw(in Render3DContext render, DrawContext3D item)
         {
+            if (TryDrawGroupMemberSolid(render, item))
+                return;
+
             var texture = item.Texture ?? GetTexture(render.Device);
             if (texture is null)
                 return;

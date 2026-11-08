@@ -9,6 +9,8 @@ using YMM43D.Commons;
 using YMM43D.Project.Items;
 using YMM43D.Player;
 using YMM43D.PreviewTool.Views;
+using YMM43D.Graphics.Meshes;
+using YMM43D.Project.Shape;
 using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.ItemEditor;
 using YukkuriMovieMaker.Plugin;
@@ -24,18 +26,21 @@ namespace YMM43D.PreviewTool.ViewModels
 
         private const double ClickSlop = 4;
 
-        // 何かが変わった直後は、YMM4 側の描き直しが追いつくまで少しのあいだ描き続ける。
         private const long SettleMs = 500;
 
         private const long SettleIntervalMs = 33;
 
-        // 何も起きていないときの見回りの間隔。取りこぼした変化もこの間隔で拾う。
         private const long IdleIntervalMs = 1000;
 
         private readonly DisposeCollector disposer = new();
         private readonly Preview3DRenderer renderer = new();
         private readonly FreeCameraController freeCamera = new();
         private readonly ItemDragController itemDrag = new();
+        private readonly BoneDragController boneDrag = new();
+        private readonly OutlineDragController outlineDrag = new();
+        private readonly MeshDragController meshDrag = new();
+        private readonly MeshSlideController meshSlide = new();
+        private readonly HashSet<int> meshSelection = [];
         private readonly PreviewSceneBuilder sceneBuilder;
 
         private TimelineRefresher? refresher;
@@ -46,6 +51,7 @@ namespace YMM43D.PreviewTool.ViewModels
         private TimelineSourceAndDevices? sourceAndDevices;
         private IReadOnlyList<IVideoItem> selection = [];
         private IItem? selectedMarker;
+        private int selectedBone = -1;
         private ImmutableList<IItem>? lastItems;
         private PreviewScene? preparedScene;
         private Point? toggleClickAt;
@@ -53,9 +59,19 @@ namespace YMM43D.PreviewTool.ViewModels
         private bool drivesSceneCamera;
         private bool insertsKeyFrame;
         private bool showsGrid = true;
+        private bool showsMesh;
+        private bool isOrthographic;
+        private bool usesLocalSpace;
+        private GizmoMode mode;
         private bool snapsToGrid;
         private float snapStep = SnapGrid.DefaultStep;
         private bool hadSelectedItem;
+        private bool isEditingMesh;
+        private MeshPart meshPart = MeshPart.Vertices;
+        private long meshRevision;
+        private bool slidesMesh;
+        private int cutEdge = -1;
+        private DoubleClick clicks;
         private bool isDisposed;
 
         private bool renderRequested = true;
@@ -97,6 +113,210 @@ namespace YMM43D.PreviewTool.ViewModels
             set => Set(ref showsGrid, value, nameof(ShowsGrid));
         }
 
+        public bool ShowsMesh
+        {
+            get => showsMesh;
+            set => Set(ref showsMesh, value, nameof(ShowsMesh));
+        }
+
+        public bool IsOrthographic
+        {
+            get => isOrthographic;
+            set => Set(ref isOrthographic, value, nameof(IsOrthographic));
+        }
+
+        public bool UsesLocalSpace
+        {
+            get => usesLocalSpace;
+            set => Set(ref usesLocalSpace, value, nameof(UsesLocalSpace));
+        }
+
+        public PreviewKeyText Keys { get; } = new();
+
+        public GizmoMode Mode
+        {
+            get => mode;
+            set
+            {
+                if (!Set(ref mode, value, nameof(Mode)))
+                    return;
+
+                cutEdge = -1;
+
+                OnPropertyChanged(nameof(IsSelectingMode));
+                OnPropertyChanged(nameof(IsCuttingLoops));
+                OnPropertyChanged(nameof(IsInflating));
+                OnPropertyChanged(nameof(IsMovingMode));
+                OnPropertyChanged(nameof(IsRotatingMode));
+                OnPropertyChanged(nameof(IsScalingMode));
+            }
+        }
+
+        public bool IsSelectingMode
+        {
+            get => Mode is GizmoMode.Select;
+            set => Choose(value, GizmoMode.Select);
+        }
+
+        public bool IsCuttingLoops
+        {
+            get => Mode is GizmoMode.LoopCut;
+            set => Choose(value, GizmoMode.LoopCut);
+        }
+
+        public bool IsInflating
+        {
+            get => Mode is GizmoMode.Inflate;
+            set => Choose(value, GizmoMode.Inflate);
+        }
+
+        public bool IsMovingMode
+        {
+            get => Mode is GizmoMode.Move;
+            set => Choose(value, GizmoMode.Move);
+        }
+
+        public bool IsRotatingMode
+        {
+            get => Mode is GizmoMode.Rotate;
+            set => Choose(value, GizmoMode.Rotate);
+        }
+
+        public bool IsScalingMode
+        {
+            get => Mode is GizmoMode.Scale;
+            set => Choose(value, GizmoMode.Scale);
+        }
+
+        private void Choose(bool chosen, GizmoMode wanted)
+        {
+            if (chosen)
+                Mode = wanted;
+        }
+
+        public bool IsEditingMesh
+        {
+            get => isEditingMesh;
+            set => SetEditMode(value);
+        }
+
+        public bool CanEditMesh => EditableShape() is not null;
+
+        public bool SlidesMesh
+        {
+            get => slidesMesh;
+            set
+            {
+                if (slidesMesh == value)
+                    return;
+
+                slidesMesh = value && isEditingMesh;
+                meshSlide.End();
+
+                OnPropertyChanged(nameof(SlidesMesh));
+                TouchHint();
+                RequestRender();
+            }
+        }
+
+        public string EditHint
+        {
+            get
+            {
+                if (!isEditingMesh)
+                    return string.Empty;
+
+                var part = meshPart switch
+                {
+                    MeshPart.Edges => "辺",
+                    MeshPart.Faces => "面",
+                    _ => "頂点",
+                };
+
+                var slide = slidesMesh ? "／スライド中（ドラッグで滑らせる）" : string.Empty;
+
+                return $"編集モード：{part}を選ぶ　{meshSelection.Count} 点{slide}";
+            }
+        }
+
+        public bool HasEditHint => EditHint.Length > 0;
+
+        private void TouchHint()
+        {
+            OnPropertyChanged(nameof(EditHint));
+            OnPropertyChanged(nameof(HasEditHint));
+        }
+
+        public bool EditsVertices
+        {
+            get => meshPart is MeshPart.Vertices;
+            set => ChoosePart(value, MeshPart.Vertices);
+        }
+
+        public bool EditsEdges
+        {
+            get => meshPart is MeshPart.Edges;
+            set => ChoosePart(value, MeshPart.Edges);
+        }
+
+        public bool EditsFaces
+        {
+            get => meshPart is MeshPart.Faces;
+            set => ChoosePart(value, MeshPart.Faces);
+        }
+
+        private void ChoosePart(bool chosen, MeshPart wanted)
+        {
+            if (!chosen || meshPart == wanted)
+                return;
+
+            meshPart = wanted;
+            meshRevision++;
+            TouchHint();
+
+            OnPropertyChanged(nameof(EditsVertices));
+            OnPropertyChanged(nameof(EditsEdges));
+            OnPropertyChanged(nameof(EditsFaces));
+
+            RequestRender();
+        }
+
+        private Shape3DParameter? EditableShape()
+            => selection.Count == 1
+                && selection[0] is ShapeItem { ShapeParameter: Shape3DParameter found }
+                && !found.IsCustom
+                ? found
+                : null;
+
+        private void SetEditMode(bool wanted)
+        {
+            if (wanted && EditableShape() is null)
+                wanted = false;
+
+            if (isEditingMesh == wanted)
+                return;
+
+            isEditingMesh = wanted;
+            meshSelection.Clear();
+            meshRevision++;
+            meshDrag.End();
+            meshSlide.End();
+            cutEdge = -1;
+
+            if (!wanted)
+            {
+                slidesMesh = false;
+
+                if (mode is GizmoMode.LoopCut or GizmoMode.Inflate)
+                    Mode = GizmoMode.Move;
+            }
+
+            OnPropertyChanged(nameof(IsEditingMesh));
+            OnPropertyChanged(nameof(SlidesMesh));
+            TouchHint();
+            RequestRender();
+        }
+
         public bool SnapsToGrid
         {
             get => snapsToGrid;
@@ -131,6 +351,31 @@ namespace YMM43D.PreviewTool.ViewModels
             OnPropertyChanged(nameof(SnapsEvery100));
         }
 
+        public string SelectedBoneName => SelectedBone() is { } bone
+            ? bone.HasParent ? $"ボーン {bone.Name}（親 {bone.ParentName}）" : $"ボーン {bone.Name}"
+            : string.Empty;
+
+        public bool HasSelectedBone => SelectedBoneName.Length > 0;
+
+        private void SetSelectedBone(int index)
+        {
+            if (selectedBone == index)
+                return;
+
+            var left = SelectedBone();
+
+            selectedBone = index;
+
+            if (left is { } gone)
+                gone.Parameter.DropBoneIfUntouched(gone.Name);
+
+            if (SelectedBone() is { } chosen && !chosen.Item.IsLocked)
+                chosen.Parameter.BoneFor(chosen.Name);
+
+            OnPropertyChanged(nameof(SelectedBoneName));
+            OnPropertyChanged(nameof(HasSelectedBone));
+        }
+
         public UpdateChecker Update => UpdateChecker.Instance;
 
         public bool CanAddItem => timeline is not null;
@@ -148,6 +393,17 @@ namespace YMM43D.PreviewTool.ViewModels
         public ICommand SelectAllCommand { get; }
         public ICommand ClearSelectionCommand { get; }
         public ActionCommand AddKeyFrameCommand { get; }
+        public ICommand CutLoopCommand { get; }
+        public ICommand ResetMeshCommand { get; }
+        public ICommand ExtrudeCommand { get; }
+        public ICommand DeleteMeshCommand { get; }
+        public ICommand MakeFaceCommand { get; }
+        public ICommand MergeMeshCommand { get; }
+        public ICommand SubdivideCommand { get; }
+        public ICommand SelectLinkedCommand { get; }
+        public ICommand InvertSelectionCommand { get; }
+        public ICommand GrowSelectionCommand { get; }
+        public ICommand ShrinkSelectionCommand { get; }
 
         public Preview3DViewModel()
         {
@@ -160,6 +416,17 @@ namespace YMM43D.PreviewTool.ViewModels
             AddCameraCommand = new ActionCommand(_ => CanAddItem, _ => AddItem(() => new CameraItem()));
             AddLightCommand = new ActionCommand(_ => CanAddItem, _ => AddItem(() => new LightItem()));
             AddEnvironmentCommand = new ActionCommand(_ => CanAddItem, _ => AddItem(() => new EnvironmentItem()));
+            CutLoopCommand = new ActionCommand(_ => true, _ => CutLoop());
+            ExtrudeCommand = new ActionCommand(_ => true, _ => Extrude());
+            DeleteMeshCommand = new ActionCommand(_ => true, _ => DeleteMesh());
+            MakeFaceCommand = new ActionCommand(_ => true, _ => MakeFace());
+            MergeMeshCommand = new ActionCommand(_ => true, _ => MergeMesh());
+            SubdivideCommand = new ActionCommand(_ => true, _ => Subdivide());
+            SelectLinkedCommand = new ActionCommand(_ => true, _ => Reselect(mesh => mesh.LinkedTo(meshSelection)));
+            InvertSelectionCommand = new ActionCommand(_ => true, _ => Reselect(Inverted));
+            GrowSelectionCommand = new ActionCommand(_ => true, _ => Reselect(mesh => mesh.Grown(meshSelection)));
+            ShrinkSelectionCommand = new ActionCommand(_ => true, _ => Reselect(mesh => mesh.Shrunk(meshSelection)));
+            ResetMeshCommand = new ActionCommand(_ => true, _ => ResetMesh());
             FocusSelectedCommand = new ActionCommand(_ => true, _ => FocusSelected());
             ViewAllCommand = new ActionCommand(_ => true, _ => ViewAll());
             LevelRollCommand = new ActionCommand(_ => true, _ => LevelRoll());
@@ -296,6 +563,9 @@ namespace YMM43D.PreviewTool.ViewModels
 
             freeCamera.EnsureInitialized(basis);
 
+            if (active is { } aimed && aimed.Source.GetPivot(aimed.ItemTime) is { } pivot)
+                freeCamera.AimAt(pivot, basis);
+
             var move = make(basis);
             if (move.IsZero)
                 return;
@@ -316,9 +586,14 @@ namespace YMM43D.PreviewTool.ViewModels
         }
 
         private EditScope GetEditScope(IItem item)
-            => insertsKeyFrame && timeline is not null
-                ? EditScope.AtFrame(timeline.CurrentFrame - item.Frame)
-                : EditScope.Whole;
+        {
+            if (timeline is null)
+                return EditScope.Whole;
+
+            var time = FrameContext.ForItem(item, timeline.CurrentFrame, Math.Max(1, timeline.VideoInfo.FPS));
+
+            return insertsKeyFrame ? EditScope.AtFrame(time.Frame) : EditScope.InSegment(time);
+        }
 
         private void EnsureSceneCamera()
         {
@@ -454,8 +729,22 @@ namespace YMM43D.PreviewTool.ViewModels
                 Selection = selection,
                 Markers = SceneMarkerResolver.Resolve(timeline),
                 SelectedMarker = selectedMarker,
+                SelectedBone = selectedBone,
                 ShowsGrid = showsGrid,
-                ActiveHandle = itemDrag.Handle,
+                ShowsMesh = showsMesh,
+                IsOrthographic = isOrthographic,
+                ViewDistance = freeCamera.PivotDistance,
+                Space = usesLocalSpace ? GizmoSpace.Local : GizmoSpace.World,
+                IsEditingMesh = isEditingMesh,
+                MeshPart = meshPart,
+                MeshSelection = meshSelection,
+                MeshRevision = meshRevision,
+                CutEdge = isEditingMesh && mode is GizmoMode.LoopCut ? cutEdge : -1,
+                ShowsInflateHandle = isEditingMesh && mode is GizmoMode.Inflate,
+                Mode = mode,
+                ActiveHandle = meshDrag.IsDragging
+                    ? meshDrag.Handle
+                    : boneDrag.IsDragging ? boneDrag.Handle : itemDrag.Handle,
             };
         }
 
@@ -502,6 +791,9 @@ namespace YMM43D.PreviewTool.ViewModels
                 case D3D11Host.MouseEventKind.Down:
                     var modifiers = Keyboard.Modifiers;
 
+                    if (isEditingMesh && renderer.MeshEdit is { } edit)
+                        return GrabMesh(edit, ToVector(position), modifiers);
+
                     if ((modifiers & ModifierKeys.Control) != 0)
                     {
                         toggleClickAt = position;
@@ -513,6 +805,56 @@ namespace YMM43D.PreviewTool.ViewModels
 
                     return TryGrab(position);
 
+                case D3D11Host.MouseEventKind.Move when meshSlide.IsDragging:
+                    if (renderer.CreateRay(ToVector(position)) is { } slideRay && meshSlide.Update(slideRay))
+                    {
+                        meshRevision++;
+                        refresher?.ForceRefresh(timeline!);
+                    }
+
+                    return true;
+
+                case D3D11Host.MouseEventKind.Up when meshSlide.IsDragging:
+                    meshSlide.End();
+                    return true;
+
+                case D3D11Host.MouseEventKind.Move when meshDrag.IsDragging:
+                    if (renderer.CreateRay(ToVector(position)) is { } meshRay
+                        && meshDrag.Update(meshRay, CurrentSnap()))
+                    {
+                        meshRevision++;
+                        refresher?.ForceRefresh(timeline!);
+                    }
+
+                    return true;
+
+                case D3D11Host.MouseEventKind.Up when meshDrag.IsDragging:
+                    meshDrag.End();
+                    return true;
+
+                case D3D11Host.MouseEventKind.Move when outlineDrag.IsDragging:
+                    if (renderer.CreateRay(ToVector(position)) is { } outlineRay
+                        && outlineDrag.Update(outlineRay, CurrentSnap()))
+                    {
+                        refresher?.ForceRefresh(timeline!);
+                    }
+
+                    return true;
+
+                case D3D11Host.MouseEventKind.Up when outlineDrag.IsDragging:
+                    outlineDrag.End();
+                    return true;
+
+                case D3D11Host.MouseEventKind.Move when boneDrag.IsDragging:
+                    if (renderer.CreateRay(ToVector(position)) is { } boneRay && boneDrag.Update(boneRay, CurrentSnap()))
+                        refresher?.ForceRefresh(timeline!);
+
+                    return true;
+
+                case D3D11Host.MouseEventKind.Up when boneDrag.IsDragging:
+                    boneDrag.End();
+                    return true;
+
                 case D3D11Host.MouseEventKind.Move when itemDrag.IsDragging:
                     if (renderer.CreateRay(ToVector(position)) is { } ray && itemDrag.Update(ray, CurrentSnap()))
                         refresher?.ForceRefresh(timeline!);
@@ -522,6 +864,10 @@ namespace YMM43D.PreviewTool.ViewModels
                 case D3D11Host.MouseEventKind.Up when itemDrag.IsDragging:
                     itemDrag.End();
                     return true;
+
+                case D3D11Host.MouseEventKind.Move when isEditingMesh && mode is GizmoMode.LoopCut:
+                    HoverCut(ToVector(position));
+                    return false;
 
                 default:
                     return false;
@@ -577,15 +923,46 @@ namespace YMM43D.PreviewTool.ViewModels
                 && renderer.Gizmo is { } gizmo
                 && renderer.CreateRay(screen) is { } gizmoRay)
             {
+                if (SelectedBone() is { } bone && !bone.Item.IsLocked)
+                    return boneDrag.Begin(bone, gizmo, grabbed, gizmoRay, GetEditScope(bone.Item));
+
                 if (renderer.GizmoMarker is { } held && CanGrab(held))
                 {
                     return itemDrag.BeginMarker(
-                        held.Source, held.ItemTime, gizmo.Origin, grabbed, gizmoRay,
+                        held.Source, held.ItemTime, gizmo, grabbed, gizmoRay,
                         freeCamera.State.Forward, GetEditScope(held.Item));
                 }
 
                 if (MovableSelection() is { Count: > 0 } movable)
-                    return BeginItems(movable, movable[0], gizmo.Origin, grabbed, gizmoRay);
+                {
+                    if (movable.Count == 1
+                        && TransformGizmo.IsScale(grabbed)
+                        && renderer.ResolveMeshShape() is { } stretched
+                        && ReferenceEquals(stretched.Item, movable[0])
+                        && meshDrag.BeginWhole(
+                               stretched, gizmo, grabbed, gizmoRay, freeCamera.State.Forward))
+                    {
+                        return true;
+                    }
+
+                    return BeginItems(movable, movable[0], gizmo, grabbed, gizmoRay);
+                }
+            }
+
+            if (renderer.Outline is { } outline
+                && !outline.Item.IsLocked
+                && renderer.PickOutlinePoint(screen) is var pickedPoint and >= 0
+                && renderer.CreateRay(screen) is { } pointRay)
+            {
+                return outlineDrag.Begin(outline, pickedPoint, pointRay, GetEditScope(outline.Item));
+            }
+
+            if (renderer.PickBone(screen) is var pickedBone and >= 0)
+            {
+                SetSelectedBone(pickedBone);
+                RequestRender();
+
+                return true;
             }
 
             if (renderer.PickMarker(screen) is { } placed
@@ -595,8 +972,13 @@ namespace YMM43D.PreviewTool.ViewModels
                 Select([placed.Item]);
 
                 return itemDrag.BeginMarker(
-                    placed.Source, placed.ItemTime, placed.Marker.Position, GizmoHandle.Free, markerRay,
-                    freeCamera.State.Forward, GetEditScope(placed.Item));
+                    placed.Source,
+                    placed.ItemTime,
+                    TransformGizmo.Create(placed.Marker.Position, freeCamera.State.Position),
+                    GizmoHandle.Free,
+                    markerRay,
+                    freeCamera.State.Forward,
+                    GetEditScope(placed.Item));
             }
 
             renderer.RequestPick(screen);
@@ -608,18 +990,234 @@ namespace YMM43D.PreviewTool.ViewModels
                 return false;
             }
 
+            SetSelectedBone(-1);
+
             if (!selection.Contains(picked.Item))
                 Select([picked.Item]);
 
             return MovableSelection() is { Count: > 0 } targets
-                && BeginItems(targets, picked.Item, picked.Origin, GizmoHandle.Free, ray);
+                && BeginItems(
+                    targets,
+                    picked.Item,
+                    TransformGizmo.Create(picked.Origin, freeCamera.State.Position),
+                    GizmoHandle.Free,
+                    ray);
         }
+
+        private void HoverCut(Vector2 screen)
+        {
+            var edge = renderer.MeshEdit is null ? -1 : renderer.PickMeshEdge(screen);
+
+            if (edge == cutEdge)
+                return;
+
+            cutEdge = edge;
+            RequestRender();
+        }
+
+        private bool GrabMesh(in MeshEditTarget edit, Vector2 screen, ModifierKeys modifiers)
+        {
+            var twice = clicks.Twice(Environment.TickCount64, screen);
+
+            if (mode is GizmoMode.Inflate
+                && renderer.InflateHandle is { } grip
+                && renderer.PickInflate(screen)
+                && renderer.CreateRay(screen) is { } swell
+                && meshDrag.BeginInflate(edit, meshSelection, grip, swell))
+            {
+                return true;
+            }
+
+            if (mode is GizmoMode.LoopCut)
+            {
+                var wanted = renderer.PickMeshEdge(screen);
+
+                if (wanted < 0)
+                    return false;
+
+                CutLoopAt(wanted);
+
+                return true;
+            }
+
+            if ((modifiers & ModifierKeys.Alt) != 0 || twice)
+            {
+                var loop = renderer.PickMeshEdge(screen);
+
+                if (loop < 0)
+                    return false;
+
+                ChooseMesh(edit.LoopOf(loop), (modifiers & ModifierKeys.Shift) != 0);
+
+                return true;
+            }
+
+            if (slidesMesh
+                && meshSelection.Count > 0
+                && (modifiers & (ModifierKeys.Alt | ModifierKeys.Control)) == 0
+                && renderer.CreateRay(screen) is { } sliding
+                && meshSlide.Begin(edit, meshSelection, sliding, freeCamera.State.Forward))
+            {
+                return true;
+            }
+
+            if (meshSelection.Count > 0
+                && renderer.PickGizmo(screen) is var grabbed and not GizmoHandle.None
+                && renderer.Gizmo is { } gizmo
+                && renderer.CreateRay(screen) is { } ray
+                && meshDrag.Begin(edit, meshSelection, gizmo, grabbed, ray, freeCamera.State.Forward))
+            {
+                return true;
+            }
+
+            var extend = (modifiers & ModifierKeys.Shift) != 0;
+
+            if ((modifiers & ModifierKeys.Control) != 0)
+                return false;
+
+            var picked = meshPart switch
+            {
+                MeshPart.Edges => renderer.PickMeshEdge(screen),
+                MeshPart.Faces => renderer.PickMeshFace(screen),
+                _ => renderer.PickMeshVertex(screen),
+            };
+
+            if (picked < 0)
+                return false;
+
+            ChooseMesh(edit.VerticesOf(meshPart, picked), extend);
+
+            return true;
+        }
+
+        private void ChooseMesh(IEnumerable<int> vertices, bool extend)
+        {
+            MeshChoice.Apply(meshSelection, vertices as IReadOnlyCollection<int> ?? [.. vertices], extend);
+
+            meshRevision++;
+            TouchHint();
+            RequestRender();
+        }
+
+        private void Reselect(Func<Graphics.Meshes.MeshTopology, IEnumerable<int>> work)
+        {
+            if (!isEditingMesh || renderer.MeshEdit is not { } edit)
+                return;
+
+            ChooseMesh(work(edit.Mesh), false);
+        }
+
+        private IEnumerable<int> Inverted(Graphics.Meshes.MeshTopology mesh)
+            => Enumerable.Range(0, mesh.Points.Length).Where(one => !meshSelection.Contains(one));
+
+        private void Change(
+            Func<Graphics.Meshes.MeshTopology, (Graphics.Meshes.MeshTopology Mesh, int[] Chosen)?> work)
+        {
+            if (!isEditingMesh || renderer.MeshEdit is not { } edit || edit.Item.IsLocked)
+                return;
+
+            if (work(edit.Parameter.EnsureMesh()) is not { } made)
+                return;
+
+            SeparateHistory();
+
+            edit.Parameter.StoreMesh(made.Mesh);
+            meshSelection.Clear();
+
+            foreach (var one in made.Chosen)
+                meshSelection.Add(one);
+
+            meshRevision++;
+
+            if (timeline is not null)
+                refresher?.ForceRefresh(timeline);
+
+            TouchHint();
+            RequestRender();
+            SeparateHistory();
+        }
+
+        private void Extrude()
+            => Change(mesh => mesh.Extrude(meshSelection) is { } made ? (made.Mesh, made.Added) : null);
+
+        private void DeleteMesh()
+            => Change(mesh => mesh.Delete(meshSelection) is { } made ? (made, []) : null);
+
+        private void MakeFace()
+            => Change(mesh => mesh.MakeFace(meshSelection) is { } made ? (made, [.. meshSelection]) : null);
+
+        private void MergeMesh()
+            => Change(mesh => mesh.Merge(meshSelection) is { } made ? (made.Mesh, made.Added) : null);
+
+        private void Subdivide() => Change(mesh => (mesh.Subdivide(), []));
+
+        private void CutLoop()
+        {
+            if (!isEditingMesh || renderer.MeshEdit is not { } edit || edit.Item.IsLocked)
+                return;
+
+            for (var i = 0; i < edit.Mesh.Edges.Length; i++)
+            {
+                if (!edit.IsEdgeChosen(i, meshSelection))
+                    continue;
+
+                CutLoopAt(i);
+
+                return;
+            }
+        }
+
+        private void CutLoopAt(int edge)
+        {
+            cutEdge = -1;
+
+            Change(mesh => mesh.CutLoop(edge) is { } made ? (made.Mesh, made.Added) : null);
+        }
+
+        private void ResetMesh()
+        {
+            if (EditableShape() is not { } shape)
+                return;
+
+            SeparateHistory();
+
+            shape.DropMesh();
+            meshSelection.Clear();
+            meshRevision++;
+
+            if (timeline is not null)
+                refresher?.ForceRefresh(timeline);
+
+            RequestRender();
+            SeparateHistory();
+        }
+
+        private void SelectAllMesh()
+        {
+            if (renderer.MeshEdit is not { } edit)
+                return;
+
+            meshSelection.Clear();
+
+            for (var i = 0; i < edit.Mesh.Points.Length; i++)
+                meshSelection.Add(i);
+
+            meshRevision++;
+            RequestRender();
+        }
+
+        private PreviewBone? SelectedBone()
+            => selectedBone >= 0 && selectedBone < renderer.Bones.Count ? renderer.Bones[selectedBone] : null;
 
         private IReadOnlyList<IVideoItem> MovableSelection()
             => [.. selection.Where(item => !item.IsLocked)];
 
         private bool BeginItems(
-            IReadOnlyList<IVideoItem> items, IVideoItem primary, Vector3 origin, GizmoHandle grabbed, PickRay ray)
+            IReadOnlyList<IVideoItem> items,
+            IVideoItem primary,
+            in TransformGizmo gizmo,
+            GizmoHandle grabbed,
+            PickRay ray)
         {
             if (timeline is null)
                 return false;
@@ -627,13 +1225,15 @@ namespace YMM43D.PreviewTool.ViewModels
             var fps = Math.Max(1, timeline.VideoInfo.FPS);
 
             return itemDrag.Begin(
-                [.. items.Select(item => new DragTarget(item, GetEditScope(item)))],
+                [.. items.Select(item => new DragTarget(
+                    item, GetEditScope(item), FrameContext.ForItem(item, timeline.CurrentFrame, fps)))],
                 primary,
                 FrameContext.ForItem(primary, timeline.CurrentFrame, fps),
-                origin,
+                gizmo,
                 grabbed,
                 ray,
-                freeCamera.State.Forward);
+                freeCamera.State.Forward,
+                usesLocalSpace ? GizmoSpace.Local : GizmoSpace.World);
         }
 
         private SnapGrid CurrentSnap()
@@ -648,16 +1248,38 @@ namespace YMM43D.PreviewTool.ViewModels
             if (timeline is null)
                 return;
 
+            SetSelectedBone(-1);
+
             timeline.SelectedItems = [.. items];
             SyncSelectionState();
         }
 
-        public void SelectAll() => Select(renderer.VisibleItems);
+        public void SelectAll()
+        {
+            if (isEditingMesh)
+            {
+                SelectAllMesh();
+
+                return;
+            }
+
+            Select(renderer.VisibleItems);
+        }
 
         public void ClearSelection()
         {
+            if (isEditingMesh)
+            {
+                meshSelection.Clear();
+                meshRevision++;
+                RequestRender();
+
+                return;
+            }
+
             selection = [];
             selectedMarker = null;
+            SetSelectedBone(-1);
 
             if (timeline?.SelectedItems is { Count: > 0 })
                 timeline.SelectedItems = [];
@@ -669,65 +1291,182 @@ namespace YMM43D.PreviewTool.ViewModels
         {
             RequestRender();
 
-            var control = (modifiers & ModifierKeys.Control) != 0;
-            var shift = (modifiers & ModifierKeys.Shift) != 0;
+            return PreviewShortcuts.Find(key, modifiers, isEditingMesh) is { } action
+                ? Run(action)
+                : TryHostKey(key, modifiers);
+        }
 
-            switch (key)
+        private bool Run(PreviewAction action)
+        {
+            switch (action)
             {
-                case Key.R when control:
+                case PreviewAction.ViewFront:
+                    ViewFrom(ViewDirection.Front);
+                    return true;
+
+                case PreviewAction.ViewBack:
+                    ViewFrom(ViewDirection.Back);
+                    return true;
+
+                case PreviewAction.ViewRight:
+                    ViewFrom(ViewDirection.Right);
+                    return true;
+
+                case PreviewAction.ViewLeft:
+                    ViewFrom(ViewDirection.Left);
+                    return true;
+
+                case PreviewAction.ViewTop:
+                    ViewFrom(ViewDirection.Top);
+                    return true;
+
+                case PreviewAction.ViewBottom:
+                    ViewFrom(ViewDirection.Bottom);
+                    return true;
+
+                case PreviewAction.ToggleOrthographic:
+                    IsOrthographic = !IsOrthographic;
+                    return true;
+
+                case PreviewAction.ViewCamera:
                     ResetToSceneCamera();
                     return true;
 
-                case Key.R when shift:
-                    LevelRoll();
-                    return true;
-
-                case Key.F when modifiers == ModifierKeys.None:
-                    FocusSelected();
-                    return true;
-
-                case Key.Home when modifiers == ModifierKeys.None:
-                    ViewAll();
-                    return true;
-
-                case Key.K when modifiers == ModifierKeys.None:
-                    InsertsKeyFrame = !InsertsKeyFrame;
-                    return true;
-
-                case Key.G when modifiers == ModifierKeys.None:
-                    ShowsGrid = !ShowsGrid;
-                    return true;
-
-                case Key.S when modifiers == ModifierKeys.None:
-                    SnapsToGrid = !SnapsToGrid;
-                    return true;
-
-                case Key.A when modifiers == ModifierKeys.Control:
-                    SelectAll();
-                    return true;
-
-                case Key.Escape when modifiers == ModifierKeys.None:
-                    ClearSelection();
-                    return true;
-
-                case Key.NumPad0 or Key.D0:
+                case PreviewAction.DriveSceneCamera:
                     DrivesSceneCamera = !DrivesSceneCamera;
                     return true;
 
-                case Key.NumPad1 or Key.D1:
-                    ViewFrom(control ? ViewDirection.Back : ViewDirection.Front);
+                case PreviewAction.FocusSelected:
+                    FocusSelected();
                     return true;
 
-                case Key.NumPad3 or Key.D3:
-                    ViewFrom(control ? ViewDirection.Left : ViewDirection.Right);
+                case PreviewAction.ViewAll:
+                    ViewAll();
                     return true;
 
-                case Key.NumPad7 or Key.D7:
-                    ViewFrom(control ? ViewDirection.Bottom : ViewDirection.Top);
+                case PreviewAction.LevelRoll:
+                    LevelRoll();
+                    return true;
+
+                case PreviewAction.SelectAll:
+                    SelectAll();
+                    return true;
+
+                case PreviewAction.ClearSelection:
+                    ClearSelection();
+                    return true;
+
+                case PreviewAction.ToggleWireframe:
+                    ShowsMesh = !ShowsMesh;
+                    return true;
+
+                case PreviewAction.ToggleGrid:
+                    ShowsGrid = !ShowsGrid;
+                    return true;
+
+                case PreviewAction.ToggleSnap:
+                    SnapsToGrid = !SnapsToGrid;
+                    return true;
+
+                case PreviewAction.ToggleLocalSpace:
+                    UsesLocalSpace = !UsesLocalSpace;
+                    return true;
+
+                case PreviewAction.ModeSelect:
+                    Mode = GizmoMode.Select;
+                    return true;
+
+                case PreviewAction.ModeLoopCut:
+                    Mode = GizmoMode.LoopCut;
+                    return true;
+
+                case PreviewAction.ModeInflate:
+                    Mode = GizmoMode.Inflate;
+                    return true;
+
+                case PreviewAction.ModeMove:
+                    Mode = GizmoMode.Move;
+                    return true;
+
+                case PreviewAction.ModeRotate:
+                    Mode = GizmoMode.Rotate;
+                    return true;
+
+                case PreviewAction.ModeScale:
+                    Mode = GizmoMode.Scale;
+                    return true;
+
+                case PreviewAction.ToggleEditMode:
+                    IsEditingMesh = !IsEditingMesh;
+                    return true;
+
+                case PreviewAction.EditVertices:
+                    EditsVertices = true;
+                    return true;
+
+                case PreviewAction.EditEdges:
+                    EditsEdges = true;
+                    return true;
+
+                case PreviewAction.EditFaces:
+                    EditsFaces = true;
+                    return true;
+
+                case PreviewAction.CutLoop:
+                    CutLoop();
+                    return true;
+
+                case PreviewAction.Extrude:
+                    Extrude();
+                    return true;
+
+                case PreviewAction.DeleteMesh:
+                    DeleteMesh();
+                    return true;
+
+                case PreviewAction.MakeFace:
+                    MakeFace();
+                    return true;
+
+                case PreviewAction.MergeMesh:
+                    MergeMesh();
+                    return true;
+
+                case PreviewAction.Subdivide:
+                    Subdivide();
+                    return true;
+
+                case PreviewAction.ToggleSlide:
+                    SlidesMesh = !SlidesMesh;
+                    return true;
+
+                case PreviewAction.SelectLinked:
+                    Reselect(mesh => mesh.LinkedTo(meshSelection));
+                    return true;
+
+                case PreviewAction.InvertSelection:
+                    Reselect(Inverted);
+                    return true;
+
+                case PreviewAction.GrowSelection:
+                    Reselect(mesh => mesh.Grown(meshSelection));
+                    return true;
+
+                case PreviewAction.ShrinkSelection:
+                    Reselect(mesh => mesh.Shrunk(meshSelection));
+                    return true;
+
+                case PreviewAction.ResetMesh:
+                    ResetMesh();
+                    return true;
+
+                case PreviewAction.AddKeyFrame:
+                    AddKeyFrameCommand.Execute(null);
                     return true;
 
                 default:
-                    return TryHostKey(key, modifiers);
+                    InsertsKeyFrame = !InsertsKeyFrame;
+                    return true;
             }
         }
 
@@ -757,6 +1496,11 @@ namespace YMM43D.PreviewTool.ViewModels
         {
             selectedMarker = timeline?.SelectedItems?.FirstOrDefault(item => item is ISceneMarkerSource);
             selection = timeline?.SelectedItems is { } items ? [.. items.OfType<IVideoItem>()] : [];
+
+            if (isEditingMesh && EditableShape() is null)
+                SetEditMode(false);
+
+            OnPropertyChanged(nameof(CanEditMesh));
 
             var has = HasSelectedItem;
 

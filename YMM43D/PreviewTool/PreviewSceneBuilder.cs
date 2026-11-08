@@ -102,8 +102,6 @@ namespace YMM43D.PreviewTool
                 return groupSolids.Select(provider => new Placed(provider, flat));
             }
 
-            // 板として描くアイテムには、YMM4 と同じくアイテムのエフェクトの後にグループ制御のエフェクトを掛ける。
-            // ここに来るのは、グループ制御が位置を変えず、3D エフェクトも付いていないときだけ。
             ImmutableList<IVideoEffect> flatWithGroups = [.. Flattened(effects), .. flattening.EffectsFor(item)];
 
             if (!SceneDepthCollector.HasSolidEffect(item))

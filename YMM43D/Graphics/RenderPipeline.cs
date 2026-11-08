@@ -82,12 +82,8 @@ namespace YMM43D.Graphics
 
             context.OMSetDepthStencilState(DepthStateFor(settings));
 
-            context.RSSetState(settings.Culling switch
-            {
-                FaceCulling.Back => states.CullBack,
-                FaceCulling.Front => states.CullFront,
-                _ => states.CullNone,
-            });
+            context.RSSetState(
+                settings.LiftsLines ? states.LiftedLines : states.Rasterizer(settings.Culling));
 
             context.VSSetShader(Material.VertexShader);
             context.PSSetShader(Material.PixelShader);
@@ -103,6 +99,14 @@ namespace YMM43D.Graphics
                 context.PSSetShaderResource(0, settings.Texture);
                 context.PSSetSampler(0, settings.Sampler ?? states.LinearSampler);
             }
+
+            BindSurface(context, settings);
+
+            if (settings.Bones is not null)
+                context.VSSetShaderResource(Models.ModelBoneBuffer.Slot, settings.Bones);
+
+            if (settings.Morphs is not null)
+                context.VSSetShaderResource(Models.ModelMorphBuffer.Slot, settings.Morphs);
 
             if (mesh.IndexBuffer is not null)
             {
@@ -128,10 +132,52 @@ namespace YMM43D.Graphics
             return settings.SkipDepthWrite ? states.DepthTestOnly : states.DepthDefault;
         }
 
+        private const int BumpSlot = 5;
+        private const int GlowSlot = 6;
+        private const int FeelSlot = 7;
+        private const int ShadeSlot = 8;
+        private const int MirrorSlot = 9;
+
+        private static void BindSurface(ID3D11DeviceContext context, in DrawSettings settings)
+        {
+            if (settings.Bump is not null)
+                context.PSSetShaderResource(BumpSlot, settings.Bump);
+
+            if (settings.Glow is not null)
+                context.PSSetShaderResource(GlowSlot, settings.Glow);
+
+            if (settings.Feel is not null)
+                context.PSSetShaderResource(FeelSlot, settings.Feel);
+
+            if (settings.Shade is not null)
+                context.PSSetShaderResource(ShadeSlot, settings.Shade);
+
+            if (settings.Mirror is not null)
+                context.PSSetShaderResource(MirrorSlot, settings.Mirror);
+        }
+
         private static void ResetState(ID3D11DeviceContext context, in DrawSettings settings)
         {
             if (settings.Texture is not null)
                 context.PSSetShaderResource(0, null!);
+
+            if (settings.Bump is not null)
+                context.PSSetShaderResource(BumpSlot, null!);
+
+            if (settings.Glow is not null)
+                context.PSSetShaderResource(GlowSlot, null!);
+
+            if (settings.Feel is not null)
+                context.PSSetShaderResource(FeelSlot, null!);
+
+            if (settings.Shade is not null)
+                context.PSSetShaderResource(ShadeSlot, null!);
+
+            if (settings.Mirror is not null)
+                context.PSSetShaderResource(MirrorSlot, null!);
+
+            if (settings.Bones is not null)
+                context.VSSetShaderResource(Models.ModelBoneBuffer.Slot, null!);
 
             context.OMSetBlendState(null);
             context.OMSetDepthStencilState(null);

@@ -21,16 +21,23 @@ struct PS_IN
     float3 World : TEXCOORD1;
 };
 
-PS_IN VSMain(VS_IN input)
+PS_IN MakeVertex(float3 position, float4 color, float2 texCoord, float3 normal)
 {
     PS_IN output;
-    output.Pos = mul(float4(input.Pos, 1.0), WorldViewProjection);
-    output.Col = input.Col;
-    output.Tex = input.Tex;
-    output.Nrm = mul(float4(input.Nrm, 0.0), WorldInverse).xyz;
-    output.World = mul(float4(input.Pos, 1.0), World).xyz;
+    output.Pos = mul(float4(position, 1.0), WorldViewProjection);
+    output.Col = color;
+    output.Tex = texCoord;
+    output.Nrm = mul(float4(normal, 0.0), WorldInverse).xyz;
+    output.World = mul(float4(position, 1.0), World).xyz;
     return output;
 }
+
+#ifndef YMM43D_CUSTOM_VERTEX_SHADER
+PS_IN VSMain(VS_IN input)
+{
+    return MakeVertex(input.Pos, input.Col, input.Tex, input.Nrm);
+}
+#endif
 
 float4 Shade(float4 color, PS_IN input)
 {

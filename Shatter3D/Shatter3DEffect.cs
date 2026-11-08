@@ -102,10 +102,21 @@ namespace Shatter3D
         public double RandomVector { get => randomVector; set => Set(ref randomVector, value); }
         private double randomVector = 100;
 
-        [Display(GroupName = DetailGroup, Name = "陰影をつけない",
-            Description = "光源を無視して、元の色のまま塗ります", Order = 700)]
+        [Display(GroupName = DetailGroup, Name = "陰影", Description = "光源にしたがって陰影をつけます。切ると、元の色のまま塗ります", Order = 700)]
         [ToggleSlider]
-        public bool IsUnlit { get => isUnlit; set => Set(ref isUnlit, value); }
+        public bool IsLit { get => !IsUnlit; set => IsUnlit = !value; }
+
+        [Browsable(false)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public bool IsUnlit
+        {
+            get => isUnlit;
+            set
+            {
+                Set(ref isUnlit, value);
+                OnPropertyChanged(nameof(IsLit));
+            }
+        }
         private bool isUnlit;
 
         [Display(GroupName = DetailGroup, Name = "つや",

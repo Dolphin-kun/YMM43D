@@ -17,6 +17,8 @@ namespace YMM43D.Plugin
 
         private const float VisibleMargin = 0.5f;
 
+        private const float MaxDensity = 32f;
+
         private readonly Renderer3DTo2D renderer = new();
 
         public ID2D1Image Render(
@@ -65,8 +67,6 @@ namespace YMM43D.Plugin
                 return renderer.RenderEmpty(devices);
             }
 
-            // グループ制御の Z は、YMM4 が後から標準の遠近の距離で掛ける。打ち消しもその距離で計算しているので、
-            // そのときは距離を広げないよう、画像の広がりを伝えない。
             imageReach = scene.OwnerGroupScreen.Depth == 0f ? target.Reach : 0f;
 
             var item = new DrawContext3D
@@ -87,11 +87,23 @@ namespace YMM43D.Plugin
                 {
                     DrawOccluders(render, scene.Occluders);
                     draw(render, item);
-                });
+                },
+                Density(screenPlacement.HostScale, target));
         }
 
-        // エフェクトアイテムは、下のレイヤーを黒い背景ごと描いた画面をエフェクトに渡し、結果を元の絵の上に重ねる。
-        // 板の外を透明にすると元の絵が透けて二重に見えるので、画面全体を覆い、板の外は渡された絵と同じ黒で埋める。
+        public static float Density(float hostScale, in RenderArea target)
+        {
+            if (!float.IsFinite(hostScale) || hostScale <= 1f)
+                return 1f;
+
+            var longest = Math.Max(target.Width, target.Height);
+
+            if (longest <= 0)
+                return 1f;
+
+            return Math.Clamp(MathF.Min(hostScale, MaxRenderSize / (float)longest), 1f, MaxDensity);
+        }
+
         private static bool CoversScreen(IVideoItem? owner) => owner is EffectItem;
 
         private static RenderArea? ScreenArea(TimelineItemSourceDescription description, in ScreenPlacement screenPlacement)
@@ -113,8 +125,6 @@ namespace YMM43D.Plugin
         {
             foreach (var occluder in occluders)
             {
-                // 前後関係のためにほかの物の奥行きを描くが、この絵の範囲に写らない物は描いても何も変わらないので飛ばす。
-                // 大きさの分からない物は、念のため描く。
                 if (occluder.Provider is I3DBounds bounded
                     && render.IsOutside(bounded.GetLocalBounds(occluder.Time), occluder.World))
                 {

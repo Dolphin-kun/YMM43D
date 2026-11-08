@@ -121,7 +121,13 @@ namespace YMM43D.Player
 
             maps.Bind(context);
 
-            var built = new SceneLighting(placed, lighting.Ambient, lighting.Fog, lighting.ShadowResolution);
+            var built = new SceneLighting(
+                placed,
+                lighting.Ambient,
+                lighting.Fog,
+                lighting.ShadowResolution,
+                lighting.Ground,
+                lighting.Mirror);
 
             cache.Remember(lighting, casters, maps, built, requester);
 

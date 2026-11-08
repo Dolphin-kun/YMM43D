@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Runtime.InteropServices;
 using YMM43D.Commons;
@@ -49,10 +50,21 @@ namespace Curve3D
         }
         private int segments = 64;
 
-        [Display(GroupName = Group, Name = "陰影をつけない",
-            Description = "光源を無視して、元の色のまま塗ります", Order = 600)]
+        [Display(GroupName = Group, Name = "陰影", Description = "光源にしたがって陰影をつけます。切ると、元の色のまま塗ります", Order = 600)]
         [ToggleSlider]
-        public bool IsUnlit { get => isUnlit; set => Set(ref isUnlit, value); }
+        public bool IsLit { get => !IsUnlit; set => IsUnlit = !value; }
+
+        [Browsable(false)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public bool IsUnlit
+        {
+            get => isUnlit;
+            set
+            {
+                Set(ref isUnlit, value);
+                OnPropertyChanged(nameof(IsLit));
+            }
+        }
         private bool isUnlit;
 
         [Display(GroupName = Group, Name = "つや",

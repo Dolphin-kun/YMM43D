@@ -7,6 +7,7 @@ using YukkuriMovieMaker.Controls;
 using YukkuriMovieMaker.Exo;
 using YukkuriMovieMaker.ItemEditor.CustomVisibilityAttributes;
 using YukkuriMovieMaker.Project.Items;
+using YukkuriMovieMaker.Settings;
 
 namespace YMM43D.Project.Items
 {
@@ -29,6 +30,8 @@ namespace YMM43D.Project.Items
     {
         private const string Ambient = "環境光";
 
+        private const string Mirror = "映り込み";
+
         private const string Fog = "霧";
 
         private const string Shade = "影";
@@ -45,6 +48,38 @@ namespace YMM43D.Project.Items
             Description = "0 にすると光の当たらない面は真っ黒になります", Order = FirstOrder + 1)]
         [AnimationSlider("F0", "%", 0, 100)]
         public Animation AmbientBrightness { get; } = new(SceneLighting.DefaultAmbient * 100, 0, 10000);
+
+        [Display(GroupName = Ambient, Name = "下からも当てる",
+            Description = "上からと下からで、回り込む光の色を分けます。地面の照り返しを作るときに",
+            Order = FirstOrder + 2)]
+        [ToggleSlider]
+        public bool HasGround { get => hasGround; set => Set(ref hasGround, value); }
+        private bool hasGround;
+
+        [Display(GroupName = Ambient, Name = "下からの色",
+            Description = "下向きの面に当たる光の色", Order = FirstOrder + 3)]
+        [ColorPicker]
+        [ShowPropertyEditorWhen(nameof(HasGround), true)]
+        public Color GroundColor { get => groundColor; set => Set(ref groundColor, value); }
+        private Color groundColor = Color.FromRgb(0x40, 0x3A, 0x34);
+
+        [Display(GroupName = Ambient, Name = "下からの明るさ", Order = FirstOrder + 4)]
+        [AnimationSlider("F0", "%", 0, 100)]
+        [ShowPropertyEditorWhen(nameof(HasGround), true)]
+        public Animation GroundBrightness { get; } = new(20, 0, 10000);
+
+        [Display(GroupName = Mirror, Name = "風景の画像",
+            Description = "まわりの景色の 1 枚絵。左右ぐるり 360 度・上下 180 度に引き伸ばした横長の画像を選びます。"
+                + "3Dモデルの「映り込み」を上げると映ります",
+            Order = FirstOrder + 5)]
+        [FileSelector(FileGroupType.ImageItem)]
+        public string MirrorImage { get => mirrorImage; set => Set(ref mirrorImage, value ?? string.Empty); }
+        private string mirrorImage = string.Empty;
+
+        [Display(GroupName = Mirror, Name = "回り込む光に混ぜる",
+            Description = "風景の色を、光の当たらないところの明るさにも混ぜます", Order = FirstOrder + 6)]
+        [AnimationSlider("F0", "%", 0, 100)]
+        public Animation MirrorAmbient { get; } = new(0, 0, 100);
 
         [Display(GroupName = Fog, Name = "霧をかける",
             Description = "遠くのものほど霧の色に溶かします", Order = FirstOrder + 2)]
@@ -101,6 +136,16 @@ namespace YMM43D.Project.Items
         public Vector3 GetAmbient(in FrameContext itemTime)
             => AmbientColor.ToVector3() * (AmbientBrightness.GetFloat(itemTime) / 100f);
 
+        public Vector3? GetGround(in FrameContext itemTime)
+            => HasGround
+                ? GroundColor.ToVector3() * (GroundBrightness.GetFloat(itemTime) / 100f)
+                : null;
+
+        public SceneMirror GetMirror(in FrameContext itemTime)
+            => MirrorImage.Length == 0
+                ? SceneMirror.None
+                : new SceneMirror(MirrorImage, MirrorAmbient.GetFloat(itemTime) / 100f);
+
         public SceneFog GetFog(in FrameContext itemTime)
         {
             if (!IsFogEnabled)
@@ -117,15 +162,18 @@ namespace YMM43D.Project.Items
         }
 
         protected override IEnumerable<IAnimatable> GetAnimatables()
-            => [AmbientBrightness, FogDensity, FogStart, FogEnd];
+            => [AmbientBrightness, GroundBrightness, MirrorAmbient, FogDensity, FogStart, FogEnd];
 
         public override IAsyncEnumerable<ExoItem> GetExoItemsAsync(ExoOutputDescription outputDescription)
             => AsyncEnumerable.Empty<ExoItem>();
 
-        public override IEnumerable<string> GetFiles() => [];
+        public override IEnumerable<string> GetFiles()
+            => MirrorImage.Length > 0 ? [MirrorImage] : [];
 
         public override void ReplaceFile(string from, string to)
         {
+            if (MirrorImage == from)
+                MirrorImage = to;
         }
     }
 }

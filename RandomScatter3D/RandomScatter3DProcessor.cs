@@ -21,13 +21,30 @@ namespace RandomScatter3D
 
         public override bool ScalesToInputSize => false;
 
+        protected override bool KeepsGroupMemberSolid => true;
+
+        protected override bool UsesGroupMemberBounds => false;
+
         protected override void OnUpdating(EffectDescription effectDescription)
-            => solidSource = FindSolidSource(effectDescription);
+            => solidSource = Live3D.KeepLast(
+                GroupMemberSolid ?? FindSolidSource(effectDescription), solidSource);
 
         private I3DProvider? FindSolidSource(EffectDescription description)
             => SceneDepthCollector.FindOwner(description) is { } owner
                 ? SceneDepthCollector.FindSources(owner, Devices).FirstOrDefault(source => !ReferenceEquals(source, this))
                 : null;
+
+        protected override bool TryInheritTransform(out Matrix4x4 local, out Matrix4x4 world)
+        {
+            if (GroupMemberProcessor is { } member && member.TryGetPlacement(out var placement))
+            {
+                local = Matrix4x4.Identity;
+                world = placement;
+                return true;
+            }
+
+            return base.TryInheritTransform(out local, out world);
+        }
 
         public override void Draw(in Render3DContext render, DrawContext3D item)
         {
@@ -40,10 +57,13 @@ namespace RandomScatter3D
             {
                 foreach (var copy in Copies(time))
                 {
+                    if (copy.Alpha <= 0f)
+                        continue;
+
                     source.Draw(render, new DrawContext3D
                     {
                         World = Place(copy, Matrix4x4.CreateScale(copy.Scale), facing, item.World),
-                        Opacity = item.Opacity,
+                        Opacity = item.Opacity * copy.Alpha,
                         Blend = item.Blend,
                         IsAlwaysOnTop = item.IsAlwaysOnTop,
                         DepthOnly = item.DepthOnly,
@@ -64,11 +84,19 @@ namespace RandomScatter3D
 
             foreach (var copy in Copies(time))
             {
+                if (copy.Alpha <= 0f)
+                    continue;
+
                 var scale = Matrix4x4.CreateScale(WorldScale.ToWorld(size.X * copy.Scale), WorldScale.ToWorld(size.Y * copy.Scale), 1f);
 
                 pipeline.Draw(
                     render.Context,
-                    render.CreateConstants(Place(copy, scale, facing, item.World), item.Opacity, effect.IsUnlit, item.AlphaCutoff, gloss),
+                    render.CreateConstants(
+                        Place(copy, scale, facing, item.World),
+                        item.Opacity * copy.Alpha,
+                        effect.IsUnlit,
+                        item.AlphaCutoff,
+                        gloss),
                     settings);
             }
         }
@@ -84,7 +112,7 @@ namespace RandomScatter3D
                   * Matrix4x4.CreateTranslation(position) * itemWorld;
         }
 
-        private readonly record struct Copy(Vector3 Position, Vector3 Angles, float Scale);
+        private readonly record struct Copy(Vector3 Position, Vector3 Angles, float Scale, float Alpha);
 
         private IEnumerable<Copy> Copies(FrameContext time)
         {
@@ -93,6 +121,7 @@ namespace RandomScatter3D
             var variation = Math.Clamp(effect.SizeVariation.GetFloat(time) / 100f, 0f, 1f);
             var maxSpeed = effect.MaxSpeed.GetFloat(time);
             var maxSpin = effect.MaxSpin.GetFloat(time);
+            var fade = Math.Clamp(effect.EdgeFade.GetFloat(time) / 100f, 0f, 1f);
             var frame = time.Frame;
             var seed = effect.Seed;
 
@@ -104,10 +133,13 @@ namespace RandomScatter3D
                 var angles = new Vector3(Signed(seed, index, 7), Signed(seed, index, 8), Signed(seed, index, 9)) * maxAngle
                            + new Vector3(Signed(seed, index, 10), Signed(seed, index, 11), Signed(seed, index, 12)) * maxSpin * frame;
 
+                var position = Wrap(start + velocity * frame, range);
+
                 yield return new Copy(
-                    Wrap(start + velocity * frame, range),
+                    position,
                     angles,
-                    1f - variation * Unit(seed, index, 13));
+                    1f - variation * Unit(seed, index, 13),
+                    ScatterEdge.Alpha(position, velocity, range, fade));
             }
         }
 

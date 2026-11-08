@@ -1,10 +1,11 @@
-﻿using System.Numerics;
+using System.Numerics;
 using YMM43D.Graphics;
 using YMM43D.Graphics.Materials;
 using YMM43D.Graphics.Meshes;
 using YMM43D.Plugin;
 using YMM43D.Commons;
 using YukkuriMovieMaker.Commons;
+using YukkuriMovieMaker.Player.Video;
 
 namespace YMM43D.Project.Effects.Flat3D
 {
@@ -27,8 +28,17 @@ namespace YMM43D.Project.Effects.Flat3D
 
         public override bool ScalesToInputSize => false;
 
+        protected override bool KeepsGroupMemberSolid => true;
+
+        protected override bool ParentsGroupMembers => true;
+
+        protected override Matrix4x4 GetGroupParentMatrix(in FrameContext time) => GetRotation(time);
+
         public override void Draw(in Render3DContext render, DrawContext3D item)
         {
+            if (TryDrawGroupMemberSolid(render, item))
+                return;
+
             var texture = item.Texture ?? GetTexture(render.Device);
             if (texture is null || !pipelines.TryGet(render.Device, out var pipeline))
                 return;
@@ -49,12 +59,15 @@ namespace YMM43D.Project.Effects.Flat3D
             pipeline.Draw(render.Context, constants, settings);
         }
 
-        private Matrix4x4 GetLocalMatrix(in FrameContext time)
-        {
-            var rotation = Rotation3D.ForObject(
+        private Matrix4x4 GetRotation(in FrameContext time)
+            => Rotation3D.ForObject(
                 -effect.RotationX.GetFloat(time),
                 -effect.RotationY.GetFloat(time),
                 -effect.RotationZ.GetFloat(time));
+
+        private Matrix4x4 GetLocalMatrix(in FrameContext time)
+        {
+            var rotation = IsGroupEffect ? Matrix4x4.Identity : GetRotation(time);
 
             if (!TryGetSize(out var size, out var offset))
                 return rotation;

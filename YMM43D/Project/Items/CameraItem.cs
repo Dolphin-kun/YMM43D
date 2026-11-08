@@ -190,6 +190,11 @@ namespace YMM43D.Project.Items
             return (yaw, Math.Clamp(pitch, -CameraState.MaxPitch, CameraState.MaxPitch));
         }
 
+        public Vector3? GetPivot(in FrameContext itemTime)
+            => AimMode is CameraAim.Target or CameraAim.Orbit
+                ? ToWorld(TargetX, TargetY, TargetZ, itemTime)
+                : null;
+
         public SceneMarker GetMarker(in FrameContext itemTime)
             => SceneMarker.ForCamera(GetState(itemTime).Position);
 
