@@ -205,6 +205,13 @@ namespace YMM43D.Player
             {
                 into.Add(shapeProvider);
             }
+
+            if (item is TachieItem tachie
+                && Provider3DRegistry.Find(tachie.Character?.TachieCharacterParameter, devices) is { } standing
+                && !into.Contains(standing))
+            {
+                into.Add(standing);
+            }
         }
 
         public static IReadOnlyList<I3DProvider> FindGroupSolids(

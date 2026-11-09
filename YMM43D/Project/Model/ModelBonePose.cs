@@ -36,7 +36,7 @@ namespace YMM43D.Project.Model
         public Animation RotationZ { get; } = new(0, -100000, 100000);
 
         [Display(GroupName = Group, Name = "揺らす",
-            Description = "このボーンから下を揺らします。モデルに揺れものが書かれていないときに使います")]
+            Description = "このボーンから下を揺らします")]
         [ToggleSlider]
         public bool Swings { get => swings; set => Set(ref swings, value); }
         private bool swings;

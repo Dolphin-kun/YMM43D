@@ -46,6 +46,12 @@ namespace YMM43D.Project.Tachie
         public double RotationZ { get => rotationZ; set => Set(ref rotationZ, value); }
         private double rotationZ;
 
+        [Display(GroupName = Body, Name = "揺らす",
+            Description = "揺れもの（髪やスカートなど）と、ボーンの「揺らす」を効かせます")]
+        [ToggleSlider]
+        public bool Swings { get => swings; set => Set(ref swings, value); }
+        private bool swings = true;
+
         [Display(GroupName = Body, Name = "上下の位置", Description = "立ち絵の中でモデルを上下にずらします")]
         [TextBoxSlider("F0", "px", -1000, 1000)]
         public double OffsetY { get => offsetY; set => Set(ref offsetY, value); }
@@ -135,7 +141,7 @@ namespace YMM43D.Project.Tachie
         private double toonShift;
 
         [Display(GroupName = Toon, Name = "境目のぼかし",
-            Description = "段の境目をどれだけぼかすか。0 にするときっぱり分かれます")]
+            Description = "段の境目をどれだけぼかすか")]
         [TextBoxSlider("F0", "%", 0, 100)]
         [ShowPropertyEditorWhen(nameof(IsShaded), true)]
         public double ToonFeather
@@ -153,7 +159,7 @@ namespace YMM43D.Project.Tachie
         private Color shadeColor = Colors.White;
 
         [Display(GroupName = Feel, Name = "凹凸",
-            Description = "モデルに入っている法線マップのでこぼこの強さ。入っていなければ効きません")]
+            Description = "モデルに入っている法線マップのでこぼこの強さ")]
         [TextBoxSlider("F0", "%", 0, 200)]
         [ShowPropertyEditorWhen(nameof(IsUnlit), false)]
         public double Bump { get => bump; set => Set(ref bump, Math.Clamp(value, 0, 1000)); }
@@ -180,7 +186,7 @@ namespace YMM43D.Project.Tachie
         private double smoothness;
 
         [Display(GroupName = Feel, Name = "映り込み",
-            Description = "「3D環境」のアイテムで選んだ風景の画像を映します。0 なら映しません")]
+            Description = "「3D環境」のアイテムで選んだ風景の画像を映します")]
         [TextBoxSlider("F0", "%", 0, 100)]
         [ShowPropertyEditorWhen(nameof(IsUnlit), false)]
         public double Mirror { get => mirror; set => Set(ref mirror, Math.Clamp(value, 0, 100)); }
@@ -189,8 +195,8 @@ namespace YMM43D.Project.Tachie
         internal const float FeatherSpan = 400f;
 
         [Display(GroupName = Talk, Name = "口の表情",
-            Description = "セリフに合わせて動かす表情の名前。VRM なら A（あ）が入っています")]
-        [TextEditor(AcceptsReturn = false)]
+            Description = "セリフに合わせて動かす「あ」の口。い・う・え・お は自動で使います")]
+        [ExpressionSelector]
         public string MouthExpression { get => mouth; set => Set(ref mouth, value ?? string.Empty); }
         private string mouth = "A";
 
@@ -199,9 +205,19 @@ namespace YMM43D.Project.Tachie
         public double MouthOpen { get => mouthOpen; set => Set(ref mouthOpen, Math.Clamp(value, 0, 100)); }
         private double mouthOpen = 100;
 
+        [Display(GroupName = Talk, Name = "なめらかさ",
+            Description = "次の口の形へ移るのにかける時間")]
+        [TextBoxSlider("F0", "ms", 0, 150)]
+        public double MouthSmooth
+        {
+            get => mouthSmooth;
+            set => Set(ref mouthSmooth, Math.Clamp(value, 0, 1000));
+        }
+        private double mouthSmooth = 45;
+
         [Display(GroupName = Blink, Name = "まばたきの表情",
-            Description = "まばたきに使う表情の名前。空にするとまばたきしません")]
-        [TextEditor(AcceptsReturn = false)]
+            Description = "まばたきに使う表情")]
+        [ExpressionSelector]
         public string BlinkExpression { get => blink; set => Set(ref blink, value ?? string.Empty); }
         private string blink = "Blink";
 
@@ -213,6 +229,6 @@ namespace YMM43D.Project.Tachie
         [Display(GroupName = Blink, Name = "閉じている時間")]
         [TextBoxSlider("F2", "秒", 0.05, 0.5)]
         public double BlinkLength { get => blinkLength; set => Set(ref blinkLength, Math.Clamp(value, 0.02, 2)); }
-        private double blinkLength = 0.12;
+        private double blinkLength = 0.15;
     }
 }

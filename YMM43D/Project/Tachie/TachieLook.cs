@@ -4,15 +4,18 @@ using YMM43D.Graphics;
 using YMM43D.Graphics.Models;
 using YMM43D.Project.Model;
 using YukkuriMovieMaker.Commons;
+using YukkuriMovieMaker.Plugin.Voice;
 
 namespace YMM43D.Project.Tachie
 {
     internal sealed class TachieLook(
         ModelData model,
         Model3DCharacterParameter character,
-        Model3DFaceParameter? face,
+        IReadOnlyList<Model3DFaceParameter> faces,
+        Model3DItemParameter? item,
+        ModelSwing? swing,
         TimeSpan time,
-        double kuchipaku) : IModelLook
+        IReadOnlyList<float> mouth) : IModelLook
     {
         public ModelData? Model => model;
 
@@ -44,6 +47,7 @@ namespace YMM43D.Project.Tachie
 
         public Matrix4x4 GetLocalMatrix(ModelData model, in FrameContext time)
         {
+            var pose = TachiePose.Of(item, time);
             var bounds = model.Bounds;
             var extent = bounds.Max - bounds.Min;
             var longest = MathF.Max(extent.X, MathF.Max(extent.Y, extent.Z));
@@ -52,7 +56,10 @@ namespace YMM43D.Project.Tachie
 
             return Matrix4x4.CreateTranslation(-bounds.Center)
                  * Matrix4x4.CreateScale(scale)
-                 * Rotation3D.ForObject((float)character.RotationX, (float)character.RotationY, (float)character.RotationZ)
+                 * Rotation3D.ForObject(
+                     (float)character.RotationX + pose.RotationX,
+                     (float)character.RotationY + pose.RotationY,
+                     (float)character.RotationZ + pose.RotationZ)
                  * Matrix4x4.CreateTranslation(0f, -WorldScale.ToWorld((float)character.OffsetY), 0f);
         }
 
@@ -61,21 +68,110 @@ namespace YMM43D.Project.Tachie
         public IReadOnlyList<(ModelBlend Blend, float Cutoff)?> GetBlends(ModelData model)
             => new (ModelBlend, float)?[model.Materials.Length];
 
+        private const float Softness = 1f;
+
+        private const float Sway = 2f;
+
         public IReadOnlyList<Matrix4x4>? GetPose(
             ModelData model, in FrameContext time, in Matrix4x4 world, bool advance)
-            => null;
+            => Posed(model, time, advance ? world : null);
+
+        public IReadOnlyList<Matrix4x4>? GetPose(ModelData model, in FrameContext time)
+            => Posed(model, time, null);
+
+        private Matrix4x4[]? baked;
+
+        private int bakedFrame = int.MinValue;
+
+        private Matrix4x4[]? Posed(ModelData model, in FrameContext time, Matrix4x4? world)
+        {
+            if (!model.HasBones)
+                return null;
+
+            if (bakedFrame != time.Frame)
+            {
+                bakedFrame = time.Frame;
+                baked = item is null
+                    ? null
+                    : BonePoses.Apply(model, item.Bones, time, item.Sample(model, time));
+            }
+
+            return character.Swings && swing is not null
+                ? swing.Apply(model, item?.Bones ?? [], baked, time, world, Softness, Sway)
+                : baked;
+        }
 
         public IReadOnlyList<float>? GetMorphWeights(ModelData model, in FrameContext time)
             => ModelExpressionWeights.Of(model, Wanted());
 
         private IEnumerable<(string Name, float Strength)> Wanted()
         {
-            yield return (character.MouthExpression, (float)(kuchipaku * character.MouthOpen / 100.0));
+            foreach (var one in Mouth())
+                yield return one;
 
             yield return (character.BlinkExpression, Blink());
 
-            if (face is { Expression.Length: > 0 })
-                yield return (face.Expression, (float)(face.Strength / 100.0));
+            foreach (var one in faces)
+            {
+                if (one.Expression.Length > 0)
+                    yield return (one.Expression, (float)(one.Strength / 100.0));
+            }
+        }
+
+        private IEnumerable<(string Name, float Strength)> Mouth()
+        {
+            for (var slot = 0; slot < mouth.Count; slot++)
+            {
+                if (mouth[slot] <= 0f)
+                    continue;
+
+                var name = Vowel(MouthMotion.Of(slot));
+
+                if (name.Length == 0 || Shares(name, slot))
+                    continue;
+
+                yield return (name, Strongest(name, slot));
+            }
+        }
+
+        private bool Shares(string name, int slot)
+        {
+            for (var other = 0; other < slot; other++)
+            {
+                if (mouth[other] > 0f && Vowel(MouthMotion.Of(other)) == name)
+                    return true;
+            }
+
+            return false;
+        }
+
+        private float Strongest(string name, int slot)
+        {
+            var best = mouth[slot];
+
+            for (var other = slot + 1; other < mouth.Count; other++)
+            {
+                if (mouth[other] > best && Vowel(MouthMotion.Of(other)) == name)
+                    best = mouth[other];
+            }
+
+            return best;
+        }
+
+        private string Vowel(MouthShape shape)
+        {
+            var wanted = shape switch
+            {
+                MouthShape.I => "I",
+                MouthShape.U => "U",
+                MouthShape.E => "E",
+                MouthShape.O => "O",
+                _ => string.Empty,
+            };
+
+            return wanted.Length > 0 && ModelExpressionWeights.Has(model, wanted)
+                ? wanted
+                : character.MouthExpression;
         }
 
         private float Blink()

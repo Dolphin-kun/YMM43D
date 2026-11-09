@@ -72,7 +72,7 @@ namespace RandomScatter3D
         public Animation MaxSpin { get; } = new(0, 0, 10000);
 
         [Display(GroupName = Movement, Name = "端でうすくする",
-            Description = "範囲の端に近づいたものを薄くして、反対側から出てくるときに急に現れないようにします。"
+            Description = "範囲の端に近づいたものを薄くして、急に現れないようにします"
                 + "0 で薄くしません。動いていないものには効きません", Order = 300)]
         [AnimationSlider("F0", "%", 0, 100)]
         public Animation EdgeFade { get; } = new(20, 0, 100);
@@ -94,7 +94,7 @@ namespace RandomScatter3D
         }
         private bool isUnlit;
 
-        [Display(GroupName = Look, Name = "つや", Description = "光が映り込んだ明るい点の強さ。0 でつやなし", Order = 200)]
+        [Display(GroupName = Look, Name = "つや", Description = "光が映り込んだ明るい点の強さ", Order = 200)]
         [AnimationSlider("F0", "%", 0, 100)]
         [ShowPropertyEditorWhen(nameof(IsUnlit), false)]
         public Animation Gloss { get; } = new(0, 0, 1000);

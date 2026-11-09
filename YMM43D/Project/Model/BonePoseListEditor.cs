@@ -24,7 +24,6 @@ namespace YMM43D.Project.Model
         private readonly ListPanel panel = new();
         private readonly Button remove;
         private readonly ContentControl values = new();
-        private readonly TextBlock empty;
 
         private readonly List<(PropertyEditorAttribute2 Attribute, FrameworkElement Control, FrameworkElement Caption)> editors = [];
 
@@ -75,18 +74,9 @@ namespace YMM43D.Project.Model
                 },
                 lower: true);
 
-            empty = new TextBlock
-            {
-                Text = "3Dプレビューでボーンをクリックするか、＋で足してください。",
-                Opacity = 0.6,
-                TextWrapping = TextWrapping.Wrap,
-                Margin = new Thickness(2, 4, 2, 2),
-            };
-
             var stack = new StackPanel();
 
             stack.Children.Add(panel);
-            stack.Children.Add(empty);
             stack.Children.Add(values);
 
             Content = stack;
@@ -147,7 +137,7 @@ namespace YMM43D.Project.Model
                 ? list
                 : [];
 
-        private ModelData? Model => (target as Model3DParameter)?.Model;
+        private ModelData? Model => (target as IBoneHost)?.Model;
 
         private int DepthOf(string name) => depths.TryGetValue(name, out var depth) ? depth : 0;
 
@@ -222,8 +212,6 @@ namespace YMM43D.Project.Model
             panel.List.SelectedItem =
                 poses.FirstOrDefault(pose => pose.Name == chosen) ?? poses.FirstOrDefault();
 
-            empty.Visibility = poses.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-
             ShowValues();
         }
 
@@ -296,7 +284,7 @@ namespace YMM43D.Project.Model
 
         private void Add(string name)
         {
-            if (target is not Model3DParameter parameter)
+            if (target is not IBoneHost parameter)
                 return;
 
             BeginEdit?.Invoke(this, EventArgs.Empty);

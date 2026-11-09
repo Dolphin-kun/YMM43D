@@ -69,7 +69,7 @@ namespace YMM43D.Project.Items
         public Animation GroundBrightness { get; } = new(20, 0, 10000);
 
         [Display(GroupName = Mirror, Name = "風景の画像",
-            Description = "まわりの景色の 1 枚絵。左右ぐるり 360 度・上下 180 度に引き伸ばした横長の画像を選びます。"
+            Description = "まわりの景色の 1 枚絵。左右 360 度・上下 180 度に引き伸ばした横長の画像"
                 + "3Dモデルの「映り込み」を上げると映ります",
             Order = FirstOrder + 5)]
         [FileSelector(FileGroupType.ImageItem)]
@@ -112,7 +112,7 @@ namespace YMM43D.Project.Items
         public Animation FogEnd { get; } = new(4000, 1, 1000000);
 
         [Display(GroupName = Shade, Name = "影の細かさ",
-            Description = "影の板の解像度。細かいほど影のふちがきれいになり、そのぶん GPU のメモリを使います",
+            Description = "影の板の解像度。細かいほどきれいになり、メモリを多く使います",
             Order = FirstOrder + 7)]
         [EnumComboBox]
         public ShadowQuality ShadowQuality { get => shadowQuality; set => Set(ref shadowQuality, value); }

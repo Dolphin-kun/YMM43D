@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using YMM43D.Project.Model;
 using YukkuriMovieMaker.Controls;
 using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Plugin.Tachie;
@@ -8,8 +9,8 @@ namespace YMM43D.Project.Tachie
     public class Model3DFaceParameter : TachieFaceParameterBase
     {
         [Display(Name = "表情",
-            Description = "モデルに入っている表情の名前（VRM なら Joy、Angry など）。空なら表情なし")]
-        [TextEditor(AcceptsReturn = false)]
+            Description = "モデルに入っている表情（VRM なら Joy、Angry など）")]
+        [ExpressionSelector]
         public string Expression { get => expression; set => Set(ref expression, value ?? string.Empty); }
         private string expression = string.Empty;
 

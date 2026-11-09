@@ -6,6 +6,7 @@ using YMM43D.Graphics;
 using YMM43D.Player;
 using YMM43D.PreviewTool.Rendering;
 using YMM43D.Project.Model;
+using YMM43D.Project.Tachie;
 using YukkuriMovieMaker.Project.Items;
 
 namespace YMM43D.PreviewTool
@@ -509,7 +510,8 @@ namespace YMM43D.PreviewTool
         }
 
         private static bool IsModel(IVideoItem item)
-            => item is ShapeItem { ShapeParameter: Model3DParameter };
+            => item is ShapeItem { ShapeParameter: Model3DParameter }
+            or TachieItem { Character.TachieCharacterParameter: Model3DCharacterParameter };
 
         private PreviewBone? SelectedBone(PreviewScene scene)
             => scene.SelectedBone >= 0 && scene.SelectedBone < lastBones.Count

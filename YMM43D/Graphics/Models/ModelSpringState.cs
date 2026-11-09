@@ -19,6 +19,8 @@ namespace YMM43D.Graphics.Models
         private Vector3[]? previous;
         private int lastFrame = int.MinValue;
         private Matrix4x4[]? result;
+        private Matrix4x4[]? lastPose;
+        private Matrix4x4[]? settled;
         private Matrix4x4 lastWorld = Matrix4x4.Identity;
 
         public Matrix4x4[]? Apply(
@@ -45,7 +47,14 @@ namespace YMM43D.Graphics.Models
             }
 
             if (frame == lastFrame && result is not null)
-                return result;
+            {
+                if (Same(pose, lastPose))
+                    return result;
+
+                lastFrame = int.MinValue;
+            }
+
+            Remember(pose);
 
             var steps = frame - lastFrame;
 
@@ -83,7 +92,46 @@ namespace YMM43D.Graphics.Models
             return result;
         }
 
-        public void Forget() => lastFrame = int.MinValue;
+        public void Forget()
+        {
+            lastFrame = int.MinValue;
+            lastPose = null;
+        }
+
+        public Matrix4x4[]? Last(ModelData model, Matrix4x4[]? pose)
+            => ReferenceEquals(source, model) && Same(pose, lastPose) ? result : null;
+
+        private void Remember(Matrix4x4[]? pose)
+        {
+            if (pose is null)
+            {
+                lastPose = null;
+
+                return;
+            }
+
+            if (lastPose is null || lastPose.Length != pose.Length)
+                lastPose = new Matrix4x4[pose.Length];
+
+            pose.AsSpan().CopyTo(lastPose);
+        }
+
+        private static bool Same(Matrix4x4[]? one, Matrix4x4[]? other)
+        {
+            if (one is null || other is null)
+                return one is null && other is null;
+
+            if (one.Length != other.Length)
+                return false;
+
+            for (var i = 0; i < one.Length; i++)
+            {
+                if (one[i] != other[i])
+                    return false;
+            }
+
+            return true;
+        }
 
         private bool Jumped(ModelData model, IReadOnlyList<ModelSpring> springs, in Matrix4x4 world)
         {
@@ -151,7 +199,10 @@ namespace YMM43D.Graphics.Models
             float sway,
             bool rest)
         {
-            var made = new Matrix4x4[model.Bones.Length];
+            if (settled is null || settled.Length != model.Bones.Length)
+                settled = new Matrix4x4[model.Bones.Length];
+
+            var made = settled;
 
             for (var i = 0; i < made.Length; i++)
                 made[i] = pose is not null && i < pose.Length ? pose[i] : Matrix4x4.Identity;

@@ -55,7 +55,7 @@ namespace YMM43D.Project.Effects.Flat3D
         private bool isUnlit;
 
         [Display(GroupName = Group, Name = "つや",
-            Description = "光が映り込んだ明るい点の強さ。0 でつやなし", Order = 5)]
+            Description = "光が映り込んだ明るい点の強さ", Order = 5)]
         [AnimationSlider("F0", "%", 0, 100)]
         [ShowPropertyEditorWhen(nameof(IsUnlit), false)]
         public Animation Gloss { get; } = new(0, 0, 1000);
@@ -70,7 +70,7 @@ namespace YMM43D.Project.Effects.Flat3D
             => IsUnlit ? SurfaceGloss.None : SurfaceGloss.FromPercent(Gloss.GetFloat(time), GlossSharpness.GetFloat(time));
 
         [Display(GroupName = Group, Name = "他のものを隠す",
-            Description = "入れると板が奥行きを持ち、後ろにあるものを隠します。"
+            Description = "入れると板が奥行きを持ち、後ろにあるものを隠します"
                 + "同じ面に並べたり半透明にしたりすると、境目がちらつくことがあります",
             Order = 4)]
         [ToggleSlider]

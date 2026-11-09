@@ -42,13 +42,13 @@ namespace YMM43D.Project.Model
         private string name = string.Empty;
 
         [Display(GroupName = "材質", Name = "テクスチャ",
-            Description = "この材質に貼る画像。空ならモデルに書かれている画像を使います")]
+            Description = "この材質に貼る画像。空ならモデルのまま")]
         [FileSelector(FileGroupType.ImageItem)]
         public string Texture { get => texture; set => Set(ref texture, value ?? string.Empty); }
         private string texture = string.Empty;
 
         [Display(GroupName = "材質", Name = "透け方",
-            Description = "画像の薄いところをどう扱うか。fbx のように書かれていないモデルでは、ここで決められます")]
+            Description = "画像の薄いところをどう扱うか")]
         [EnumComboBox]
         public ModelSlotBlend Blend
         {

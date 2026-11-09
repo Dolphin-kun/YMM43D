@@ -64,7 +64,7 @@ namespace Noise3D
         public Animation EdgeBlur { get; } = new(30, 0, 100);
 
         [Display(GroupName = Volume, Name = "分割の細かさ",
-            Description = "箱を切って描く板の枚数の上限。ノイズの大きさに合わせて必要な分だけ使います。板の筋が見えるときに上げてください", Order = 700)]
+            Description = "箱を切って描く板の枚数の上限。板の筋が見えるときに上げてください", Order = 700)]
         [TextBoxSlider("F0", "枚", MinSlices, MaxSlices)]
         [Range(MinSlices, MaxSlices)]
         public int Slices { get => slices; set => Set(ref slices, Math.Clamp(value, MinSlices, MaxSlices)); }
@@ -90,7 +90,7 @@ namespace Noise3D
         [AnimationSlider("F1", "%", 0, 100)]
         public Animation Threshold { get; } = new(45, 0, 100);
 
-        [Display(GroupName = Tone, Name = "階調数", Description = "指定した階調数に減色します。0 で減色しません", Order = 102)]
+        [Display(GroupName = Tone, Name = "階調数", Description = "指定した階調数に減色します", Order = 102)]
         [AnimationSlider("F0", "", 0, 8)]
         public Animation Levels { get; } = new(0, 0, 256);
 

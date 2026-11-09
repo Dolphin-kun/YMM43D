@@ -16,6 +16,25 @@ namespace YMM43D.Graphics.Models
         public static bool IsSupported(string? path)
             => Path.GetExtension(path ?? string.Empty).ToLowerInvariant() is ".obj" or ".gltf" or ".glb" or ".vrm" or ".fbx";
 
+        public static IReadOnlyList<ModelData> Loaded
+        {
+            get
+            {
+                lock (gate)
+                {
+                    var found = new List<ModelData>(cache.Count);
+
+                    foreach (var entry in cache)
+                    {
+                        if (entry.Model is { } model)
+                            found.Add(model);
+                    }
+
+                    return found;
+                }
+            }
+        }
+
         public static ModelData? Find(string? path)
         {
             if (string.IsNullOrWhiteSpace(path) || !IsSupported(path))

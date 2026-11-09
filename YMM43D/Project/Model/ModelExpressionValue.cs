@@ -20,7 +20,7 @@ namespace YMM43D.Project.Model
         }
         private string name = string.Empty;
 
-        [Display(Name = "強さ", Description = "0 でなし、100 でその表情いっぱい")]
+        [Display(Name = "強さ", Description = "その表情をどれだけ強く出すか")]
         [AnimationSlider("F1", "%", 0, 100)]
         public Animation Weight { get; } = new(0, 0, 100);
 

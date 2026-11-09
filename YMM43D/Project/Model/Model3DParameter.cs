@@ -16,7 +16,7 @@ using YukkuriMovieMaker.Settings;
 
 namespace YMM43D.Project.Model
 {
-    internal sealed class Model3DParameter : ShapeParameter3DBase, IModelLook, ISceneRotation3D, ISceneScale3D
+    internal sealed class Model3DParameter : ShapeParameter3DBase, IModelLook, ISceneRotation3D, ISceneScale3D, IBoneHost
     {
         private const string Body = "";
         private const string Rotation = "3D回転";
@@ -43,7 +43,7 @@ namespace YMM43D.Project.Model
         private string file = string.Empty;
 
         [Display(GroupName = Body, Name = "モデルのまま",
-            Description = "作られたときの大きさのまま出します（1 m が 100 px）。「サイズ」のかわりに「倍率」で調整します")]
+            Description = "作られたときの大きさのまま出します（1 m が 100 px）")]
         [ToggleSlider]
         public bool IsActualSize { get => isActualSize; set => Set(ref isActualSize, value); }
         private bool isActualSize = true;
@@ -120,7 +120,7 @@ namespace YMM43D.Project.Model
         public string Motion { get => motion; set => Set(ref motion, value ?? string.Empty); }
         private string motion = string.Empty;
 
-        [Display(GroupName = Move, Name = "速さ", Description = "100% でファイルのとおり。0 で止まります")]
+        [Display(GroupName = Move, Name = "速さ", Description = "100% でファイルのとおり")]
         [AnimationSlider("F1", "%", 0, 400)]
         [ShowPropertyEditorWhen(nameof(HasMotion), true)]
         public Animation MotionSpeed { get; } = new(100, -100000, 100000);
@@ -154,7 +154,7 @@ namespace YMM43D.Project.Model
         private bool swings = true;
 
         [Display(GroupName = Move, Name = "やわらかさ",
-            Description = "大きいほど、もとの形に戻る力が弱くなり、大きく揺れます。100% でモデルに書かれたとおり")]
+            Description = "大きいほど大きく揺れます。100% でモデルに書かれたとおり")]
         [AnimationSlider("F0", "%", 0, 300)]
         [ShowPropertyEditorWhen(nameof(ShowsSwing), true)]
         public Animation Softness { get; } = new(100, 0, 100000);
@@ -165,7 +165,7 @@ namespace YMM43D.Project.Model
         [ShowPropertyEditorWhen(nameof(ShowsSwing), true)]
         public Animation Sway { get; } = new(200, 0, 100000);
 
-        private readonly ModelSpringState springs = new();
+        private readonly ModelSwing springs = new();
 
         [Display(GroupName = Paint, Name = "色", Description = "モデルの色に掛け合わせます。白ならそのまま")]
         [ColorPicker]
@@ -223,7 +223,7 @@ namespace YMM43D.Project.Model
         public bool IsShaded => !IsUnlit && ToonSteps >= 2;
 
         [Display(GroupName = Paint, Name = "つや",
-            Description = "光が映り込んだ明るい点の強さ。0 でつやなし")]
+            Description = "光が映り込んだ明るい点の強さ")]
         [AnimationSlider("F0", "%", 0, 100)]
         [ShowPropertyEditorWhen(nameof(IsUnlit), false)]
         public Animation Gloss { get; } = new(0, 0, 1000);
@@ -259,7 +259,7 @@ namespace YMM43D.Project.Model
         public Animation ToonShift { get; } = new(0, -100, 100);
 
         [Display(GroupName = Toon, Name = "境目のぼかし",
-            Description = "段の境目をどれだけぼかすか。0 にするときっぱり分かれます")]
+            Description = "段の境目をどれだけぼかすか")]
         [AnimationSlider("F0", "%", 0, 100)]
         [ShowPropertyEditorWhen(nameof(IsShaded), true)]
         public Animation ToonFeather { get; } = new(DefaultFeather, 0, 100);
@@ -272,7 +272,7 @@ namespace YMM43D.Project.Model
         private Color shadeColor = Colors.White;
 
         [Display(GroupName = Feel, Name = "凹凸",
-            Description = "モデルに入っている法線マップのでこぼこの強さ。入っていなければ効きません")]
+            Description = "モデルに入っている法線マップのでこぼこの強さ")]
         [AnimationSlider("F0", "%", 0, 200)]
         [ShowPropertyEditorWhen(nameof(IsUnlit), false)]
         public Animation Bump { get; } = new(100, 0, 10000);
@@ -295,7 +295,7 @@ namespace YMM43D.Project.Model
         public Animation Smoothness { get; } = new(0, 0, 100);
 
         [Display(GroupName = Feel, Name = "映り込み",
-            Description = "「3D環境」のアイテムで選んだ風景の画像を映します。0 なら映しません")]
+            Description = "「3D環境」のアイテムで選んだ風景の画像を映します")]
         [AnimationSlider("F0", "%", 0, 100)]
         [ShowPropertyEditorWhen(nameof(IsUnlit), false)]
         public Animation Mirror { get; } = new(0, 0, 100);
@@ -459,23 +459,11 @@ namespace YMM43D.Project.Model
             return played;
         }
 
-        private ModelAnimation? FindMotion(ModelData model)
-            => Motion.Length == 0
-                ? null
-                : model.Animations.FirstOrDefault(one => one.Name == Motion);
+        private ModelAnimation? FindMotion(ModelData model) => ModelMotion.Find(model, Motion);
 
         private float SecondsOf(ModelAnimation motion, in FrameContext time)
-        {
-            var fps = Math.Max(1, time.Fps);
-            var at = time.Frame / (float)fps * (MotionSpeed.GetFloat(time) / 100f) + MotionStart.GetFloat(time);
-
-            if (!MotionLoops || motion.Duration <= 0f)
-                return at;
-
-            at %= motion.Duration;
-
-            return at < 0f ? at + motion.Duration : at;
-        }
+            => ModelMotion.SecondsOf(
+                motion, time, MotionSpeed.GetFloat(time), MotionStart.GetFloat(time), MotionLoops);
 
         private void SyncMaterials()
         {
@@ -505,6 +493,12 @@ namespace YMM43D.Project.Model
                 return new ModelMaterialSlot(name, kept?.Texture ?? string.Empty);
             })];
         }
+
+        ModelData? IModelHost.Model => Model;
+
+        ModelBonePose IBoneHost.BoneFor(string name) => BoneFor(name);
+
+        void IBoneHost.DropBoneIfUntouched(string name) => DropBoneIfUntouched(name);
 
         internal ModelBonePose? FindBonePose(string name)
         {
@@ -559,98 +553,18 @@ namespace YMM43D.Project.Model
                 ModelAnimationSampler.Sample(motion, SecondsOf(motion, time), pose, null);
             }
 
-            if (Bones.Count == 0)
-                return Swing(model, pose, time, world);
-
-            foreach (var bone in Bones)
-            {
-                if (bone.Name.Length == 0 || bone.IsStill(time))
-                    continue;
-
-                var rotation = bone.GetRotation(time);
-
-                for (var i = 0; i < model.Bones.Length; i++)
-                {
-                    if (model.Bones[i].Name != bone.Name)
-                        continue;
-
-                    pose ??= Identity(model.Bones.Length);
-                    pose[i] = rotation * pose[i];
-                }
-            }
-
-            return Swing(model, pose, time, world);
+            return Swing(model, BonePoses.Apply(model, Bones, time, pose), time, world);
         }
 
         private Matrix4x4[]? Swing(
             ModelData model, Matrix4x4[]? pose, in FrameContext time, Matrix4x4? world)
-        {
-            var swinging = SpringsOf(model);
-
-            if (!Swings || swinging.Count == 0)
-                return pose;
-
-            if (world is not { } place)
-                return springs.Last(model) ?? pose;
-
-            return springs.Apply(
-                model,
-                swinging,
-                pose,
-                time.Frame,
-                1f / Math.Max(1, time.Fps),
-                place,
-                Softness.GetFloat(time) / 100f,
-                Sway.GetFloat(time) / 100f);
-        }
-
-        private IReadOnlyList<ModelSpring> SpringsOf(ModelData model)
-        {
-            var chosen = Bones
-                .Where(bone => bone.Swings && bone.Name.Length > 0)
-                .Select(bone => bone.Name)
-                .ToArray();
-
-            if (chosen.Length == 0)
-                return model.Springs;
-
-            if (ReferenceEquals(ownSpringsFor, model) && ownSpringNames.SequenceEqual(chosen))
-                return ownSprings;
-
-            var made = new List<ModelSpring>(model.Springs);
-
-            foreach (var name in chosen)
-            {
-                for (var i = 0; i < model.Bones.Length; i++)
-                {
-                    if (model.Bones[i].Name != name)
-                        continue;
-
-                    var spring = ModelSpring.From(
-                        model.Bones,
-                        i,
-                        ModelSpring.DefaultStiffness,
-                        ModelSpring.DefaultDrag,
-                        default,
-                        ModelSpring.DefaultHitRadius,
-                        model.Colliders);
-
-                    if (spring is not null)
-                        made.Add(spring);
-                }
-            }
-
-            ownSpringsFor = model;
-            ownSpringNames = chosen;
-            this.springs.Forget();
-
-            return ownSprings = made;
-        }
+            => Swings
+                ? springs.Apply(
+                    model, Bones, pose, time, world,
+                    Softness.GetFloat(time) / 100f, Sway.GetFloat(time) / 100f)
+                : pose;
 
         private string syncedFile = string.Empty;
-        private ModelData? ownSpringsFor;
-        private string[] ownSpringNames = [];
-        private IReadOnlyList<ModelSpring> ownSprings = [];
 
         private static Matrix4x4[] Identity(int count)
         {

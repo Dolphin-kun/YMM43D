@@ -2,13 +2,14 @@ using System.Numerics;
 using YMM43D.Commons;
 using YMM43D.Graphics.Models;
 using YMM43D.Project.Model;
+using YMM43D.Project.Tachie;
 using YukkuriMovieMaker.Project.Items;
 
 namespace YMM43D.PreviewTool
 {
     internal readonly record struct PreviewBone(
         IVideoItem Item,
-        Model3DParameter Parameter,
+        IBoneHost Parameter,
         FrameContext Time,
         int Index,
         string Name,
@@ -63,14 +64,11 @@ namespace YMM43D.PreviewTool
         public static IReadOnlyList<PreviewBone> Resolve(
             IVideoItem item, in FrameContext itemTime, in Matrix4x4 itemWorld)
         {
-            if (item is not ShapeItem { ShapeParameter: Model3DParameter parameter }
-                || parameter.Model is not { HasBones: true } model)
-            {
+            if (Posed(item, itemTime) is not { } found)
                 return [];
-            }
 
-            var pose = parameter.GetBoneFrames(model, itemTime);
-            var world = parameter.GetLocalMatrix(model, itemTime) * itemWorld;
+            var (parameter, model, pose, local) = found;
+            var world = local * itemWorld;
 
             var bones = new PreviewBone[model.Bones.Length];
             var positions = new Vector3[model.Bones.Length];
@@ -95,6 +93,40 @@ namespace YMM43D.PreviewTool
             }
 
             return bones;
+        }
+
+        private static (IBoneHost Host, ModelData Model, ModelPose.PoseFrames Pose, Matrix4x4 Local)? Posed(
+            IVideoItem item, in FrameContext itemTime)
+        {
+            if (item is ShapeItem { ShapeParameter: Model3DParameter parameter })
+            {
+                return parameter.Model is { HasBones: true } model
+                    ? (parameter, model, parameter.GetBoneFrames(model, itemTime),
+                        parameter.GetLocalMatrix(model, itemTime))
+                    : null;
+            }
+
+            if (item is not TachieItem
+                {
+                    Character.TachieCharacterParameter: Model3DCharacterParameter character,
+                    TachieItemParameter: Model3DItemParameter standing,
+                })
+            {
+                return null;
+            }
+
+            if (ModelLibrary.Find(character.File) is not { HasBones: true } shown)
+                return null;
+
+            var look = new TachieLook(shown, character, [], standing, null, TimeSpan.Zero, []);
+
+            return (
+                standing,
+                shown,
+                ModelPose.Compute(
+                    shown.Bones,
+                    BonePoses.Apply(shown, standing.Bones, itemTime, standing.Sample(shown, itemTime))),
+                look.GetLocalMatrix(shown, itemTime));
         }
 
         private static (Vector3 Tail, bool HasChildren)[] Tails(ModelBone[] bones, Vector3[] positions)

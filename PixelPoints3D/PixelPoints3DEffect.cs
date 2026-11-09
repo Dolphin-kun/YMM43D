@@ -77,7 +77,7 @@ namespace PixelPoints3D
         private bool isUnlit;
 
         [Display(GroupName = Shape, Name = "つや",
-            Description = "光が映り込んだ明るい点の強さ。0 でつやなし")]
+            Description = "光が映り込んだ明るい点の強さ")]
         [AnimationSlider("F0", "%", 0, 100)]
         [ShowPropertyEditorWhen(nameof(IsUnlit), false)]
         public Animation Gloss { get; } = new(0, 0, 1000);

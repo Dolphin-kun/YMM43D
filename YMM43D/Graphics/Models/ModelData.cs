@@ -77,7 +77,7 @@ namespace YMM43D.Graphics.Models
 
         public Matrix4x4 Root { get; } = root ?? Matrix4x4.Identity;
 
-        public bool HasBones => Bones.Length > 0 && Influences.Length == vertices.Length;
+        public bool HasBones => Bones.Length > 0 && Influences.Length == Vertices.Length;
 
         public ModelMorph[] Morphs { get; } = morphs ?? [];
 

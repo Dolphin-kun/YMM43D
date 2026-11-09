@@ -29,7 +29,7 @@ namespace YMM43D.Project.Model
 
     internal sealed class MotionSelector : ContentControl, IPropertyEditorControl
     {
-        private const string None = "（動かさない）";
+        private const string None = "動かさない";
 
         private readonly ComboBox list = new();
 
@@ -44,6 +44,13 @@ namespace YMM43D.Project.Model
         public MotionSelector()
         {
             Content = list;
+
+            list.VerticalContentAlignment = VerticalAlignment.Center;
+            list.ItemContainerStyle = new Style(typeof(ComboBoxItem))
+            {
+                Setters = { new Setter(Control.VerticalContentAlignmentProperty, VerticalAlignment.Center) },
+            };
+
 
             list.SelectionChanged += (_, _) =>
             {
@@ -85,7 +92,7 @@ namespace YMM43D.Project.Model
 
         private void OnOwnerPropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
-            if (e.PropertyName == property?.Name || e.PropertyName == nameof(Model3DParameter.File))
+            if (e.PropertyName == property?.Name || e.PropertyName is "File" or "ModelFile")
                 Fill();
         }
 
@@ -93,7 +100,7 @@ namespace YMM43D.Project.Model
         {
             filling = true;
 
-            var names = (target as Model3DParameter)?.Model?.Animations.Select(one => one.Name) ?? [];
+            var names = (target as IModelHost)?.Model?.Animations.Select(one => one.Name) ?? [];
             var chosen = property?.GetValue(target) as string ?? string.Empty;
 
             list.ItemsSource = new[] { None }.Concat(names).ToArray();
