@@ -24,8 +24,13 @@ struct PS_IN
     float  Fade     : TEXCOORD2;
 };
 
+#ifdef DEFORM_SUPPLIED
 float3 Deform(float3 local, float3 piece);
 float  DeformFade(float3 local, float3 piece);
+#else
+float3 Deform(float3 local, float3 piece) { return local; }
+float  DeformFade(float3 local, float3 piece) { return 1.0; }
+#endif
 
 static const float NormalStep = 1.0 / 512.0;
 

@@ -28,6 +28,18 @@ namespace YMM43D.Commons
 
         public static ScreenPlacement None => new(Vector2.Zero, 1f, 0f, 0f);
 
+        public ScreenPlacement Then(in ScreenPlacement parent)
+        {
+            var parentZoom = float.IsFinite(parent.Zoom) && parent.Zoom > 0f ? parent.Zoom : 1f;
+            var turn = Matrix3x2.CreateRotation(float.DegreesToRadians(parent.RotationDegrees));
+
+            return new ScreenPlacement(
+                parent.Offset + Vector2.Transform(Offset * parentZoom, turn),
+                Zoom * parentZoom,
+                RotationDegrees + parent.RotationDegrees,
+                parent.Depth + Depth * parentZoom);
+        }
+
         public float PerspectiveScale
         {
             get
@@ -40,6 +52,16 @@ namespace YMM43D.Commons
                 return remaining >= HostPerspectiveDistance / MaxPerspectiveScale
                     ? HostPerspectiveDistance / remaining
                     : MaxPerspectiveScale;
+            }
+        }
+
+        public float HostScale
+        {
+            get
+            {
+                var zoom = float.IsFinite(Zoom) && Zoom > 0f ? Zoom : 1f;
+
+                return zoom * PerspectiveScale;
             }
         }
 

@@ -38,14 +38,25 @@ namespace Extrusion3D
         [EditorBrowsable(EditorBrowsableState.Never)]
         public bool IsSolidSide => ExtrusionType == ExtrusionType.Solid;
 
-        [Display(GroupName = "立体化3D", Name = "陰影をつけない",
-            Description = "光源を無視して、元の色のまま塗ります")]
+        [Display(GroupName = "立体化3D", Name = "陰影", Description = "光源にしたがって陰影をつけます。切ると、元の色のまま塗ります")]
         [ToggleSlider]
-        public bool IsUnlit { get => isUnlit; set => Set(ref isUnlit, value); }
+        public bool IsLit { get => !IsUnlit; set => IsUnlit = !value; }
+
+        [Browsable(false)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public bool IsUnlit
+        {
+            get => isUnlit;
+            set
+            {
+                Set(ref isUnlit, value);
+                OnPropertyChanged(nameof(IsLit));
+            }
+        }
         private bool isUnlit;
 
         [Display(GroupName = "立体化3D", Name = "つや",
-            Description = "光が映り込んだ明るい点の強さ。0 でつやなし")]
+            Description = "光が映り込んだ明るい点の強さ")]
         [AnimationSlider("F0", "%", 0, 100)]
         [ShowPropertyEditorWhen(nameof(IsUnlit), false)]
         public Animation Gloss { get; } = new(0, 0, 1000);

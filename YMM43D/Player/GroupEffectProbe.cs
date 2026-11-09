@@ -4,6 +4,7 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using Vortice.Direct2D1;
 using YMM43D.Commons;
+using YMM43D.Plugin;
 using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Player.Video;
 using YukkuriMovieMaker.Plugin.Effects;
@@ -28,6 +29,11 @@ namespace YMM43D.Player
         private static readonly Dictionary<nint, ID2D1CommandList> blanks = [];
 
         private static readonly PrivateD2DContext privateContext = new();
+
+        [ThreadStatic]
+        private static int evaluating;
+
+        public static bool IsEvaluating => evaluating > 0;
 
         private sealed record Verdict(int Frame, long At, int Signature, bool Moves);
 
@@ -68,7 +74,7 @@ namespace YMM43D.Player
         {
             var effects = EnabledEffects(group);
 
-            if (effects.Count == 0)
+            if (effects.Count == 0 || IsEvaluating)
                 return false;
 
             var signature = Signature(effects);
@@ -82,11 +88,7 @@ namespace YMM43D.Player
                 return known.Moves;
             }
 
-            var moves = Evaluate(group, effects, devices, source, timelineFrame);
-
-            verdicts.AddOrUpdate(group, new Verdict(timelineFrame, now, signature, moves));
-
-            return moves;
+            return Evaluate(group, effects, devices, source, timelineFrame);
         }
 
         public static void Forget()
@@ -115,6 +117,16 @@ namespace YMM43D.Player
         {
             lock (gate)
             {
+                if (verdicts.TryGetValue(group, out var known)
+                    && known.Frame == timelineFrame
+                    && known.Signature == Signature(effects)
+                    && Environment.TickCount64 - known.At < VerdictLifetimeMs)
+                {
+                    return known.Moves;
+                }
+
+                evaluating++;
+
                 try
                 {
                     var description = new TimelineItemSourceDescription(
@@ -125,6 +137,12 @@ namespace YMM43D.Player
 
                     foreach (var effect in effects)
                     {
+                        if (effect is VideoEffect3DBase)
+                        {
+                            draw = Identity;
+                            continue;
+                        }
+
                         var processor = ProcessorFor(effect, devices);
 
                         processor.SetInput(image);
@@ -132,18 +150,25 @@ namespace YMM43D.Player
                         image = processor.Output;
                     }
 
-                    return Moves(draw);
+                    return Remember(group, effects, timelineFrame, Moves(draw));
                 }
                 catch (Exception error)
                 {
                     Trace.TraceWarning($"[YMM43D] グループ制御のエフェクトを確かめられませんでした。板として扱います。{error.Message}");
-                    return true;
+                    return Remember(group, effects, timelineFrame, true);
                 }
                 finally
                 {
+                    evaluating--;
                     Prune();
                 }
             }
+        }
+
+        private static bool Remember(GroupItem group, IReadOnlyList<IVideoEffect> effects, int timelineFrame, bool moves)
+        {
+            verdicts.AddOrUpdate(group, new Verdict(timelineFrame, Environment.TickCount64, Signature(effects), moves));
+            return moves;
         }
 
         private static IVideoEffectProcessor ProcessorFor(IVideoEffect effect, IGraphicsDevicesAndContext devices)

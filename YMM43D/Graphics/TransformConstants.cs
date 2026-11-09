@@ -36,6 +36,10 @@ namespace YMM43D.Graphics
 
         public Vector4 Surface;
 
+        public Vector4 Shading;
+
+        public Vector4 Ground;
+
         public static TransformConstants CreateUnlit(in Matrix4x4 worldViewProjection, float opacity) => new()
         {
             WorldViewProjection = Matrix4x4.Transpose(worldViewProjection),

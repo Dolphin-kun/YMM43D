@@ -1,3 +1,4 @@
+#define DEFORM_SUPPLIED
 #include "../../YMM43D/Shaders/Deform.hlsli"
 
 cbuffer CurveConstants : register(b1)

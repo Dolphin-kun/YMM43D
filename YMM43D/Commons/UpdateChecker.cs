@@ -17,7 +17,7 @@ namespace YMM43D.Commons
         private Task? checkTask;
         private string downloadUrl = string.Empty;
 
-        public string CurrentVersion => BuildInfo.Version;
+        public string CurrentVersion => typeof(UpdateChecker).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
 
         public string LatestVersion { get => latestVersion; private set => Set(ref latestVersion, value); }
         private string latestVersion = string.Empty;

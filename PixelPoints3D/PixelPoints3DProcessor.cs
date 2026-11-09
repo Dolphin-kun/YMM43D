@@ -19,8 +19,13 @@ namespace PixelPoints3D
 
         public override bool ScalesToInputSize => false;
 
+        protected override bool KeepsGroupMemberSolid => true;
+
         public override void Draw(in Render3DContext render, DrawContext3D item)
         {
+            if (TryDrawGroupMemberSolid(render, item))
+                return;
+
             var texture = item.Texture ?? GetTexture(render.Device);
             if (texture is null)
                 return;
@@ -39,7 +44,9 @@ namespace PixelPoints3D
             var size = GetGridSize(time, sizePixels);
             var world = GetLocalMatrix(time, offsetPixels + sizePixels / 2f) * item.World;
 
-            var shared = resources.Get(render.Device);
+            if (!resources.TryGet(render.Device, out var shared))
+                return;
+
             var grid = shared.GetGrid(size);
             var pipeline = shared.Pipeline;
 

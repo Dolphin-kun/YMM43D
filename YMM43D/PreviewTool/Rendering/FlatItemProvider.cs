@@ -25,7 +25,7 @@ namespace YMM43D.PreviewTool.Rendering
             if (item.Texture is null || item.DepthOnly)
                 return;
 
-            var constants = render.CreateConstants(item.World, item.Opacity);
+            var constants = render.CreateConstants(item.World, item.Opacity, unlit: true);
 
             var settings = item.ToDrawSettings(FaceCulling.None) with { SkipDepthWrite = true };
 

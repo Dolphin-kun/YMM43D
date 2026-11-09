@@ -20,6 +20,10 @@ namespace YMM43D.Commons
 
         SceneFog GetFog(in FrameContext itemTime);
 
+        Vector3? GetGround(in FrameContext itemTime) => null;
+
+        SceneMirror GetMirror(in FrameContext itemTime) => SceneMirror.None;
+
         int ShadowResolution => Graphics.ShadowMapArray.DefaultSize;
     }
 }

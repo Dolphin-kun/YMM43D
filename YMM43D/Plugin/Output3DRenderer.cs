@@ -1,9 +1,11 @@
 ﻿using System.Numerics;
+using Vortice.Mathematics;
 using Vortice.Direct2D1;
 using YMM43D.Commons;
 using YMM43D.Player;
 using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Player.Video;
+using YukkuriMovieMaker.Project.Items;
 
 namespace YMM43D.Plugin
 {
@@ -14,6 +16,8 @@ namespace YMM43D.Plugin
         private const int MaxRenderSize = 4096;
 
         private const float VisibleMargin = 0.5f;
+
+        private const float MaxDensity = 32f;
 
         private readonly Renderer3DTo2D renderer = new();
 
@@ -40,9 +44,10 @@ namespace YMM43D.Plugin
             var scene = SceneDepthCollector.Collect(description, self, devices);
             var lighting = SceneLightingResolver.Resolve(description);
 
-            var placedWorld = world * (placement ?? scene.OwnerPlacement);
+            var placedWorld = world * (placement ?? scene.OwnerPlacement) * scene.OwnerGroupTransform;
 
-            var screenPlacement = hostAppliesPlacement ? scene.OwnerScreenPlacement : ScreenPlacement.None;
+            var screenPlacement = (hostAppliesPlacement ? scene.OwnerScreenPlacement : ScreenPlacement.None)
+                .Then(scene.OwnerGroupScreen);
 
             var tangentToImage = ImageProjection.TangentToImage(pixelsPerTangent, screenPlacement);
 
@@ -51,16 +56,18 @@ namespace YMM43D.Plugin
                 screenPlacement,
                 VisibleMargin);
 
-            var area = RenderArea.Measure(
-                bounds, placedWorld, view, tangentToImage, visible,
-                SceneProjection.NearPlane, MaxRenderSize);
+            var area = CoversScreen(scene.Owner)
+                ? ScreenArea(description, screenPlacement)
+                : RenderArea.Measure(
+                    bounds, placedWorld, view, tangentToImage, visible,
+                    SceneProjection.NearPlane, MaxRenderSize);
 
             if (area is not { } target)
             {
                 return renderer.RenderEmpty(devices);
             }
 
-            imageReach = target.Reach;
+            imageReach = scene.OwnerGroupScreen.Depth == 0f ? target.Reach : 0f;
 
             var item = new DrawContext3D
             {
@@ -75,11 +82,41 @@ namespace YMM43D.Plugin
             return renderer.Render(
                 devices, target.Width, target.Height, view, projection, target.Origin, lighting,
                 scene.Casters,
+                CoversScreen(scene.Owner) ? new Color4(0f, 0f, 0f, 1f) : new Color4(0f, 0f, 0f, 0f),
                 render =>
                 {
                     DrawOccluders(render, scene.Occluders);
                     draw(render, item);
-                });
+                },
+                Density(screenPlacement.HostScale, target));
+        }
+
+        public static float Density(float hostScale, in RenderArea target)
+        {
+            if (!float.IsFinite(hostScale) || hostScale <= 1f)
+                return 1f;
+
+            var longest = Math.Max(target.Width, target.Height);
+
+            if (longest <= 0)
+                return 1f;
+
+            return Math.Clamp(MathF.Min(hostScale, MaxRenderSize / (float)longest), 1f, MaxDensity);
+        }
+
+        private static bool CoversScreen(IVideoItem? owner) => owner is EffectItem;
+
+        private static RenderArea? ScreenArea(TimelineItemSourceDescription description, in ScreenPlacement screenPlacement)
+        {
+            var screen = ImageArea.ForScreen(
+                new Vector2((float)description.ScreenSize.Width, (float)description.ScreenSize.Height),
+                screenPlacement,
+                0f);
+
+            var width = Math.Min((int)MathF.Ceiling(screen.Max.X - screen.Min.X), MaxRenderSize);
+            var height = Math.Min((int)MathF.Ceiling(screen.Max.Y - screen.Min.Y), MaxRenderSize);
+
+            return width > 0 && height > 0 ? new RenderArea(width, height, screen.Min) : null;
         }
 
         private static void DrawOccluders(
@@ -88,6 +125,12 @@ namespace YMM43D.Plugin
         {
             foreach (var occluder in occluders)
             {
+                if (occluder.Provider is I3DBounds bounded
+                    && render.IsOutside(bounded.GetLocalBounds(occluder.Time), occluder.World))
+                {
+                    continue;
+                }
+
                 var context = new DrawContext3D
                 {
                     World = occluder.World,
@@ -108,4 +151,5 @@ namespace YMM43D.Plugin
 
         public void Dispose() => renderer.Dispose();
     }
+
 }

@@ -38,10 +38,15 @@ namespace YMM43D.Plugin
             ? WorldScale.ToWorld(size.X)
             : 1f;
 
+        protected override bool KeepsGroupMemberSolid => true;
+
         public override void Draw(in Render3DContext render, DrawContext3D item)
         {
+            if (TryDrawGroupMemberSolid(render, item))
+                return;
+
             var texture = item.Texture ?? GetTexture(render.Device);
-            if (texture is null)
+            if (texture is null || !resources.TryGet(render.Device, out var shared))
                 return;
 
             var time = EffectDescription is { } description
@@ -53,7 +58,6 @@ namespace YMM43D.Plugin
             var scene = render.CreateConstants(world, item, IsUnlit, GetGloss(time));
             var constants = GetConstants(time);
 
-            var shared = resources.Get(render.Device);
             var settings = item.ToDrawSettings(FaceCulling.None, texture);
 
             shared.Pipeline.Draw(

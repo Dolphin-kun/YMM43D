@@ -6,10 +6,14 @@ using YukkuriMovieMaker.Player.Video;
 
 namespace YMM43D.Plugin
 {
-    public abstract class Shape3DSourceBase(IGraphicsDevicesAndContext devices) : IShapeSource2, I3DProvider, I3DBounds
+    public abstract class Shape3DSourceBase(IGraphicsDevicesAndContext devices)
+        : IShapeSource2, I3DProvider, I3DBounds, I3DAlive
     {
         private readonly Output3DRenderer renderer = new();
         private ID2D1Image? output;
+        private bool isDisposed;
+
+        public bool IsAlive => !isDisposed;
 
         protected IGraphicsDevicesAndContext Devices { get; } = devices;
 
@@ -39,10 +43,17 @@ namespace YMM43D.Plugin
                 out _,
                 self: this,
                 hostAppliesPlacement: true);
+
+            SceneRevision.Advance();
         }
+
+        internal Action? Disposed { get; set; }
 
         public virtual void Dispose()
         {
+            isDisposed = true;
+            Disposed?.Invoke();
+            Disposed = null;
             renderer.Dispose();
             GC.SuppressFinalize(this);
         }

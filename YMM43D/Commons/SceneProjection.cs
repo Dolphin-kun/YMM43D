@@ -34,6 +34,16 @@ namespace YMM43D.Commons
             => Matrix4x4.CreatePerspectiveFieldOfView(
                 GetFieldOfView(screenHeight, pixelsPerTangent), aspectRatio, NearPlane, FarPlane);
 
+        public static Matrix4x4 GetOrthographicMatrix(
+            float aspectRatio, float screenHeight, float pixelsPerTangent, float distance)
+        {
+            var reach = MathF.Max(distance, NearPlane);
+            var height = 2f * reach * MathF.Tan(GetFieldOfView(screenHeight, pixelsPerTangent) / 2f);
+            var width = height * MathF.Max(aspectRatio, 1e-4f);
+
+            return Matrix4x4.CreateOrthographic(width, height, NearPlane, FarPlane);
+        }
+
         public static float GetFieldOfView(float screenHeight, float pixelsPerTangent)
         {
             if (!float.IsFinite(screenHeight) || screenHeight <= 0f || pixelsPerTangent <= 0f)

@@ -16,8 +16,13 @@ namespace Extrusion3D
                     BoxMesh.CreateExtrusionBox(device),
                     new ExtrusionMaterial(device)));
 
+        protected override bool KeepsGroupMemberSolid => true;
+
         public override void Draw(in Render3DContext render, DrawContext3D item)
         {
+            if (TryDrawGroupMemberSolid(render, item))
+                return;
+
             var texture = item.Texture ?? GetTexture(render.Device);
             if (texture is null)
                 return;
@@ -43,8 +48,11 @@ namespace Extrusion3D
                 ExtrusionType = (int)effect.ExtrusionType,
             };
 
+            if (!pipelines.TryGet(render.Device, out var pipeline))
+                return;
+
             var settings = item.ToDrawSettings(FaceCulling.Front, texture) with { Blend = BlendMode.Normal };
-            pipelines.Get(render.Device).Draw(render.Context, scene, constants, settings);
+            pipeline.Draw(render.Context, scene, constants, settings);
         }
 
         private float GetThickness(in FrameContext time)

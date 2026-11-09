@@ -22,25 +22,52 @@ float LightFalloff(Light light, float3 world, out float3 toLight)
     return fade * cone * cone;
 }
 
-float3 ApplyLight(float3 color, float3 normal, float3 world)
+float3 AmbientOf(float3 normal)
 {
-    float3 worldDx = ddx(world);
-    float3 worldDy = ddy(world);
+    if (Ground.a <= 0.0)
+        return Ambient.rgb;
 
-    if (Unlit > 0.5 || dot(normal, normal) < 1e-8)
-        return color;
+    return lerp(Ground.rgb, Ambient.rgb, saturate(normal.y * 0.5 + 0.5));
+}
 
+float Tone(float level)
+{
+    if (ToonSteps < 2.0)
+        return level;
+
+    float steps = ToonSteps - 1.0;
+    float soft = max(ToonFeather, 0.002);
+
+    float scaled = saturate(level) * steps;
+    float stair = floor(scaled);
+    float edge = smoothstep(0.5 - soft, 0.5 + soft, scaled - stair);
+
+    return (stair + edge) / steps;
+}
+
+float3 FaceCamera(float3 normal, float3 world, out float3 toEye)
+{
     float3 n = normalize(normal);
-    float3 toEye = CameraPosition.xyz - world;
+    float3 offset = CameraPosition.xyz - world;
+    float distance = length(offset);
 
-    if (dot(n, toEye) < 0.0)
-        n = -n;
+    toEye = distance > 1e-6 ? offset / distance : n;
 
-    float eyeDistance = length(toEye);
-    toEye = eyeDistance > 1e-6 ? toEye / eyeDistance : n;
+    return dot(n, toEye) < 0.0 ? -n : n;
+}
 
-    float3 sum = Ambient.rgb;
-    float3 shine = float3(0.0, 0.0, 0.0);
+void GatherLight(
+    float3 n,
+    float3 world,
+    float3 worldDx,
+    float3 worldDy,
+    float3 toEye,
+    out float3 sum,
+    out float3 shine)
+{
+    sum = float3(0.0, 0.0, 0.0);
+    shine = float3(0.0, 0.0, 0.0);
+
     int count = (int)LightCount;
 
     for (int i = 0; i < count; i++)
@@ -53,25 +80,42 @@ float3 ApplyLight(float3 color, float3 normal, float3 world)
         if (light.Vector.w > 0.5)
             fade = LightFalloff(light, world, toLight);
 
-        float lambert = saturate(dot(n, toLight));
+        float lambert = saturate(dot(n, toLight) + ToonShift);
 
         if (lambert <= 0.0 || fade <= 0.0)
             continue;
 
-        float3 received = light.Color.rgb * fade * ShadowAt(light, world, worldDx, worldDy, n, lambert);
+        float shaded = Tone(lambert * ShadowAt(light, world, worldDx, worldDy, n, lambert));
+        float3 received = light.Color.rgb * fade;
 
-        sum += received * lambert;
+        sum += received * shaded;
 
         if (Gloss > 0.0)
         {
             float3 halfway = normalize(toLight + toEye);
             float normalization = (GlossPower + 8.0) / 8.0;
 
-            shine += received * lambert * normalization * pow(saturate(dot(n, halfway)), GlossPower);
+            shine += received * shaded * normalization * pow(saturate(dot(n, halfway)), GlossPower);
         }
     }
+}
 
-    return color * sum + shine * Gloss;
+float3 ApplyLight(float3 color, float3 normal, float3 world)
+{
+    float3 worldDx = ddx(world);
+    float3 worldDy = ddy(world);
+
+    if (Unlit > 0.5 || dot(normal, normal) < 1e-8)
+        return color;
+
+    float3 toEye;
+    float3 n = FaceCamera(normal, world, toEye);
+
+    float3 sum;
+    float3 shine;
+    GatherLight(n, world, worldDx, worldDy, toEye, sum, shine);
+
+    return color * (AmbientOf(n) + sum) + shine * Gloss;
 }
 
 float3 ApplyFog(float3 color, float3 world)

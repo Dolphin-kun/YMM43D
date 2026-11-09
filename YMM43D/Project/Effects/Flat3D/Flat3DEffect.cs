@@ -1,4 +1,6 @@
-﻿using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel;
+using System.Numerics;
+using System.ComponentModel.DataAnnotations;
 using YMM43D.Commons;
 using YMM43D.Plugin;
 using YukkuriMovieMaker.Commons;
@@ -11,7 +13,7 @@ using YukkuriMovieMaker.Plugin.Effects;
 namespace YMM43D.Project.Effects.Flat3D
 {
     [VideoEffect("3D空間に置く", ["3D"], [])]
-    public class Flat3DEffect : VideoEffect3DBase
+    public class Flat3DEffect : VideoEffect3DBase, ISceneRotation3D
     {
         private const string Group = "3D空間に置く";
 
@@ -29,14 +31,31 @@ namespace YMM43D.Project.Effects.Flat3D
         [AnimationSlider("F1", "°", -180, 180)]
         public Animation RotationZ { get; } = new(0, -100000, 100000);
 
-        [Display(GroupName = Group, Name = "陰影をつけない",
-            Description = "光源を無視して、元の絵のまま置きます", Order = 3)]
+        Matrix4x4 ISceneRotation3D.ToOrientation(float x, float y, float z)
+            => Rotation3D.ForObject(-x, -y, -z);
+
+        Vector3 ISceneRotation3D.ToAngles(in Matrix4x4 orientation)
+            => -Rotation3D.ToAngles(orientation);
+
+        [Display(GroupName = Group, Name = "陰影", Description = "光源にしたがって陰影をつけます。切ると、元の絵のまま置きます", Order = 3)]
         [ToggleSlider]
-        public bool IsUnlit { get => isUnlit; set => Set(ref isUnlit, value); }
+        public bool IsLit { get => !IsUnlit; set => IsUnlit = !value; }
+
+        [Browsable(false)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public bool IsUnlit
+        {
+            get => isUnlit;
+            set
+            {
+                Set(ref isUnlit, value);
+                OnPropertyChanged(nameof(IsLit));
+            }
+        }
         private bool isUnlit;
 
         [Display(GroupName = Group, Name = "つや",
-            Description = "光が映り込んだ明るい点の強さ。0 でつやなし", Order = 5)]
+            Description = "光が映り込んだ明るい点の強さ", Order = 5)]
         [AnimationSlider("F0", "%", 0, 100)]
         [ShowPropertyEditorWhen(nameof(IsUnlit), false)]
         public Animation Gloss { get; } = new(0, 0, 1000);
@@ -51,7 +70,7 @@ namespace YMM43D.Project.Effects.Flat3D
             => IsUnlit ? SurfaceGloss.None : SurfaceGloss.FromPercent(Gloss.GetFloat(time), GlossSharpness.GetFloat(time));
 
         [Display(GroupName = Group, Name = "他のものを隠す",
-            Description = "入れると板が奥行きを持ち、後ろにあるものを隠します。"
+            Description = "入れると板が奥行きを持ち、後ろにあるものを隠します"
                 + "同じ面に並べたり半透明にしたりすると、境目がちらつくことがあります",
             Order = 4)]
         [ToggleSlider]
