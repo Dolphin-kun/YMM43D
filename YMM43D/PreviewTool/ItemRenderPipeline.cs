@@ -1,7 +1,6 @@
 ﻿using System.Collections.Immutable;
 using System.Numerics;
 using Vortice.Direct2D1;
-using YMM43D.Player;
 using YMM43D.Commons;
 using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Player.Video;
@@ -11,8 +10,6 @@ using YukkuriMovieMaker.Project.Items;
 
 namespace YMM43D.PreviewTool
 {
-    internal readonly record struct ItemRenderResult(ID2D1Image? Image, DrawDescription Draw);
-
     internal sealed class ItemRenderPipeline : IDisposable
     {
         private readonly record struct SourcePart(ID2D1Image Image, Vector2 Offset);
@@ -46,7 +43,7 @@ namespace YMM43D.PreviewTool
             return RenderCore(item, time, environment, allParts, effects, provider, seed);
         }
 
-        private IReadOnlyList<ItemRenderResult> RenderCore(
+        private ItemRenderResult[] RenderCore(
             IVideoItem item,
             in FrameContext time,
             PreviewEnvironment environment,
@@ -58,8 +55,7 @@ namespace YMM43D.PreviewTool
             var scene = environment.Scene!;
             var sourceDescription = environment.SourceDescription!;
 
-            var description = new TimelineItemSourceDescription(
-                sourceDescription, time.Frame, time.Length, item.Layer);
+            var description = new TimelineItemSourceDescription(sourceDescription, time.Frame, time.Length, item.Layer);
 
             var parts = RenderSource(item, scene, environment, description);
 
@@ -90,7 +86,7 @@ namespace YMM43D.PreviewTool
             return results;
         }
 
-        private IReadOnlyList<SourcePart> RenderSource(
+        private List<SourcePart> RenderSource(
             IVideoItem item,
             Scene scene,
             PreviewEnvironment environment,
@@ -132,7 +128,7 @@ namespace YMM43D.PreviewTool
             }
             catch
             {
-                sourceRetryAt[item] = System.Environment.TickCount64 + RetryDelayMs;
+                sourceRetryAt[item] = Environment.TickCount64 + RetryDelayMs;
             }
 
             return [];
@@ -171,13 +167,13 @@ namespace YMM43D.PreviewTool
             catch
             {
                 ReleaseChain(key);
-                effectRetryAt[item] = System.Environment.TickCount64 + RetryDelayMs;
+                effectRetryAt[item] = Environment.TickCount64 + RetryDelayMs;
                 return new ItemRenderResult(sourceImage, seed);
             }
         }
 
         private static bool IsWaiting(Dictionary<IVideoItem, long> retryAt, IVideoItem item)
-            => retryAt.TryGetValue(item, out var at) && System.Environment.TickCount64 < at;
+            => retryAt.TryGetValue(item, out var at) && Environment.TickCount64 < at;
 
         public void RetainOnly(IReadOnlySet<IVideoItem> aliveItems)
         {
@@ -264,8 +260,7 @@ namespace YMM43D.PreviewTool
                 return true;
             }
 
-            public ItemRenderResult Apply(
-                ID2D1Image input, TimelineItemSourceDescription description, DrawDescription seed, int part, int partCount)
+            public ItemRenderResult Apply(ID2D1Image input, TimelineItemSourceDescription description, DrawDescription seed, int part, int partCount)
             {
                 var draw = seed;
                 var image = input;

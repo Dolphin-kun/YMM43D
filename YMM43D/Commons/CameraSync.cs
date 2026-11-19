@@ -1,12 +1,7 @@
-using YukkuriMovieMaker.Commons;
+﻿using YukkuriMovieMaker.Commons;
 
 namespace YMM43D.Commons
 {
-    public interface ICameraSync
-    {
-        void TouchCameraSync();
-    }
-
     public sealed class CameraSync : ICameraSync
     {
         private const double Min = -1000000;

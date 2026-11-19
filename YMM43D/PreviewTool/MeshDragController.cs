@@ -9,14 +9,13 @@ namespace YMM43D.PreviewTool
     {
         private Shape3DParameter? parameter;
         private MeshTopology? mesh;
-        private int[] chosen = [];
-        private Vector3[] startPoints = [];
+        private MeshTransformer? transformer;
+        private MeshSnapper? snapper;
+        private MeshSelection? selection;
+        private Matrix4x4 toWorld;
+        private Matrix4x4 orientation = Matrix4x4.Identity;
 
-        private Matrix4x4 toLocal = Matrix4x4.Identity;
-        private Vector3 pivotLocal;
         private Vector3 pivotWorld;
-        private GizmoHandle handle;
-
         private Vector3 axis;
         private float axisPosition;
         private Vector3 planeNormal;
@@ -37,30 +36,47 @@ namespace YMM43D.PreviewTool
 
         private Vector3[] normals = [];
         private float appliedSwell;
+        private Matrix4x4 toLocal;
 
         public bool IsDragging => parameter is not null;
 
-        public GizmoHandle Handle => handle;
+        public GizmoHandle Handle { get; private set; }
+
+        public SnapTargets Snapped { get; private set; }
+
+        public ProportionalEdit? Proportional => transformer?.Proportional;
 
         public bool Begin(
             in MeshEditTarget target,
-            IReadOnlyCollection<int> selection,
+            MeshSelection chosen,
             in TransformGizmo gizmo,
             GizmoHandle grabbed,
             in PickRay ray,
-            in Vector3 viewDirection)
-            => Start(target, selection, gizmo, grabbed, ray, viewDirection);
-
-        public bool BeginInflate(
-            in MeshEditTarget target,
-            IReadOnlyCollection<int> selection,
-            in Vector3 handle,
-            in PickRay ray)
+            in Vector3 viewDirection,
+            PivotPoint pivot,
+            in Vector3 cursor,
+            ProportionalEdit? proportional,
+            MeshSnapper? snaps)
         {
-            if (!Start(target, selection, new TransformGizmo(handle, 1f, Matrix4x4.Identity), GizmoHandle.Inflate, ray, Vector3.Zero))
+            if (chosen.IsEmpty)
                 return false;
 
-            pivotWorld = Vector3.Transform(mesh!.Middle(chosen), target.ToWorld);
+            snapper = snaps;
+
+            return Start(target, chosen, pivot, cursor, proportional, gizmo, grabbed, ray, viewDirection);
+        }
+
+        public bool BeginInflate(in MeshEditTarget target, MeshSelection chosen, in Vector3 handle, in PickRay ray, ProportionalEdit? proportional)
+        {
+            if (chosen.IsEmpty)
+                return false;
+
+            var origin = MeshPivot.Median(target.Mesh, target.ToWorld, chosen.Vertices);
+
+            if (!Start(target, chosen, PivotPoint.Median, origin, proportional, new TransformGizmo(handle, 1f, Matrix4x4.Identity), GizmoHandle.Inflate, ray, Vector3.Zero))
+                return false;
+
+            pivotWorld = origin;
             axis = handle - pivotWorld;
 
             if (axis.LengthSquared() < 1e-12f
@@ -70,30 +86,36 @@ namespace YMM43D.PreviewTool
             }
 
             axisPosition = at;
-            normals = mesh.PointNormals();
+            normals = mesh!.PointNormals();
             appliedSwell = 0f;
 
             return true;
         }
 
-        public bool BeginWhole(
-            in MeshEditTarget target,
-            in TransformGizmo gizmo,
-            GizmoHandle grabbed,
-            in PickRay ray,
-            in Vector3 viewDirection)
-            => Start(target, null, gizmo, grabbed, ray, viewDirection);
+        public bool BeginWhole(in MeshEditTarget target, in TransformGizmo gizmo, GizmoHandle grabbed, in PickRay ray, in Vector3 viewDirection)
+        {
+            var everything = new MeshSelection();
+
+            everything.Bind(target.Parameter.ShownMesh());
+            everything.SelectAll();
+
+            snapper = null;
+
+            return Start(target, everything, PivotPoint.Cursor, Vector3.Transform(Vector3.Zero, target.ToWorld), null, gizmo, grabbed, ray, viewDirection);
+        }
 
         private bool Start(
             in MeshEditTarget target,
-            IReadOnlyCollection<int>? selection,
+            MeshSelection chosen,
+            PivotPoint pivot,
+            in Vector3 cursor,
+            ProportionalEdit? proportional,
             in TransformGizmo gizmo,
             GizmoHandle grabbed,
             in PickRay ray,
             in Vector3 viewDirection)
         {
-            if (selection is { Count: 0 }
-                || grabbed is GizmoHandle.None
+            if (grabbed is GizmoHandle.None
                 || target.Item.IsLocked
                 || !Matrix4x4.Invert(target.ToWorld, out toLocal))
             {
@@ -102,19 +124,20 @@ namespace YMM43D.PreviewTool
 
             var built = target.Parameter.ShownMesh();
 
-            chosen = selection is null
-                ? [.. Enumerable.Range(0, built.Points.Length)]
-                : [.. selection.Where(one => one >= 0 && one < built.Points.Length)];
+            chosen.Bind(built);
 
-            if (chosen.Length == 0)
+            if (chosen.IsEmpty)
                 return false;
 
             parameter = target.Parameter;
             mesh = built;
-            startPoints = [.. built.Points];
-            pivotLocal = selection is null ? Vector3.Zero : built.Middle(chosen);
+            selection = chosen;
+            toWorld = target.ToWorld;
+            orientation = gizmo.Orientation;
+            transformer = new MeshTransformer(built, target.ToWorld, chosen, pivot, cursor, proportional);
             pivotWorld = gizmo.Origin;
-            handle = grabbed;
+            Handle = grabbed;
+            Snapped = SnapTargets.None;
 
             rawShift = appliedShift = Vector3.Zero;
             rawTurn = appliedTurn = 0f;
@@ -175,7 +198,7 @@ namespace YMM43D.PreviewTool
                 return true;
             }
 
-            handle = GizmoHandle.Free;
+            Handle = GizmoHandle.Free;
             planeNormal = -viewDirection;
             anchor = ray.IntersectPlane(pivotWorld, planeNormal) ?? pivotWorld;
 
@@ -189,38 +212,46 @@ namespace YMM43D.PreviewTool
             return false;
         }
 
-        public bool Update(in PickRay ray, in SnapGrid snap)
+        public bool Update(in PickRay ray, in Vector2 screen, in ViewSnapshot view, in SnapSettings snap)
         {
-            if (parameter is not { } target || mesh is not { } built)
+            if (parameter is not { } target || mesh is not { } built || transformer is null)
                 return false;
 
-            if (handle is GizmoHandle.Inflate)
+            if (Handle is GizmoHandle.Inflate)
                 return Swell(ray, snap, target, built);
 
-            if (TransformGizmo.IsTurn(handle))
+            if (TransformGizmo.IsTurn(Handle))
                 return Turn(ray, snap, target, built);
 
-            if (TransformGizmo.IsScale(handle) || handle is GizmoHandle.ScaleAll)
+            if (TransformGizmo.IsScale(Handle) || Handle is GizmoHandle.ScaleAll)
                 return Resize(ray, snap, target, built);
 
-            return Shift(ray, snap, target, built);
+            return Shift(ray, screen, view, snap, target, built);
+        }
+
+        public void Widen(float ratio)
+        {
+            if (transformer?.Proportional is { } shaped)
+                transformer.Proportional = shaped with { Radius = MathF.Max(shaped.Radius * ratio, ProportionalEdit.LeastRadius) };
         }
 
         public void End()
         {
             parameter = null;
             mesh = null;
-            chosen = [];
-            startPoints = [];
+            transformer = null;
+            snapper = null;
+            selection = null;
             normals = [];
-            handle = GizmoHandle.None;
+            Handle = GizmoHandle.None;
+            Snapped = SnapTargets.None;
         }
 
-        private bool Shift(in PickRay ray, in SnapGrid snap, Shape3DParameter target, MeshTopology built)
+        private bool Shift(in PickRay ray, in Vector2 screen, in ViewSnapshot view, in SnapSettings snap, Shape3DParameter target, MeshTopology built)
         {
             Vector3 step;
 
-            if (TransformGizmo.IsAxis(handle))
+            if (TransformGizmo.IsAxis(Handle))
             {
                 if (TransformGizmo.ClosestOnAxis(ray, pivotWorld, axis) is not { } at)
                     return false;
@@ -239,18 +270,70 @@ namespace YMM43D.PreviewTool
 
             rawShift += step;
 
-            var wanted = snap.SnapShift(pivotWorld, rawShift);
+            Snapped = SnapTargets.None;
+
+            Vector3 wanted;
+
+            if (snap.SnapsToElements && snapper?.Find(screen, view, snap.Targets) is { } found)
+            {
+                Snapped = found.Kind;
+                wanted = Constrain(found.Point - BaseFor(snap.Base, found.Point));
+            }
+            else
+            {
+                wanted = snap.SnapsToIncrement ? Constrain(snap.Grid.SnapShift(pivotWorld, rawShift)) : rawShift;
+            }
 
             if (wanted == appliedShift)
                 return false;
 
             appliedShift = wanted;
 
-            return Apply(
-                target, built, Matrix4x4.CreateTranslation(Vector3.TransformNormal(appliedShift, toLocal)));
+            return Store(target, built, transformer!.Translate(appliedShift));
         }
 
-        private bool Turn(in PickRay ray, in SnapGrid snap, Shape3DParameter target, MeshTopology built)
+        private Vector3 Constrain(in Vector3 shift)
+        {
+            if (TransformGizmo.IsAxis(Handle))
+                return axis * Vector3.Dot(shift, axis);
+
+            return shift - planeNormal * Vector3.Dot(shift, planeNormal);
+        }
+
+        private Vector3 BaseFor(SnapBase wanted, in Vector3 target)
+        {
+            if (selection is null || transformer is null)
+                return pivotWorld;
+
+            switch (wanted)
+            {
+                case SnapBase.Active:
+                    return MeshPivot.ActiveCenter(transformer.Mesh, toWorld, selection) ?? pivotWorld;
+
+                case SnapBase.Closest:
+                    var nearest = float.MaxValue;
+                    var found = pivotWorld;
+
+                    foreach (var vertex in selection.Vertices)
+                    {
+                        var placed = transformer.Placed[vertex];
+                        var distance = Vector3.DistanceSquared(placed, target);
+
+                        if (distance >= nearest)
+                            continue;
+
+                        nearest = distance;
+                        found = placed;
+                    }
+
+                    return found;
+
+                default:
+                    return pivotWorld;
+            }
+        }
+
+        private bool Turn(in PickRay ray, in SnapSettings snap, Shape3DParameter target, MeshTopology built)
         {
             var angle = GizmoTurn.Measure(ray, pivotWorld, axis, turnRight, turnUp);
 
@@ -263,26 +346,21 @@ namespace YMM43D.PreviewTool
             lastAngle = angle;
             rawTurn += float.RadiansToDegrees(step);
 
-            var wanted = snap.SnapTurn(0f, rawTurn);
+            var wanted = snap.SnapsToIncrement ? snap.Grid.SnapTurn(0f, rawTurn) : rawTurn;
 
             if (wanted == appliedTurn)
                 return false;
 
             appliedTurn = wanted;
 
-            var change = Matrix4x4.CreateTranslation(-pivotLocal)
-                * Matrix4x4.CreateFromAxisAngle(
-                      TransformGizmo.TurnDirection(handle), float.DegreesToRadians(appliedTurn))
-                * Matrix4x4.CreateTranslation(pivotLocal);
-
-            return Apply(target, built, change);
+            return Store(target, built, transformer!.Rotate(axis, float.DegreesToRadians(appliedTurn)));
         }
 
-        private bool Resize(in PickRay ray, in SnapGrid snap, Shape3DParameter target, MeshTopology built)
+        private bool Resize(in PickRay ray, in SnapSettings snap, Shape3DParameter target, MeshTopology built)
         {
             float ratio;
 
-            if (handle is GizmoHandle.ScaleAll)
+            if (Handle is GizmoHandle.ScaleAll)
             {
                 if (ray.IntersectPlane(pivotWorld, planeNormal) is not { } hit)
                     return false;
@@ -297,14 +375,15 @@ namespace YMM43D.PreviewTool
                     return false;
             }
 
-            ratio = snap.SnapScale(100f, ratio);
+            if (snap.SnapsToIncrement)
+                ratio = snap.Grid.SnapScale(100f, ratio);
 
             if (ratio == appliedRatio)
                 return false;
 
             appliedRatio = ratio;
 
-            var scale = handle switch
+            var scale = Handle switch
             {
                 GizmoHandle.ScaleX => new Vector3(ratio, 1f, 1f),
                 GizmoHandle.ScaleY => new Vector3(1f, ratio, 1f),
@@ -312,19 +391,15 @@ namespace YMM43D.PreviewTool
                 _ => new Vector3(ratio),
             };
 
-            var change = Matrix4x4.CreateTranslation(-pivotLocal)
-                * Matrix4x4.CreateScale(scale)
-                * Matrix4x4.CreateTranslation(pivotLocal);
-
-            return Apply(target, built, change);
+            return Store(target, built, transformer!.Scale(scale, orientation));
         }
 
-        private bool Swell(in PickRay ray, in SnapGrid snap, Shape3DParameter target, MeshTopology built)
+        private bool Swell(in PickRay ray, in SnapSettings snap, Shape3DParameter target, MeshTopology built)
         {
             if (TransformGizmo.ClosestOnAxis(ray, pivotWorld, axis) is not { } at)
                 return false;
 
-            var reach = snap.SnapLength(at - axisPosition);
+            var reach = snap.SnapsToIncrement ? snap.Grid.SnapLength(at - axisPosition) : at - axisPosition;
             var amount = Vector3.TransformNormal(axis * reach, toLocal).Length() * MathF.Sign(reach);
 
             if (amount == appliedSwell)
@@ -332,22 +407,7 @@ namespace YMM43D.PreviewTool
 
             appliedSwell = amount;
 
-            var points = (Vector3[])startPoints.Clone();
-
-            foreach (var index in chosen)
-                points[index] = startPoints[index] + normals[index] * amount;
-
-            return Store(target, built, points);
-        }
-
-        private bool Apply(Shape3DParameter target, MeshTopology built, in Matrix4x4 change)
-        {
-            var points = (Vector3[])startPoints.Clone();
-
-            foreach (var index in chosen)
-                points[index] = Vector3.Transform(startPoints[index], change);
-
-            return Store(target, built, points);
+            return Store(target, built, transformer!.Push(normals, amount));
         }
 
         private bool Store(Shape3DParameter target, MeshTopology built, Vector3[] points)

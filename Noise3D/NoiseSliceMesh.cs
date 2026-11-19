@@ -49,8 +49,7 @@ namespace Noise3D
             order = new int[sliceCount];
             distances = new float[sliceCount];
 
-            VertexBuffer = device.CreateBuffer(new BufferDescription(
-                vertices.Length * NoiseVertex.Stride, BindFlags.VertexBuffer, ResourceUsage.Default));
+            VertexBuffer = device.CreateBuffer(new BufferDescription(vertices.Length * NoiseVertex.Stride, BindFlags.VertexBuffer, ResourceUsage.Default));
         }
 
         public static float SlicePosition(int index, int count) => -0.5f + (index + 0.5f) / count;

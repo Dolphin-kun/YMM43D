@@ -7,7 +7,7 @@ namespace Noise3D
         [Display(Name = "バリュー", Description = "格子点の値をなめらかにつないだノイズ")]
         Value,
 
-        [Display(Name = "ランダム", Description = "細かい粒がばらばらに並ぶノイズ。フラクタルは使いません")]
+        [Display(Name = "ランダム", Description = "細かい粒がばらばらに並ぶノイズで、フラクタルは使いません")]
         Random,
 
         [Display(Name = "ブロック", Description = "立方体のかたまりごとに濃さが変わるノイズ")]
@@ -27,17 +27,5 @@ namespace Noise3D
 
         [Display(Name = "マーブル", Description = "しま模様をノイズで歪ませたマーブル模様")]
         Marble,
-    }
-
-    public enum Noise3DFractalMode
-    {
-        [Display(Name = "通常")]
-        Normal,
-
-        [Display(Name = "乱流")]
-        Turbulence,
-
-        [Display(Name = "リッジ")]
-        Ridged,
     }
 }

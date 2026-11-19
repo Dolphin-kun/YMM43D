@@ -1,6 +1,4 @@
-﻿using System.Numerics;
-using Vortice.Direct3D11;
-
+﻿
 namespace YMM43D.Commons
 {
     public interface I3DProvider
@@ -9,52 +7,4 @@ namespace YMM43D.Commons
 
         void Draw(in Render3DContext render, DrawContext3D item);
     }
-
-    public interface I3DBounds
-    {
-        WorldBounds GetLocalBounds(in FrameContext itemTime);
-    }
-
-    public interface I3DTextureProvider
-    {
-        ID3D11ShaderResourceView? GetTexture(ID3D11Device device);
-    }
-
-    public interface I3DSizeProvider
-    {
-        bool TryGetSize(out Vector2 size, out Vector2 offset);
-
-        bool ScalesToInputSize => true;
-    }
-
-    public interface I3DLocalTransform
-    {
-        bool TryGetLocalMatrix(out Matrix4x4 matrix);
-    }
-
-    public interface I3DInstances
-    {
-        IReadOnlyList<I3DProvider> GetInstances();
-    }
-
-    public interface I3DPlacedInstance
-    {
-        bool TryGetPlacement(out Matrix4x4 world);
-    }
-
-    public interface I3DAlive
-    {
-        bool IsAlive { get; }
-    }
-
-    public static class Live3D
-    {
-        public static I3DProvider? KeepLast(I3DProvider? found, I3DProvider? last)
-            => found ?? (last is I3DAlive { IsAlive: false } ? null : last);
-
-        public static bool IsAlive(object? provider)
-            => provider is not null && provider is not I3DAlive { IsAlive: false };
-    }
-
-    public interface I3DVideoEffect : I3DProvider, I3DTextureProvider;
 }

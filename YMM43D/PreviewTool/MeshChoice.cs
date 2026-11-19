@@ -2,8 +2,7 @@ namespace YMM43D.PreviewTool
 {
     public static class MeshChoice
     {
-        public static bool Drops(IReadOnlySet<int> selection, IReadOnlyCollection<int> wanted)
-            => wanted.Count > 0 && wanted.All(selection.Contains);
+        public static bool Drops(IReadOnlySet<int> selection, IReadOnlyCollection<int> wanted) => wanted.Count > 0 && wanted.All(selection.Contains);
 
         public static void Apply(HashSet<int> selection, IReadOnlyCollection<int> wanted, bool extend)
         {

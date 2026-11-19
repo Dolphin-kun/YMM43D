@@ -5,11 +5,8 @@ namespace YMM43D.Project.Tachie
     internal sealed class MouthMotion
     {
         public const int Slots = 6;
-
         private const float CloseRatio = 2f;
-
         private const int MaxStep = 4;
-
         private const double LeastOpen = 0.5;
 
         private readonly float[] weights = new float[Slots];

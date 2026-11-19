@@ -10,25 +10,21 @@ namespace YMM43D.Commons
 
         public static float ToPixels(float units) => units * PixelsPerUnit;
 
-        public static Vector3 ToWorldPosition(float x, float y, float z)
-            => new(ToWorld(x), -ToWorld(y), ToWorld(z));
+        public static Vector3 ToWorldPosition(float x, float y, float z) => new(ToWorld(x), -ToWorld(y), ToWorld(z));
 
-        public static Vector3 ToPixelOffset(in Vector3 shift)
-            => new(ToPixels(shift.X), -ToPixels(shift.Y), ToPixels(shift.Z));
+        public static Vector3 ToPixelOffset(in Vector3 shift) => new(ToPixels(shift.X), -ToPixels(shift.Y), ToPixels(shift.Z));
 
         public static Matrix4x4 CreateSizeMatrix(Vector2 sizeInPixels, Vector2 centerInPixels)
             => CreateSizeMatrix(sizeInPixels, centerInPixels, Matrix4x4.Identity);
 
-        public static Matrix4x4 CreateSizeMatrix(
-            Vector2 sizeInPixels, Vector2 centerInPixels, in Matrix4x4 rotation)
+        public static Matrix4x4 CreateSizeMatrix(Vector2 sizeInPixels, Vector2 centerInPixels, in Matrix4x4 rotation)
         {
             if (sizeInPixels.X <= 0 || sizeInPixels.Y <= 0)
                 return rotation;
 
             return Matrix4x4.CreateScale(ToWorld(sizeInPixels.X), ToWorld(sizeInPixels.Y), 1f)
                  * rotation
-                 * Matrix4x4.CreateTranslation(
-                       ToWorld(centerInPixels.X), -ToWorld(centerInPixels.Y), 0f);
+                 * Matrix4x4.CreateTranslation(ToWorld(centerInPixels.X), -ToWorld(centerInPixels.Y), 0f);
         }
 
         public static Matrix4x4 ToYUpMatrix(Matrix4x4 matrix)

@@ -1,14 +1,8 @@
-using System.Numerics;
+﻿using System.Numerics;
 
 namespace YMM43D.Graphics.Meshes
 {
-    public readonly record struct SurfaceFace(int[] Indices, int Group, bool IsSmooth);
-
-    public sealed record SurfaceGeometry(
-        Vector3[] Vertices,
-        Vector3[] Normals,
-        SurfaceFace[] Faces,
-        int GroupCount)
+    public sealed record SurfaceGeometry(Vector3[] Vertices, Vector3[] Normals, SurfaceFace[] Faces, int GroupCount)
     {
         public static SurfaceGeometry Faceted(Vector3[] vertices, int[][] faces)
         {
@@ -27,9 +21,7 @@ namespace YMM43D.Graphics.Meshes
 
             foreach (var vertex in Vertices)
             {
-                extent = MathF.Max(
-                    extent,
-                    MathF.Max(MathF.Abs(vertex.X), MathF.Max(MathF.Abs(vertex.Y), MathF.Abs(vertex.Z))));
+                extent = MathF.Max(extent, MathF.Max(MathF.Abs(vertex.X), MathF.Max(MathF.Abs(vertex.Y), MathF.Abs(vertex.Z))));
             }
 
             if (extent <= 0f || MathF.Abs(extent - 0.5f) < 1e-6f)
@@ -59,9 +51,7 @@ namespace YMM43D.Graphics.Meshes
         {
             var indices = face.Indices;
 
-            var turn = Vector3.Cross(
-                Vertices[indices[1]] - Vertices[indices[0]],
-                Vertices[indices[2]] - Vertices[indices[0]]);
+            var turn = Vector3.Cross(Vertices[indices[1]] - Vertices[indices[0]], Vertices[indices[2]] - Vertices[indices[0]]);
 
             var outward = Vector3.Zero;
 

@@ -8,7 +8,7 @@ namespace YMM43D.Commons
 {
     public sealed class UpdateChecker : Bindable
     {
-        private const string PostId = "1789299160303180";
+        internal const string PostId = "1789299160303180";
 
         private static readonly HttpClient httpClient = new() { Timeout = TimeSpan.FromSeconds(10) };
 
@@ -17,24 +17,15 @@ namespace YMM43D.Commons
         private Task? checkTask;
         private string downloadUrl = string.Empty;
 
-        public string CurrentVersion => typeof(UpdateChecker).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
+        public static string CurrentVersion { get; } = typeof(UpdateChecker).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
 
-        public string LatestVersion { get => latestVersion; private set => Set(ref latestVersion, value); }
-        private string latestVersion = string.Empty;
+        public string LatestVersion { get; private set => Set(ref field, value); } = string.Empty;
 
-        public bool HasUpdate
-        {
-            get => hasUpdate;
-            private set
-            {
-                if (Set(ref hasUpdate, value))
-                    OnPropertyChanged(nameof(ShowsNotice));
-            }
-        }
-        private bool hasUpdate;
+        public bool HasUpdate { get; private set => Set(ref field, value, nameof(HasUpdate), nameof(ShowsNotice)); }
 
-        public bool ShowsNotice => HasUpdate && !isDismissed;
-        private bool isDismissed;
+        public bool ShowsNotice => HasUpdate && !IsDismissed;
+
+        private bool IsDismissed { get; set => Set(ref field, value, nameof(IsDismissed), nameof(ShowsNotice)); }
 
         public ICommand OpenDownloadPageCommand { get; }
 
@@ -43,11 +34,7 @@ namespace YMM43D.Commons
         private UpdateChecker()
         {
             OpenDownloadPageCommand = new ActionCommand(_ => HasUpdate, _ => OpenDownloadPage());
-            DismissCommand = new ActionCommand(_ => true, _ =>
-            {
-                isDismissed = true;
-                OnPropertyChanged(nameof(ShowsNotice));
-            });
+            DismissCommand = new ActionCommand(_ => true, _ => IsDismissed = true);
         }
 
         public void EnsureChecked()
@@ -57,13 +44,9 @@ namespace YMM43D.Commons
 
         private async Task CheckAsync()
         {
-            if (string.IsNullOrEmpty(PostId))
-                return;
-
             try
             {
-                using var request = new HttpRequestMessage(
-                    HttpMethod.Get, $"https://ymm4-info.net/api/plugin/{PostId}/version");
+                using var request = new HttpRequestMessage(HttpMethod.Get, $"https://ymm4-info.net/api/plugin/{PostId}/version");
                 request.Headers.Add("x-ymm4-plugin-check", "true");
 
                 using var response = await httpClient.SendAsync(request);

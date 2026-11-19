@@ -1,0 +1,216 @@
+<UserControl x:Class="YMM43D.Controls.MaterialSlotsEditor"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:local="clr-namespace:YMM43D.Controls"
+             xmlns:s="clr-namespace:YMM43D.Project.Shape"
+             xmlns:c="clr-namespace:YukkuriMovieMaker.Controls;assembly=YukkuriMovieMaker.Plugin"
+             xmlns:icons="clr-namespace:YukkuriMovieMaker.Resources.Icons;assembly=YukkuriMovieMaker.Plugin"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance local:MaterialSlotsEditorViewModel}"
+             d:DesignWidth="300">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="VisibleWhenTrue"/>
+
+        <Style x:Key="Icon" TargetType="Path">
+            <Setter Property="Stretch" Value="Uniform"/>
+            <Setter Property="Width" Value="10"/>
+            <Setter Property="Height" Value="10"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Fill" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+        </Style>
+
+        <Style x:Key="SmallButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Width" Value="24"/>
+            <Setter Property="Height" Value="24"/>
+            <Setter Property="Margin" Value="0"/>
+        </Style>
+
+        <Style x:Key="RowLabel" TargetType="Label">
+            <Setter Property="Margin" Value="6,0"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <DataTemplate DataType="{x:Type s:ShapeMaterial}">
+            <StackPanel>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="80"/>
+                        <ColumnDefinition/>
+                    </Grid.ColumnDefinitions>
+                    <Label Style="{StaticResource RowLabel}" Content="名前"/>
+                    <TextBox Grid.Column="1" VerticalContentAlignment="Center" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" GotKeyboardFocus="Text_GotKeyboardFocus" LostKeyboardFocus="Text_LostKeyboardFocus"/>
+                </Grid>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="80"/>
+                        <ColumnDefinition/>
+                    </Grid.ColumnDefinitions>
+                    <Label Style="{StaticResource RowLabel}" Content="色"/>
+                    <c:ColorPicker Grid.Column="1" Value="{Binding Color, Mode=TwoWay}" BeginEdit="Slider_BeginEdit" EndEdit="Slider_EndEdit"/>
+                </Grid>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="80"/>
+                        <ColumnDefinition/>
+                    </Grid.ColumnDefinitions>
+                    <Label Style="{StaticResource RowLabel}" Content="画像"/>
+                    <c:FileSelector Grid.Column="1" Value="{Binding Image, Mode=TwoWay}" FileGroup="Texture" FileType="画像" AllowEmptyFilePath="True" BeginEdit="Slider_BeginEdit" EndEdit="Slider_EndEdit"/>
+                </Grid>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="80"/>
+                        <ColumnDefinition/>
+                    </Grid.ColumnDefinitions>
+                    <Label Style="{StaticResource RowLabel}" Content="画像の幅"/>
+                    <c:AnimationSlider Grid.Column="1" Animation="{Binding ImageScaleX}" StringFormat="F1" Unit="%" DefaultMin="0" DefaultMax="400" BeginEdit="Slider_BeginEdit" EndEdit="Slider_EndEdit"/>
+                </Grid>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="80"/>
+                        <ColumnDefinition/>
+                    </Grid.ColumnDefinitions>
+                    <Label Style="{StaticResource RowLabel}" Content="画像の高さ"/>
+                    <c:AnimationSlider Grid.Column="1" Animation="{Binding ImageScaleY}" StringFormat="F1" Unit="%" DefaultMin="0" DefaultMax="400" BeginEdit="Slider_BeginEdit" EndEdit="Slider_EndEdit"/>
+                </Grid>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="80"/>
+                        <ColumnDefinition/>
+                    </Grid.ColumnDefinitions>
+                    <Label Style="{StaticResource RowLabel}" Content="画像の X"/>
+                    <c:AnimationSlider Grid.Column="1" Animation="{Binding ImageOffsetX}" StringFormat="F1" Unit="%" DefaultMin="-100" DefaultMax="100" BeginEdit="Slider_BeginEdit" EndEdit="Slider_EndEdit"/>
+                </Grid>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="80"/>
+                        <ColumnDefinition/>
+                    </Grid.ColumnDefinitions>
+                    <Label Style="{StaticResource RowLabel}" Content="画像の Y"/>
+                    <c:AnimationSlider Grid.Column="1" Animation="{Binding ImageOffsetY}" StringFormat="F1" Unit="%" DefaultMin="-100" DefaultMax="100" BeginEdit="Slider_BeginEdit" EndEdit="Slider_EndEdit"/>
+                </Grid>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="80"/>
+                        <ColumnDefinition/>
+                    </Grid.ColumnDefinitions>
+                    <Label Style="{StaticResource RowLabel}" Content="画像の回転"/>
+                    <c:AnimationSlider Grid.Column="1" Animation="{Binding ImageRotation}" StringFormat="F1" Unit="°" DefaultMin="-360" DefaultMax="360" BeginEdit="Slider_BeginEdit" EndEdit="Slider_EndEdit"/>
+                </Grid>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="80"/>
+                        <ColumnDefinition/>
+                    </Grid.ColumnDefinitions>
+                    <Label Style="{StaticResource RowLabel}" Content="つや"/>
+                    <c:AnimationSlider Grid.Column="1" Animation="{Binding Gloss}" StringFormat="F0" Unit="%" DefaultMin="0" DefaultMax="100" BeginEdit="Slider_BeginEdit" EndEdit="Slider_EndEdit"/>
+                </Grid>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="80"/>
+                        <ColumnDefinition/>
+                    </Grid.ColumnDefinitions>
+                    <Label Style="{StaticResource RowLabel}" Content="つやの鋭さ"/>
+                    <c:AnimationSlider Grid.Column="1" Animation="{Binding GlossSharpness}" StringFormat="F0" Unit="%" DefaultMin="0" DefaultMax="100" BeginEdit="Slider_BeginEdit" EndEdit="Slider_EndEdit"/>
+                </Grid>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="80"/>
+                        <ColumnDefinition/>
+                    </Grid.ColumnDefinitions>
+                    <Label Style="{StaticResource RowLabel}" Content="金属っぽさ"/>
+                    <c:AnimationSlider Grid.Column="1" Animation="{Binding Metallic}" StringFormat="F0" Unit="%" DefaultMin="0" DefaultMax="100" BeginEdit="Slider_BeginEdit" EndEdit="Slider_EndEdit"/>
+                </Grid>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="80"/>
+                        <ColumnDefinition/>
+                    </Grid.ColumnDefinitions>
+                    <Label Style="{StaticResource RowLabel}" Content="ざらつき"/>
+                    <c:AnimationSlider Grid.Column="1" Animation="{Binding Roughness}" StringFormat="F0" Unit="%" DefaultMin="0" DefaultMax="100" BeginEdit="Slider_BeginEdit" EndEdit="Slider_EndEdit"/>
+                </Grid>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="80"/>
+                        <ColumnDefinition/>
+                    </Grid.ColumnDefinitions>
+                    <Label Style="{StaticResource RowLabel}" Content="光る色"/>
+                    <c:ColorPicker Grid.Column="1" Value="{Binding Emission, Mode=TwoWay}" BeginEdit="Slider_BeginEdit" EndEdit="Slider_EndEdit"/>
+                </Grid>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="80"/>
+                        <ColumnDefinition/>
+                    </Grid.ColumnDefinitions>
+                    <Label Style="{StaticResource RowLabel}" Content="光る強さ"/>
+                    <c:AnimationSlider Grid.Column="1" Animation="{Binding EmissionStrength}" StringFormat="F0" Unit="%" DefaultMin="0" DefaultMax="400" BeginEdit="Slider_BeginEdit" EndEdit="Slider_EndEdit"/>
+                </Grid>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="80"/>
+                        <ColumnDefinition/>
+                    </Grid.ColumnDefinitions>
+                    <Label Style="{StaticResource RowLabel}" Content="凹凸の画像"/>
+                    <c:FileSelector Grid.Column="1" Value="{Binding NormalImage, Mode=TwoWay}" FileGroup="Texture" FileType="画像" AllowEmptyFilePath="True" BeginEdit="Slider_BeginEdit" EndEdit="Slider_EndEdit"/>
+                </Grid>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="80"/>
+                        <ColumnDefinition/>
+                    </Grid.ColumnDefinitions>
+                    <Label Style="{StaticResource RowLabel}" Content="凹凸の強さ"/>
+                    <c:AnimationSlider Grid.Column="1" Animation="{Binding NormalStrength}" StringFormat="F0" Unit="%" DefaultMin="0" DefaultMax="200" BeginEdit="Slider_BeginEdit" EndEdit="Slider_EndEdit"/>
+                </Grid>
+            </StackPanel>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <StackPanel>
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <ListBox x:Name="MaterialList"
+                     Height="96"
+                     SelectionMode="Single"
+                     PreviewMouseWheel="MaterialList_PreviewMouseWheel"
+                     ItemsSource="{Binding Items}"
+                     SelectedIndex="{Binding SelectedIndex}">
+                <ListBox.ItemTemplate>
+                    <DataTemplate DataType="{x:Type s:ShapeMaterial}">
+                        <DockPanel>
+                            <Border DockPanel.Dock="Left" Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center" BorderThickness="1" BorderBrush="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}">
+                                <Border.Background>
+                                    <SolidColorBrush Color="{Binding Color}"/>
+                                </Border.Background>
+                            </Border>
+                            <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
+                        </DockPanel>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+
+            <StackPanel Grid.Column="1">
+                <Button Style="{StaticResource SmallButton}" ToolTip="材質を足す（面には編集モードで割り当てます）" Command="{Binding AddCommand}">
+                    <Path Style="{StaticResource Icon}" Data="{DynamicResource {x:Static icons:GeometryKeys.Plus}}"/>
+                </Button>
+                <Button Style="{StaticResource SmallButton}" ToolTip="選んだ材質を消す" Command="{Binding RemoveCommand}">
+                    <Path Style="{StaticResource Icon}" Data="{DynamicResource {x:Static icons:GeometryKeys.Minus}}"/>
+                </Button>
+                <Button Style="{StaticResource SmallButton}" ToolTip="上へ" Command="{Binding MoveUpCommand}">
+                    <Path Style="{StaticResource Icon}" Data="{DynamicResource {x:Static icons:GeometryKeys.MenuUp}}"/>
+                </Button>
+                <Button Style="{StaticResource SmallButton}" ToolTip="下へ" Command="{Binding MoveDownCommand}">
+                    <Path Style="{StaticResource Icon}" Data="{DynamicResource {x:Static icons:GeometryKeys.MenuDown}}"/>
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <ContentControl Margin="0,4,0,0" Content="{Binding Selected}" Visibility="{Binding HasSelection, Converter={StaticResource VisibleWhenTrue}}"/>
+    </StackPanel>
+</UserControl>

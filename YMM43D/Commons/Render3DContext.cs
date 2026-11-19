@@ -6,16 +6,13 @@ using YukkuriMovieMaker.Commons;
 
 namespace YMM43D.Commons
 {
-    public readonly record struct Render3DContext(
-        ID3D11Device Device,
-        ID3D11DeviceContext Context,
-        Matrix4x4 View,
-        Matrix4x4 Projection,
-        SceneLighting? Lighting = null)
+    public readonly record struct Render3DContext(ID3D11Device Device, ID3D11DeviceContext Context, Matrix4x4 View, Matrix4x4 Projection, SceneLighting? Lighting = null)
     {
         public IReadOnlyList<SceneDepthCollector.Occluder> Scene { get; init; } = [];
 
         public bool IsCapturingScene { get; init; }
+
+        public ID3D11ShaderResourceView? SceneDepth { get; init; }
 
         public bool IsOutput { get; init; }
 
@@ -74,11 +71,9 @@ namespace YMM43D.Commons
             float alphaCutoff = 0f,
             SurfaceGloss gloss = default,
             ModelPaint? paint = null)
-            => SceneConstants.Create(
-                world, View, Projection, opacity, Lighting, unlit, alphaCutoff, gloss, paint);
+            => SceneConstants.Create(world, View, Projection, opacity, Lighting, unlit, alphaCutoff, gloss, paint);
 
-        public TransformConstants CreateConstants(
-            in Matrix4x4 world, DrawContext3D item, bool unlit = false, SurfaceGloss gloss = default)
+        public TransformConstants CreateConstants(in Matrix4x4 world, DrawContext3D item, bool unlit = false, SurfaceGloss gloss = default)
             => SceneConstants.Create(world, View, Projection, item.Opacity, Lighting, unlit, item.AlphaCutoff, gloss);
     }
 }

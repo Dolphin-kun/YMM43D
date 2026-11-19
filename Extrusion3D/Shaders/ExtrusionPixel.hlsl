@@ -3,7 +3,7 @@
 Texture2D    txDiffuse : register(t0);
 SamplerState samLinear : register(s0);
 
-static const int TypeImage = 1;
+static const int TypeImage = 0;
 static const int StepCount = 128;
 static const int RefineCount = 10;
 static const float AlphaThreshold = 0.5;

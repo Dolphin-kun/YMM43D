@@ -1,73 +1,12 @@
-using System.IO;
+﻿using System.IO;
 using System.IO.Compression;
 using System.Text;
 
 namespace YMM43D.Graphics.Models
 {
-    internal sealed class FbxNode(string name, object?[] properties)
-    {
-        public string Name { get; } = name;
-
-        public object?[] Properties { get; } = properties;
-
-        public List<FbxNode> Children { get; } = [];
-
-        public FbxNode? Child(string name)
-        {
-            foreach (var child in Children)
-            {
-                if (child.Name == name)
-                    return child;
-            }
-
-            return null;
-        }
-
-        public IEnumerable<FbxNode> ChildrenNamed(string name)
-        {
-            foreach (var child in Children)
-            {
-                if (child.Name == name)
-                    yield return child;
-            }
-        }
-
-        public string Text(int index)
-            => index < Properties.Length && Properties[index] is byte[] bytes
-                ? Encoding.UTF8.GetString(bytes)
-                : string.Empty;
-
-        public long Number(int index)
-            => index < Properties.Length && Properties[index] is { } value
-                ? value switch
-                {
-                    long number => number,
-                    int number => number,
-                    short number => number,
-                    sbyte number => number,
-                    double number => (long)number,
-                    float number => (long)number,
-                    _ => 0L,
-                }
-                : 0L;
-
-        public double[] Doubles(int index)
-            => index < Properties.Length && Properties[index] is double[] values ? values : [];
-
-        public int[] Integers(int index)
-            => index < Properties.Length && Properties[index] is int[] values ? values : [];
-
-        public double[] DoublesOf(string name) => Child(name)?.Doubles(0) ?? [];
-
-        public int[] IntegersOf(string name) => Child(name)?.Integers(0) ?? [];
-
-        public string TextOf(string name) => Child(name)?.Text(0) ?? string.Empty;
-    }
-
     internal static class FbxDocument
     {
         private const string BinaryMagic = "Kaydara FBX Binary  ";
-
         private const int MaxDepth = 64;
 
         public static FbxNode Load(string path)
@@ -76,8 +15,7 @@ namespace YMM43D.Graphics.Models
 
             if (bytes.Length < 27 || Encoding.ASCII.GetString(bytes, 0, BinaryMagic.Length) != BinaryMagic)
             {
-                throw new NotSupportedException(
-                    "テキスト形式の fbx には対応していません。バイナリ形式で書き出し直してください。");
+                throw new NotSupportedException("テキスト形式の fbx には対応していません。バイナリ形式で書き出し直してください。");
             }
 
             var version = BitConverter.ToUInt32(bytes, 23);
@@ -177,7 +115,7 @@ namespace YMM43D.Graphics.Models
                 case 'f': return ToDoubles(ReadArray(bytes, ref at, 4), 4);
                 case 'd': return ToDoubles(ReadArray(bytes, ref at, 8), 8);
                 case 'i': return ToIntegers(ReadArray(bytes, ref at, 4), 4);
-                case 'l': return ToIntegers(ReadArray(bytes, ref at, 8), 8);
+                case 'l': return ToLongs(ReadArray(bytes, ref at, 8));
                 case 'b': return ToIntegers(ReadArray(bytes, ref at, 1), 1);
 
                 default:
@@ -221,10 +159,19 @@ namespace YMM43D.Graphics.Models
 
             for (var i = 0; i < count; i++)
             {
-                values[i] = elementSize == 4
-                    ? BitConverter.ToSingle(data, i * 4)
-                    : BitConverter.ToDouble(data, i * 8);
+                values[i] = elementSize == 4 ? BitConverter.ToSingle(data, i * 4) : BitConverter.ToDouble(data, i * 8);
             }
+
+            return values;
+        }
+
+        private static long[] ToLongs(byte[] data)
+        {
+            var count = data.Length / 8;
+            var values = new long[count];
+
+            for (var i = 0; i < count; i++)
+                values[i] = BitConverter.ToInt64(data, i * 8);
 
             return values;
         }

@@ -1,21 +1,19 @@
-using System.Collections.Immutable;
+﻿using System.Collections.Immutable;
 using System.Numerics;
 using Vortice;
 using YukkuriMovieMaker.Plugin.Effects;
 using Vortice.Direct3D11;
 using YMM43D.Player;
 using YMM43D.Commons;
-using YukkuriMovieMaker.Commons;
+using YMM43D.Graphics;
 using YukkuriMovieMaker.Player.Video;
-using YukkuriMovieMaker.Project;
 using YukkuriMovieMaker.Project.Items;
 
 namespace YMM43D.PreviewTool
 {
     internal sealed class ItemDrawContextBuilder : IDisposable
     {
-        private readonly record struct Prepared(
-            DrawDescription Draw, ID3D11ShaderResourceView? ImageTexture, RawRectF? ImageBounds);
+        private readonly record struct Prepared(DrawDescription Draw, ID3D11ShaderResourceView? ImageTexture, RawRectF? ImageBounds);
 
         private readonly record struct PartKey(IVideoItem Item, I3DProvider Provider, int Part);
 
@@ -153,19 +151,13 @@ namespace YMM43D.PreviewTool
             return Matrix4x4.Identity;
         }
 
-        private static Graphics.BlendMode ToBlendMode(YukkuriMovieMaker.Project.Blend blend) => blend switch
+        private static BlendMode ToBlendMode(YukkuriMovieMaker.Project.Blend blend) => blend switch
         {
-            YukkuriMovieMaker.Project.Blend.Add => Graphics.BlendMode.Add,
-            YukkuriMovieMaker.Project.Blend.Subtract => Graphics.BlendMode.Subtract,
-            YukkuriMovieMaker.Project.Blend.Multiply => Graphics.BlendMode.Multiply,
-            YukkuriMovieMaker.Project.Blend.Screen => Graphics.BlendMode.Screen,
-            _ => Graphics.BlendMode.Normal,
+            YukkuriMovieMaker.Project.Blend.Add => BlendMode.Add,
+            YukkuriMovieMaker.Project.Blend.Subtract => BlendMode.Subtract,
+            YukkuriMovieMaker.Project.Blend.Multiply => BlendMode.Multiply,
+            YukkuriMovieMaker.Project.Blend.Screen => BlendMode.Screen,
+            _ => BlendMode.Normal,
         };
     }
-
-    internal readonly record struct PreviewEnvironment(
-        ID3D11Device Device,
-        IGraphicsDevicesAndContext Devices,
-        Scene? Scene,
-        TimelineSourceDescription? SourceDescription);
 }

@@ -1,4 +1,4 @@
-using YMM43D.Commons;
+﻿using YMM43D.Commons;
 using YukkuriMovieMaker.Project;
 using YukkuriMovieMaker.Project.Items;
 
@@ -6,11 +6,7 @@ namespace YMM43D.Player
 {
     public static class SceneMarkerResolver
     {
-        public readonly record struct PlacedMarker(
-            IItem Item,
-            ISceneMarkerSource Source,
-            FrameContext ItemTime,
-            SceneMarker Marker);
+        public readonly record struct PlacedMarker(IItem Item, ISceneMarkerSource Source, FrameContext ItemTime, SceneMarker Marker);
 
         public static IReadOnlyList<PlacedMarker> Resolve(Timeline? timeline)
         {

@@ -1,42 +1,13 @@
-using System.Numerics;
-using System.Runtime.InteropServices;
+﻿using System.Numerics;
 using Vortice.Direct3D;
 using Vortice.Direct3D11;
 using Vortice.DXGI;
+using YMM43D.Commons;
 using YMM43D.Graphics;
 using YukkuriMovieMaker.Commons;
 
 namespace YMM43D.Plugin
 {
-    [StructLayout(LayoutKind.Sequential)]
-    public struct DeformVertex(Vector3 position, Vector2 texCoord, Vector3 piece)
-    {
-        public Vector3 Position = position;
-        public Vector2 TexCoord = texCoord;
-        public Vector3 Piece = piece;
-
-        public static int Stride => Marshal.SizeOf<DeformVertex>();
-
-        public static InputElementDescription[] InputElements =>
-        [
-            new("POSITION", 0, Format.R32G32B32_Float, 0, 0),
-            new("TEXCOORD", 0, Format.R32G32_Float, 12, 0),
-            new("PIECE", 0, Format.R32G32B32_Float, 20, 0),
-        ];
-    }
-
-    public readonly record struct DeformGrid(int X, int Y, bool Separated)
-    {
-        public const int MinSegments = 1;
-
-        public const int MaxSegments = 192;
-
-        public static DeformGrid Create(int x, int y, bool separated = false) => new(
-            Math.Clamp(x, MinSegments, MaxSegments),
-            Math.Clamp(y, MinSegments, MaxSegments),
-            separated);
-    }
-
     public sealed class DeformMesh : IMesh
     {
         private readonly DisposeCollector disposer = new();
@@ -63,11 +34,8 @@ namespace YMM43D.Plugin
 
             var (vertices, indices) = grid.Separated ? BuildPieces(grid) : BuildSheet(grid);
 
-            VertexBuffer = D3D11Buffers.Create(device, vertices, BindFlags.VertexBuffer);
-            disposer.Collect(VertexBuffer);
-
-            IndexBuffer = D3D11Buffers.Create(device, indices, BindFlags.IndexBuffer);
-            disposer.Collect(IndexBuffer);
+            VertexBuffer = disposer.CollectEx(D3D11Buffers.Create(device, vertices, BindFlags.VertexBuffer));
+            IndexBuffer = disposer.CollectEx(D3D11Buffers.Create(device, indices, BindFlags.IndexBuffer));
 
             DrawCount = indices.Length;
         }

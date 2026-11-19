@@ -1,6 +1,5 @@
 using System.IO;
 using System.Numerics;
-using System.Text;
 using System.Text.Json;
 
 namespace YMM43D.Graphics.Models
@@ -10,7 +9,6 @@ namespace YMM43D.Graphics.Models
         private const uint GlbMagic = 0x46546C67;
         private const uint JsonChunk = 0x4E4F534A;
         private const uint BinaryChunk = 0x004E4942;
-
         private const int TriangleMode = 4;
 
         private static readonly string[] UnsupportedExtensions =
@@ -32,8 +30,7 @@ namespace YMM43D.Graphics.Models
             return new Reader(document.RootElement, directory, embedded).Read();
         }
 
-        private static bool IsGlb(byte[] bytes)
-            => bytes.Length >= 12 && BitConverter.ToUInt32(bytes, 0) == GlbMagic;
+        private static bool IsGlb(byte[] bytes) => bytes.Length >= 12 && BitConverter.ToUInt32(bytes, 0) == GlbMagic;
 
         private static (byte[] Json, byte[]? Binary) SplitGlb(byte[] bytes)
         {
@@ -97,6 +94,7 @@ namespace YMM43D.Graphics.Models
                 FinishMorphs();
                 ReadAnimations();
                 ReadSprings();
+                ReadHumanBones();
 
                 return builder.Build();
             }
@@ -216,7 +214,7 @@ namespace YMM43D.Graphics.Models
                 }
             }
 
-            private IEnumerable<int> RootNodes()
+            private List<int> RootNodes()
             {
                 if (root.TryGetProperty("scenes", out var scenes) && scenes.GetArrayLength() > 0)
                 {
@@ -258,11 +256,10 @@ namespace YMM43D.Graphics.Models
                     }
                 }
 
-                return Enumerable.Range(0, all.GetArrayLength()).Where(index => !children.Contains(index)).ToArray();
+                return [.. Enumerable.Range(0, all.GetArrayLength()).Where(index => !children.Contains(index))];
             }
 
-            private void Visit(
-                int index, in Matrix4x4 parent, int depth, int moving = -1, Matrix4x4? since = null)
+            private void Visit(int index, in Matrix4x4 parent, int depth, int moving = -1, Matrix4x4? since = null)
             {
                 if (depth > 64)
                     throw new InvalidDataException("ノードの入れ子が深すぎます。");
@@ -276,12 +273,20 @@ namespace YMM43D.Graphics.Models
                 var bone = moving;
                 var place = world;
                 var below = mine;
+                var itself = false;
 
-                if (animated.Contains(index) && AddMovingBone(index, node, moving, mine, parent) is var made and >= 0)
+                if (boneOfNode.TryGetValue(index, out var joint))
+                {
+                    bone = joint;
+                    below = Matrix4x4.Identity;
+                }
+                else if (animated.Contains(index)
+                    && AddMovingBone(index, node, moving, mine, parent) is var made and >= 0)
                 {
                     bone = made;
                     place = parent;
                     below = Matrix4x4.Identity;
+                    itself = true;
                 }
 
                 if (node.TryGetProperty("mesh", out var mesh))
@@ -290,7 +295,7 @@ namespace YMM43D.Graphics.Models
 
                     var held = skinned || bone < 0
                         ? -1
-                        : place == parent ? bone : PlacementBone(bone, mine, world);
+                        : itself ? bone : PlacementBone(bone, below, world, PartName(node));
 
                     AddMesh(
                         root.GetProperty("meshes")[mesh.GetInt32()],
@@ -330,8 +335,7 @@ namespace YMM43D.Graphics.Models
                 }
             }
 
-            private int AddMovingBone(
-                int index, JsonElement node, int parentBone, in Matrix4x4 local, in Matrix4x4 parentWorld)
+            private int AddMovingBone(int index, JsonElement node, int parentBone, in Matrix4x4 local, in Matrix4x4 parentWorld)
             {
                 if (rigidBoneOfNode.TryGetValue(index, out var known))
                     return known;
@@ -353,15 +357,20 @@ namespace YMM43D.Graphics.Models
                 return rigidBoneOfNode[index] = builder.Bones.Count - 1;
             }
 
-            private int PlacementBone(int parentBone, in Matrix4x4 local, in Matrix4x4 world)
+            private int PlacementBone(int parentBone, in Matrix4x4 local, in Matrix4x4 world, string name)
             {
                 if (!Matrix4x4.Invert(world, out var inverse))
                     return -1;
 
-                builder.Bones.Add(new ModelBone("（付いているもの）", parentBone, local, inverse));
+                builder.Bones.Add(new ModelBone(name, parentBone, local, inverse));
 
                 return builder.Bones.Count - 1;
             }
+
+            private static string PartName(JsonElement node)
+                => node.TryGetProperty("name", out var name) && name.GetString() is { Length: > 0 } text
+                    ? text
+                    : "（付いているもの）";
 
             private static Matrix4x4 LocalMatrix(JsonElement node)
             {
@@ -385,8 +394,7 @@ namespace YMM43D.Graphics.Models
                      * Matrix4x4.CreateTranslation(translation[0], translation[1], translation[2]);
             }
 
-            private void AddMesh(
-                JsonElement mesh, in Matrix4x4 world, int skinIndex = -1, int meshIndex = -1, int rigidBone = -1)
+            private void AddMesh(JsonElement mesh, in Matrix4x4 world, int skinIndex = -1, int meshIndex = -1, int rigidBone = -1)
             {
                 Matrix4x4.Invert(world, out var inverse);
                 var normalMatrix = Matrix4x4.Transpose(inverse);
@@ -476,8 +484,7 @@ namespace YMM43D.Graphics.Models
 
                 for (var i = 0; i < builder.Morphs.Count; i++)
                 {
-                    builder.Expressions.Add(
-                        new ModelExpression(builder.Morphs[i].Name, string.Empty, [new ModelExpressionBind(i, 1f)]));
+                    builder.Expressions.Add(new ModelExpression(builder.Morphs[i].Name, string.Empty, [new ModelExpressionBind(i, 1f)]));
                 }
             }
 
@@ -574,8 +581,7 @@ namespace YMM43D.Graphics.Models
                 return found >= 0 ? found : null;
             }
 
-            private void AddMorphs(
-                JsonElement mesh, JsonElement primitive, int meshIndex, uint start, int count, in Matrix4x4 normalMatrix)
+            private void AddMorphs(JsonElement mesh, JsonElement primitive, int meshIndex, uint start, int count, in Matrix4x4 normalMatrix)
             {
                 if (meshIndex < 0 || !primitive.TryGetProperty("targets", out var targets))
                     return;
@@ -596,8 +602,7 @@ namespace YMM43D.Graphics.Models
 
                     for (var v = 0; v < count && (v * 3) + 2 < offsets.Length; v++)
                     {
-                        var offset = Vector3.TransformNormal(
-                            new Vector3(offsets[v * 3], offsets[v * 3 + 1], offsets[v * 3 + 2]), normalMatrix);
+                        var offset = Vector3.TransformNormal(new Vector3(offsets[v * 3], offsets[v * 3 + 1], offsets[v * 3 + 2]), normalMatrix);
 
                         if (offset.LengthSquared() > ModelBuilder.MorphThreshold * ModelBuilder.MorphThreshold)
                             morph.Add(new ModelMorphDelta(start + (uint)v, offset));
@@ -690,8 +695,11 @@ namespace YMM43D.Graphics.Models
 
             private (string Key, string Name) MaterialName(JsonElement primitive)
             {
-                if (!primitive.TryGetProperty("material", out var index) || !root.TryGetProperty("materials", out var materials))
+                if (!primitive.TryGetProperty("material", out var index)
+                    || !root.TryGetProperty("materials", out var materials))
+                {
                     return (ModelData.NoMaterial, ModelData.NoMaterial);
+                }
 
                 var number = index.GetInt32();
                 var material = materials[number];
@@ -706,8 +714,11 @@ namespace YMM43D.Graphics.Models
             private (Vector4 Color, int Image, ModelBlend Blend, float Cutoff, bool Unlit, ModelSurface Surface)
                 ReadMaterial(JsonElement primitive)
             {
-                if (!primitive.TryGetProperty("material", out var index) || !root.TryGetProperty("materials", out var materials))
+                if (!primitive.TryGetProperty("material", out var index)
+                    || !root.TryGetProperty("materials", out var materials))
+                {
                     return (Vector4.One, -1, ModelBlend.Opaque, 0.5f, false, ModelSurface.Default);
+                }
 
                 var number = index.GetInt32();
                 var material = materials[number];
@@ -724,13 +735,7 @@ namespace YMM43D.Graphics.Models
                 if (!pbr.TryGetProperty("baseColorTexture", out var texture))
                     return (color, -1, blend, cutoff, unlit, surface);
 
-                return (
-                    color,
-                    ImageOfTexture(texture.GetProperty("index").GetInt32()),
-                    blend,
-                    cutoff,
-                    unlit,
-                    WithUvTransform(texture, surface));
+                return (color, ImageOfTexture(texture.GetProperty("index").GetInt32()), blend, cutoff, unlit, WithUvTransform(texture, surface));
             }
 
             private ModelSurface ReadSurface(int number, JsonElement material)
@@ -807,8 +812,7 @@ namespace YMM43D.Graphics.Models
                     && vectors.TryGetProperty("_ShadeColor", out var written)
                     && written.GetArrayLength() >= 3)
                 {
-                    color = new Vector3(
-                        written[0].GetSingle(), written[1].GetSingle(), written[2].GetSingle());
+                    color = new Vector3(written[0].GetSingle(), written[1].GetSingle(), written[2].GetSingle());
                 }
 
                 var image = -1;
@@ -841,8 +845,7 @@ namespace YMM43D.Graphics.Models
                 };
             }
 
-            private int ImageOfRef(JsonElement reference)
-                => reference.TryGetProperty("index", out var index) ? ImageOfTexture(index.GetInt32()) : -1;
+            private int ImageOfRef(JsonElement reference) => reference.TryGetProperty("index", out var index) ? ImageOfTexture(index.GetInt32()) : -1;
 
             private static bool IsUnlit(JsonElement material)
                 => material.TryGetProperty("extensions", out var extensions)
@@ -990,8 +993,7 @@ namespace YMM43D.Graphics.Models
                 }
             }
 
-            private void AddWeightTracks(
-                List<ModelTrack> tracks, int node, float[] times, float[] values, string shape)
+            private void AddWeightTracks(List<ModelTrack> tracks, int node, float[] times, float[] values, string shape)
             {
                 var mesh = MeshOfNode(node);
 
@@ -1055,8 +1057,53 @@ namespace YMM43D.Graphics.Models
                     inverse);
             }
 
-            private float[] ReadAccessorValues(int accessorIndex)
-                => ReadAccessor(root.GetProperty("accessors")[accessorIndex], out _);
+            private float[] ReadAccessorValues(int accessorIndex) => ReadAccessor(root.GetProperty("accessors")[accessorIndex], out _);
+
+            private void ReadHumanBones()
+            {
+                if (builder.Bones.Count == 0)
+                    return;
+
+                foreach (var name in (string[])["VRMC_vrm", "VRMC_vrm_animation", "VRM"])
+                {
+                    if (Extension(name) is not { } found
+                        || !found.TryGetProperty("humanoid", out var humanoid)
+                        || !humanoid.TryGetProperty("humanBones", out var human))
+                    {
+                        continue;
+                    }
+
+                    if (human.ValueKind == JsonValueKind.Object)
+                    {
+                        foreach (var one in human.EnumerateObject())
+                            Remember(one.Name, one.Value);
+                    }
+                    else if (human.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var one in human.EnumerateArray())
+                        {
+                            if (one.TryGetProperty("bone", out var bone))
+                                Remember(bone.GetString() ?? string.Empty, one);
+                        }
+                    }
+
+                    if (builder.HumanBones.Count > 0)
+                        return;
+                }
+            }
+
+            private void Remember(string name, JsonElement holder)
+            {
+                if (name.Length == 0
+                    || !holder.TryGetProperty("node", out var node)
+                    || node.ValueKind != JsonValueKind.Number
+                    || !boneOfNode.TryGetValue(node.GetInt32(), out var bone))
+                {
+                    return;
+                }
+
+                builder.HumanBones.TryAdd(name, bone);
+            }
 
             private void ReadSprings()
             {
@@ -1136,8 +1183,7 @@ namespace YMM43D.Graphics.Models
                 return groups;
             }
 
-            private static ModelSpringCollider[] Gather(
-                List<ModelSpringCollider[]> groups, JsonElement owner, string name)
+            private static ModelSpringCollider[] Gather(List<ModelSpringCollider[]> groups, JsonElement owner, string name)
             {
                 if (!owner.TryGetProperty(name, out var chosen))
                     return [];
@@ -1236,11 +1282,8 @@ namespace YMM43D.Graphics.Models
                     {
                         foreach (var index in chosen.EnumerateArray())
                         {
-                            if (index.TryGetInt32(out var at) && at >= 0 && at < all.Count
-                                && all[at].Radius > 0f)
-                            {
+                            if (index.TryGetInt32(out var at) && at >= 0 && at < all.Count && all[at].Radius > 0f)
                                 made.Add(all[at]);
-                            }
                         }
                     }
 
@@ -1262,22 +1305,12 @@ namespace YMM43D.Graphics.Models
 
                 if (shape.TryGetProperty("capsule", out var capsule))
                 {
-                    return new ModelSpringCollider(
-                        bone,
-                        Triple(capsule, "offset"),
-                        Number(capsule, "radius", 0f),
-                        Triple(capsule, "tail"),
-                        true);
+                    return new ModelSpringCollider(bone, Triple(capsule, "offset"), Number(capsule, "radius", 0f), Triple(capsule, "tail"), true);
                 }
 
                 if (shape.TryGetProperty("sphere", out var sphere))
                 {
-                    return new ModelSpringCollider(
-                        bone,
-                        Triple(sphere, "offset"),
-                        Number(sphere, "radius", 0f),
-                        Vector3.Zero,
-                        false);
+                    return new ModelSpringCollider(bone, Triple(sphere, "offset"), Number(sphere, "radius", 0f), Vector3.Zero, false);
                 }
 
                 return new ModelSpringCollider(-1, Vector3.Zero, 0f, Vector3.Zero, false);
@@ -1288,17 +1321,10 @@ namespace YMM43D.Graphics.Models
                 if (!owner.TryGetProperty(name, out var found) || found.GetArrayLength() < 3)
                     return Vector3.Zero;
 
-                return new Vector3(
-                    found[0].GetSingle(), found[1].GetSingle(), found[2].GetSingle());
+                return new Vector3(found[0].GetSingle(), found[1].GetSingle(), found[2].GetSingle());
             }
 
-            private void AddSpring(
-                int root,
-                float stiffness,
-                float drag,
-                in Vector3 gravity,
-                float hitRadius,
-                ModelSpringCollider[] colliders)
+            private void AddSpring(int root, float stiffness, float drag, in Vector3 gravity, float hitRadius, ModelSpringCollider[] colliders)
             {
                 if (ModelSpring.From(
                         [.. builder.Bones], root, stiffness, drag, gravity, hitRadius, colliders) is { } made)
@@ -1307,13 +1333,10 @@ namespace YMM43D.Graphics.Models
                 }
             }
 
-            private (Vector3 Axis, float Length)? Reach(int bone)
-                => ModelSpring.Reach([.. builder.Bones], bone);
+            private (Vector3 Axis, float Length)? Reach(int bone) => ModelSpring.Reach([.. builder.Bones], bone);
 
             private static float Number(JsonElement element, string name, float fallback)
-                => element.TryGetProperty(name, out var found) && found.TryGetSingle(out var value)
-                    ? value
-                    : fallback;
+                => element.TryGetProperty(name, out var found) && found.TryGetSingle(out var value) ? value : fallback;
 
             private float[] ReadVectors(int accessorIndex, int width)
             {

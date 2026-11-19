@@ -5,7 +5,6 @@ namespace YMM43D.PreviewTool
     public struct DoubleClick
     {
         public const long Milliseconds = 400;
-
         public const float Slop = 4f;
 
         private long lastTick;

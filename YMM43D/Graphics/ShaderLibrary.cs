@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.IO;
 using System.Reflection;
 using System.Text;
@@ -19,11 +19,12 @@ namespace YMM43D.Graphics
         public static string Load(Assembly assembly, string name)
             => sources.GetOrAdd((assembly.FullName ?? string.Empty, name), _ => Expand(assembly, name, []));
 
-        public static byte[] Compile(Assembly assembly, string name, string entryPoint, string profile)
+        public static byte[] Compile(Assembly assembly, string name, string entryPoint, string profile, string? prelude = null)
         {
-            var key = (assembly.FullName ?? string.Empty, name, entryPoint, profile);
+            var head = string.IsNullOrEmpty(prelude) ? string.Empty : prelude + Environment.NewLine;
+            var key = (assembly.FullName ?? string.Empty, head + name, entryPoint, profile);
             var compiled = bytecodes.GetOrAdd(key, _ => new Lazy<byte[]>(
-                () => ShaderCompiler.Compile(Load(assembly, name), entryPoint, profile, name)));
+                () => ShaderCompiler.Compile(head + Load(assembly, name), entryPoint, profile, name)));
 
             try
             {

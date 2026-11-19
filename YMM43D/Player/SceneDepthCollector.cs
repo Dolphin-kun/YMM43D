@@ -3,6 +3,7 @@ using YMM43D.Commons;
 using YMM43D.Plugin;
 using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Player.Video;
+using YukkuriMovieMaker.Plugin.Effects;
 using YukkuriMovieMaker.Project;
 using YukkuriMovieMaker.Project.Items;
 
@@ -10,7 +11,27 @@ namespace YMM43D.Player
 {
     public static class SceneDepthCollector
     {
-        public readonly record struct Occluder(I3DProvider Provider, Matrix4x4 World, FrameContext Time);
+        public readonly record struct Occluder(I3DProvider Provider, Matrix4x4 World, FrameContext Time)
+        {
+            public void DrawDepth(in Render3DContext render)
+            {
+                var item = new DrawContext3D
+                {
+                    World = World,
+                    Opacity = 1f,
+                    Time = Time,
+                    DepthOnly = true,
+                };
+
+                try
+                {
+                    Provider.Draw(render, item);
+                }
+                catch
+                {
+                }
+            }
+        }
 
         public readonly record struct SceneView(
             IVideoItem? Owner,
@@ -20,18 +41,14 @@ namespace YMM43D.Player
             IReadOnlyList<Occluder> Occluders,
             IReadOnlyList<Occluder> Casters)
         {
-            public static SceneView None
-                => new(null, default, Matrix4x4.Identity, ScreenPlacement.None, [], []);
+            public static SceneView None => new(null, default, Matrix4x4.Identity, ScreenPlacement.None, [], []);
 
             public Matrix4x4 OwnerGroupTransform { get; init; } = Matrix4x4.Identity;
 
             public ScreenPlacement OwnerGroupScreen { get; init; } = ScreenPlacement.None;
         }
 
-        public static SceneView Collect(
-            TimelineItemSourceDescription description,
-            I3DProvider? self,
-            IGraphicsDevicesAndContext? devices = null)
+        public static SceneView Collect(TimelineItemSourceDescription description, I3DProvider? self, IGraphicsDevicesAndContext? devices = null)
         {
             if (self is null || GroupEffectProbe.IsEvaluating)
                 return SceneView.None;
@@ -74,7 +91,9 @@ namespace YMM43D.Player
 
                 foreach (var provider in found)
                 {
-                    var world = provider is I3DPlacedInstance placed && placed.TryGetPlacement(out var own)
+                    var world = provider is I3DPlacedInstance placed
+                        && IsPlacedAt(provider, frame)
+                        && placed.TryGetPlacement(out var own)
                         ? GetLocalMatrix(provider) * own * groupTransform
                         : GetLocalMatrix(provider) * placement;
 
@@ -82,70 +101,35 @@ namespace YMM43D.Player
                 }
             }
 
+            var flattened = flattening.Flattens(owner);
+            var occluders = new List<Occluder>(casters.Count);
+
+            if (!flattened && IsPlacedIn3D(owner, self) && !IsOverriddenByGroup(owner, self, groups, devices))
+            {
+                found.Clear();
+                FindProviders(owner, found, groups, devices);
+
+                foreach (var caster in casters)
+                {
+                    if (!found.Contains(caster.Provider))
+                        occluders.Add(caster);
+                }
+            }
+
             var ownerPlacement = ItemPlacement.GetWorldMatrix(owner, ownerTime);
             var ownerScreen = ItemPlacement.GetScreenPlacement(owner, ownerTime);
 
-            var flattened = flattening.Flattens(owner);
-            var ownerGroupTransform = flattened ? Matrix4x4.Identity : groups.GetTransform(owner);
-            var groupScreen = flattened ? ScreenPlacement.None : GetGroupScreen(groups, owner, frame, fps);
-
-            if (flattened || !IsPlacedIn3D(owner, self) || IsOverriddenByGroup(owner, self, groups, devices))
-            {
-                return new SceneView(owner, ownerTime, ownerPlacement, ownerScreen, [], casters)
-                {
-                    OwnerGroupTransform = ownerGroupTransform,
-                    OwnerGroupScreen = groupScreen,
-                };
-            }
-
-            var occluders = new List<Occluder>(casters.Count);
-
-            found.Clear();
-            FindProviders(owner, found, groups, devices);
-
-            foreach (var caster in casters)
-            {
-                if (!found.Contains(caster.Provider))
-                    occluders.Add(caster);
-            }
-
             return new SceneView(owner, ownerTime, ownerPlacement, ownerScreen, occluders, casters)
             {
-                OwnerGroupTransform = ownerGroupTransform,
-                OwnerGroupScreen = groupScreen,
+                OwnerGroupTransform = flattened ? Matrix4x4.Identity : groups.GetTransform(owner),
+                OwnerGroupScreen = flattened ? ScreenPlacement.None : GetGroupScreen(groups, owner, frame, fps),
             };
-        }
-
-        private static ScreenPlacement GetGroupScreen(in GroupLookup groups, IVideoItem owner, int frame, int fps)
-        {
-            var screen = ScreenPlacement.None;
-
-            foreach (var group in groups.GetGroups(owner))
-                screen = screen.Then(ItemPlacement.GetScreenPlacement(group, FrameContext.ForItem(group, frame, fps)));
-
-            return screen;
         }
 
         public static IVideoItem? FindOwner(TimelineItemSourceDescription description)
             => TimelineLookup.Find(description) is { } timeline
                 ? FindOwner(timeline, description.Layer, description.TimelinePosition.Frame)
                 : null;
-
-        private static IVideoItem? FindOwner(Timeline timeline, int layer, int frame)
-        {
-            foreach (var item in timeline.Items ?? [])
-            {
-                if (item is IVideoItem video
-                    && video.Layer == layer
-                    && LayerVisibility.IsShown(timeline, video)
-                    && FrameContext.IsAlive(video, frame))
-                {
-                    return video;
-                }
-            }
-
-            return null;
-        }
 
         public static bool IsPlacedIn3D(IVideoItem item, I3DProvider provider)
         {
@@ -170,20 +154,9 @@ namespace YMM43D.Player
         }
 
         public static bool ExpectsSolid(IVideoItem item)
-            => item is I3DProvider
-            || HasSolidEffect(item)
-            || (item is ShapeItem shape && shape.ShapeParameter is ShapeParameter3DBase);
+            => item is I3DProvider || HasSolidEffect(item) || (item is ShapeItem shape && shape.ShapeParameter is ShapeParameter3DBase);
 
-        public static bool HasSolidEffect(IVideoItem item)
-        {
-            foreach (var effect in item.VideoEffects ?? [])
-            {
-                if (effect.IsEnabled && effect is I3DProvider)
-                    return true;
-            }
-
-            return false;
-        }
+        public static bool HasSolidEffect(IVideoItem item) => LastEnabled<I3DProvider>(item.VideoEffects) is not null;
 
         public static IEnumerable<I3DProvider> FindSources(IVideoItem item, IGraphicsDevicesAndContext? devices = null)
         {
@@ -192,6 +165,68 @@ namespace YMM43D.Player
             AddSources(item, sources, devices);
 
             return sources;
+        }
+
+        public static IReadOnlyList<I3DProvider> FindGroupSolids(IVideoItem item, in GroupLookup groups, IGraphicsDevicesAndContext? devices = null)
+        {
+            var enclosing = groups.GetGroups(item);
+
+            for (var i = enclosing.Count - 1; i >= 0; i--)
+            {
+                if (LastEnabled<VideoEffect3DBase>(enclosing[i].VideoEffects) is { } effect)
+                    return effect.GetInstancesAt(item.Layer, devices);
+            }
+
+            return [];
+        }
+
+        public static IReadOnlyList<I3DProvider> Instances(I3DProvider provider, IGraphicsDevicesAndContext? devices = null) => provider switch
+        {
+            VideoEffect3DBase effect => effect.GetInstances(devices),
+            I3DInstances instances => instances.GetInstances(),
+            _ => [provider],
+        };
+
+        public static bool Composes(IVideoItem composer, IVideoItem composed)
+        {
+            if (ReferenceEquals(composer, composed))
+                return false;
+
+            return composer switch
+            {
+                GroupItem { IsComposite: true } group =>
+                    composed.Layer > group.Layer
+                    && composed.Layer <= group.Layer + group.GroupRange
+                    && (!group.IsGroupOnly || group.Group == composed.Group),
+                FrameBufferItem or EffectItem => composed.Layer < composer.Layer,
+                _ => false,
+            };
+        }
+
+        private static ScreenPlacement GetGroupScreen(in GroupLookup groups, IVideoItem owner, int frame, int fps)
+        {
+            var screen = ScreenPlacement.None;
+
+            foreach (var group in groups.GetGroups(owner))
+                screen = screen.Then(ItemPlacement.GetScreenPlacement(group, FrameContext.ForItem(group, frame, fps)));
+
+            return screen;
+        }
+
+        private static IVideoItem? FindOwner(Timeline timeline, int layer, int frame)
+        {
+            foreach (var item in timeline.Items ?? [])
+            {
+                if (item is IVideoItem video
+                    && video.Layer == layer
+                    && LayerVisibility.IsShown(timeline, video)
+                    && FrameContext.IsAlive(video, frame))
+                {
+                    return video;
+                }
+            }
+
+            return null;
         }
 
         private static void AddSources(IVideoItem item, List<I3DProvider> into, IGraphicsDevicesAndContext? devices)
@@ -214,40 +249,10 @@ namespace YMM43D.Player
             }
         }
 
-        public static IReadOnlyList<I3DProvider> FindGroupSolids(
-            IVideoItem item, in GroupLookup groups, IGraphicsDevicesAndContext? devices = null)
-        {
-            var enclosing = groups.GetGroups(item);
+        private static bool IsOverriddenByGroup(IVideoItem owner, I3DProvider self, in GroupLookup groups, IGraphicsDevicesAndContext? devices)
+            => (owner.VideoEffects ?? []).Any(effect => ReferenceEquals(effect, self)) && FindGroupSolids(owner, groups, devices).Count > 0;
 
-            for (var i = enclosing.Count - 1; i >= 0; i--)
-            {
-                if (LastSolidEffect(enclosing[i]) is { } effect)
-                    return effect.GetInstancesAt(item.Layer, devices);
-            }
-
-            return [];
-        }
-
-        private static VideoEffect3DBase? LastSolidEffect(IVideoItem item)
-        {
-            VideoEffect3DBase? found = null;
-
-            foreach (var effect in item.VideoEffects ?? [])
-            {
-                if (effect.IsEnabled && effect is VideoEffect3DBase solid)
-                    found = solid;
-            }
-
-            return found;
-        }
-
-        private static bool IsOverriddenByGroup(
-            IVideoItem owner, I3DProvider self, in GroupLookup groups, IGraphicsDevicesAndContext? devices)
-            => (owner.VideoEffects ?? []).Any(effect => ReferenceEquals(effect, self))
-            && FindGroupSolids(owner, groups, devices).Count > 0;
-
-        private static void FindProviders(
-            IVideoItem item, List<I3DProvider> into, in GroupLookup groups, IGraphicsDevicesAndContext? devices)
+        private static void FindProviders(IVideoItem item, List<I3DProvider> into, in GroupLookup groups, IGraphicsDevicesAndContext? devices)
         {
             if (item is GroupItem { IsComposite: false })
                 return;
@@ -258,65 +263,33 @@ namespace YMM43D.Player
                 return;
             }
 
-            var effects = item.VideoEffects;
-
-            if (effects is null)
+            if (LastEnabled<I3DProvider>(item.VideoEffects) is not { } placed)
             {
                 AddSources(item, into, devices);
                 return;
             }
 
-            var last = -1;
-            var solid = false;
-
-            for (var i = 0; i < effects.Count; i++)
+            foreach (var instance in Instances(placed, devices))
             {
-                if (!effects[i].IsEnabled)
-                    continue;
-
-                last = i;
-                solid |= effects[i] is I3DProvider;
-            }
-
-            if (!solid)
-            {
-                AddSources(item, into, devices);
-                return;
-            }
-
-            if (last >= 0 && effects[last] is I3DProvider placed)
-            {
-                foreach (var instance in Instances(placed, devices))
-                {
-                    if (!into.Contains(instance))
-                        into.Add(instance);
-                }
+                if (!into.Contains(instance))
+                    into.Add(instance);
             }
         }
 
-        public static IReadOnlyList<I3DProvider> Instances(I3DProvider provider, IGraphicsDevicesAndContext? devices = null)
-            => provider switch
-            {
-                VideoEffect3DBase effect => effect.GetInstances(devices),
-                I3DInstances instances => instances.GetInstances(),
-                _ => [provider],
-            };
-
-        public static bool Composes(IVideoItem composer, IVideoItem composed)
+        private static T? LastEnabled<T>(IEnumerable<IVideoEffect>? effects) where T : class
         {
-            if (ReferenceEquals(composer, composed))
-                return false;
+            T? found = null;
 
-            return composer switch
+            foreach (var effect in effects ?? [])
             {
-                GroupItem { IsComposite: true } group =>
-                    composed.Layer > group.Layer
-                    && composed.Layer <= group.Layer + group.GroupRange
-                    && (!group.IsGroupOnly || group.Group == composed.Group),
-                FrameBufferItem or EffectItem => composed.Layer < composer.Layer,
-                _ => false,
-            };
+                if (effect.IsEnabled && effect is T solid)
+                    found = solid;
+            }
+
+            return found;
         }
+
+        private static bool IsPlacedAt(I3DProvider provider, int frame) => provider is not VideoEffect3DProcessorBase processor || processor.PlacedFrame == frame;
 
         private static Matrix4x4 GetLocalMatrix(I3DProvider provider)
         {

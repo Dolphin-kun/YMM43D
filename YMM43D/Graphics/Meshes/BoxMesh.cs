@@ -2,6 +2,7 @@ using System.Numerics;
 using Vortice.Direct3D11;
 using Vortice.Direct3D;
 using Vortice.Mathematics;
+using YMM43D.Commons;
 using YukkuriMovieMaker.Commons;
 
 namespace YMM43D.Graphics.Meshes
@@ -62,12 +63,10 @@ namespace YMM43D.Graphics.Meshes
                 vertices[i + 2] = new Vertex(c, white, ToTexCoord(c), normal);
             }
 
-            VertexBuffer = D3D11Buffers.Create(device, vertices, BindFlags.VertexBuffer);
-            disposer.Collect(VertexBuffer);
+            VertexBuffer = disposer.CollectEx(D3D11Buffers.Create(device, vertices, BindFlags.VertexBuffer));
         }
 
-        private static Vector2 ToTexCoord(in Vector3 position)
-            => new(position.X + 0.5f, 0.5f - position.Y);
+        private static Vector2 ToTexCoord(in Vector3 position) => new(position.X + 0.5f, 0.5f - position.Y);
 
         public void Dispose() => disposer.Dispose();
     }

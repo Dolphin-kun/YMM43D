@@ -1,6 +1,4 @@
-using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
-using System.Runtime.InteropServices;
 using YMM43D.Commons;
 using YMM43D.Plugin;
 using YukkuriMovieMaker.Commons;
@@ -12,118 +10,48 @@ using YukkuriMovieMaker.Plugin.Effects;
 
 namespace Fold3D
 {
-    [VideoEffect("折る3D", ["3D"], ["折る", "蛇腹", "fold", "紙"])]
+    [VideoEffect("折る3D", ["3D"], ["折る", "折り目", "畳む", "蛇腹", "紙", "折り紙", "fold"])]
     public class Fold3DEffect : VideoEffect3DBase
     {
         private const string Group = "折る3D";
 
         public override string Label => "折る3D";
 
-        [Display(GroupName = Group, Name = "折り込み",
-            Description = "0 で平ら、大きくするほど蛇腹に畳まれます", Order = 100)]
+        [Display(GroupName = Group, Name = "折り込み", Description = "蛇腹に畳む角度")]
         [AnimationSlider("F1", "°", 0, 170)]
         public Animation Angle { get; } = new(0, 0, 179);
 
-        [Display(GroupName = Group, Name = "折り目の数",
-            Description = "何段に折るか", Order = 200)]
+        [Display(GroupName = Group, Name = "折り目の数", Description = "何段に折るか")]
         [TextBoxSlider("F0", "", 2, 32)]
         [Range(1, 64)]
-        public int Count
-        {
-            get => count;
-            set => Set(ref count, Math.Clamp(value, 1, 64));
-        }
-        private int count = 6;
+        public int Count { get; set => Set(ref field, Math.Clamp(value, 1, 64)); } = 6;
 
-        [Display(GroupName = Group, Name = "軸の角度",
-            Description = "どの向きに折るか。0 で横、90 で縦", Order = 300)]
+        [Display(GroupName = Group, Name = "軸の角度", Description = "どの向きに折るか")]
         [AnimationSlider("F1", "°", -360, 360)]
         public Animation AxisAngle { get; } = new(0, -100000, 100000);
 
-        [Display(GroupName = Group, Name = "陰影", Description = "光源にしたがって陰影をつけます。切ると、元の色のまま塗ります", Order = 400)]
+        [Display(GroupName = Group, Name = "陰影", Description = "光源にしたがって陰影をつけます")]
         [ToggleSlider]
         public bool IsLit { get => !IsUnlit; set => IsUnlit = !value; }
 
-        [Browsable(false)]
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        public bool IsUnlit
-        {
-            get => isUnlit;
-            set
-            {
-                Set(ref isUnlit, value);
-                OnPropertyChanged(nameof(IsLit));
-            }
-        }
-        private bool isUnlit;
+        public bool IsUnlit { get; set => Set(ref field, value, nameof(IsUnlit), nameof(IsLit)); }
 
-        [Display(GroupName = Group, Name = "つや",
-            Description = "光が映り込んだ明るい点の強さ", Order = 500)]
+        [Display(GroupName = Group, Name = "つや", Description = "光が映り込んだ明るい点の強さ")]
         [AnimationSlider("F0", "%", 0, 100)]
         [ShowPropertyEditorWhen(nameof(IsUnlit), false)]
         public Animation Gloss { get; } = new(0, 0, 1000);
 
-        [Display(GroupName = Group, Name = "つやの鋭さ",
-            Description = "大きいほど映り込みが小さく締まり、磨いたように見えます", Order = 600)]
+        [Display(GroupName = Group, Name = "つやの鋭さ", Description = "映り込んだ明るい点の締まり具合")]
         [AnimationSlider("F0", "%", 0, 100)]
         [ShowPropertyEditorWhen(nameof(IsUnlit), false)]
         public Animation GlossSharpness { get; } = new(50, 0, 100);
 
-        internal SurfaceGloss GetGloss(in FrameContext time)
-            => IsUnlit ? SurfaceGloss.None : SurfaceGloss.FromPercent(Gloss.GetFloat(time), GlossSharpness.GetFloat(time));
+        internal SurfaceGloss GetGloss(in FrameContext time) => IsUnlit ? SurfaceGloss.None : SurfaceGloss.FromPercent(Gloss.GetFloat(time), GlossSharpness.GetFloat(time));
 
-        public override IVideoEffectProcessor CreateVideoEffect(IGraphicsDevicesAndContext devices)
-            => AttachProcessor(new Fold3DProcessor(this, devices));
+        public override IVideoEffectProcessor CreateVideoEffect(IGraphicsDevicesAndContext devices) => AttachProcessor(new Fold3DProcessor(this, devices));
 
-        protected override IEnumerable<IAnimatable> GetAnimatables()
-            => [Angle, AxisAngle, Gloss, GlossSharpness, CameraSyncAnimation];
+        protected override IEnumerable<IAnimatable> GetAnimatables() => [Angle, AxisAngle, Gloss, GlossSharpness, CameraSyncAnimation];
 
-        public override IEnumerable<string> CreateExoVideoFilters(
-            int keyFrameIndex, ExoOutputDescription exoOutputDescription) => [];
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    internal struct FoldConstants
-    {
-        public float HalfAngle;
-        public float Count;
-        public float AxisRadians;
-        public float Padding;
-    }
-
-    internal sealed class Fold3DProcessor(Fold3DEffect effect, IGraphicsDevicesAndContext devices)
-        : Deform3DProcessorBase<FoldConstants>(effect, devices)
-    {
-        private const int SegmentsPerFold = 4;
-
-        private readonly Fold3DEffect effect = effect;
-
-        protected override string ShaderName => "Fold.hlsl";
-
-        protected override bool IsUnlit => effect.IsUnlit;
-
-        protected override SurfaceGloss GetGloss(in FrameContext time) => effect.GetGloss(time);
-
-        protected override DeformGrid GetGrid(in FrameContext time)
-        {
-            var along = effect.Count * SegmentsPerFold;
-
-            return DeformGrid.Create(along, along);
-        }
-
-        protected override FoldConstants GetConstants(in FrameContext time) => new()
-        {
-            HalfAngle = float.DegreesToRadians(effect.Angle.GetFloat(time)) / 2f,
-            Count = effect.Count,
-            AxisRadians = float.DegreesToRadians(effect.AxisAngle.GetFloat(time)),
-        };
-
-        protected override DeformExtent GetExtent(in FrameContext time)
-        {
-            var rise = MathF.Sin(float.DegreesToRadians(effect.Angle.GetFloat(time)) / 2f)
-                     / MathF.Max(effect.Count, 1);
-
-            return new DeformExtent(0f, rise);
-        }
+        public override IEnumerable<string> CreateExoVideoFilters(int keyFrameIndex, ExoOutputDescription exoOutputDescription) => [];
     }
 }

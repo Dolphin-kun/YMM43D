@@ -2,6 +2,7 @@ using System.Numerics;
 using Vortice.Direct3D11;
 using Vortice.Direct3D;
 using Vortice.Mathematics;
+using YMM43D.Commons;
 using YukkuriMovieMaker.Commons;
 
 namespace YMM43D.Graphics.Meshes
@@ -32,8 +33,7 @@ namespace YMM43D.Graphics.Meshes
                 new Vertex(new Vector3( HalfSize, 0f, -HalfSize), white, new Vector2(1f, 1f)),
             };
 
-            VertexBuffer = D3D11Buffers.Create(device, vertices, BindFlags.VertexBuffer);
-            disposer.Collect(VertexBuffer);
+            VertexBuffer = disposer.CollectEx(D3D11Buffers.Create(device, vertices, BindFlags.VertexBuffer));
         }
 
         public void Dispose() => disposer.Dispose();

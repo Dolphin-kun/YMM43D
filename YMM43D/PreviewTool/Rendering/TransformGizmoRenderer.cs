@@ -24,12 +24,7 @@ namespace YMM43D.PreviewTool.Rendering
             resources = new DeviceResourceCache<GizmoResources>(device => new GizmoResources(device));
         }
 
-        public void Draw(
-            in Render3DContext render,
-            in TransformGizmo gizmo,
-            GizmoHandle active,
-            GizmoStyle style,
-            bool turnsInThreeAxes)
+        public void Draw(in Render3DContext render, in TransformGizmo gizmo, GizmoHandle active, GizmoStyle style, bool turnsInThreeAxes)
         {
             var world = Matrix4x4.CreateScale(gizmo.Scale) * gizmo.Orientation * Matrix4x4.CreateTranslation(gizmo.Origin);
             var transform = render.GetWorldViewProjection(world);
@@ -45,8 +40,7 @@ namespace YMM43D.PreviewTool.Rendering
 
                 var opacity = active == GizmoHandle.None || active == handle ? 1f : IdleOpacity;
 
-                shared.Pipeline.Draw(
-                    render.Context, TransformConstants.CreateUnlit(transform, opacity), settings, mesh);
+                shared.Pipeline.Draw(render.Context, TransformConstants.CreateUnlit(transform, opacity), settings, mesh);
             }
         }
 
@@ -77,65 +71,35 @@ namespace YMM43D.PreviewTool.Rendering
             ];
         }
 
-        private static Vector3[] BuildScaleBar(Vector3 axis)
+        private static Vector3[] BuildScaleBar(Vector3 axis) => [Vector3.Zero, axis * (TransformGizmo.ScaleLength - TransformGizmo.ScaleBox / 2f)];
+
+        private static SurfaceGeometry BuildScaleTip(Vector3 axis) => BuildBox(axis * TransformGizmo.ScaleLength, axis, TransformGizmo.ScaleBox / 2f);
+
+        private static SurfaceGeometry BuildCenterBox() => BuildBox(Vector3.Zero, Vector3.UnitX, TransformGizmo.ScaleBox * 1.15f);
+
+        private static SurfaceGeometry BuildBox(Vector3 center, Vector3 axis, float half)
         {
             var side = new Vector3(axis.Y, axis.Z, axis.X);
             var other = Vector3.Cross(axis, side);
-
-            var tip = axis * TransformGizmo.ScaleLength;
-            var half = TransformGizmo.ScaleBox / 2f;
-
-            var points = new List<Vector3> { Vector3.Zero, tip };
-
             var corners = new Vector3[8];
 
-            for (var i = 0; i < 8; i++)
+            for (var i = 0; i < corners.Length; i++)
             {
-                corners[i] = tip
+                corners[i] = center
                     + axis * ((i & 1) == 0 ? -half : half)
                     + side * ((i & 2) == 0 ? -half : half)
                     + other * ((i & 4) == 0 ? -half : half);
             }
 
-            foreach (var (from, to) in BoxEdges)
-            {
-                points.Add(corners[from]);
-                points.Add(corners[to]);
-            }
-
-            return [.. points];
+            return SurfaceGeometry.Faceted(corners, BoxFaces);
         }
 
-        private static readonly (int From, int To)[] BoxEdges =
+        private static readonly int[][] BoxFaces =
         [
-            (0, 1), (2, 3), (4, 5), (6, 7),
-            (0, 2), (1, 3), (4, 6), (5, 7),
-            (0, 4), (1, 5), (2, 6), (3, 7),
+            [0, 2, 6, 4], [1, 5, 7, 3],
+            [0, 4, 5, 1], [2, 3, 7, 6],
+            [0, 1, 3, 2], [4, 6, 7, 5],
         ];
-
-        private static Vector3[] BuildCenterBox()
-        {
-            var half = TransformGizmo.ScaleBox * 1.15f;
-            var corners = new Vector3[8];
-
-            for (var i = 0; i < 8; i++)
-            {
-                corners[i] = new Vector3(
-                    (i & 1) == 0 ? -half : half,
-                    (i & 2) == 0 ? -half : half,
-                    (i & 4) == 0 ? -half : half);
-            }
-
-            var points = new List<Vector3>();
-
-            foreach (var (from, to) in BoxEdges)
-            {
-                points.Add(corners[from]);
-                points.Add(corners[to]);
-            }
-
-            return [.. points];
-        }
 
         private static Vector3[] BuildPlane(GizmoHandle handle)
         {
@@ -170,7 +134,7 @@ namespace YMM43D.PreviewTool.Rendering
             public RenderPipeline<TransformConstants> Pipeline { get; } = new RenderPipeline<TransformConstants>(
                     device, Vertex.InputElements, new VertexColorMaterial(device));
 
-            public (GizmoHandle Handle, LineMesh Mesh)[] Parts { get; } =
+            public (GizmoHandle Handle, IMesh Mesh)[] Parts { get; } =
                 [
                     (GizmoHandle.MoveX, new LineMesh(device, BuildArrow(Vector3.UnitX), AxisXColor)),
                     (GizmoHandle.MoveY, new LineMesh(device, BuildArrow(Vector3.UnitY), AxisYColor)),
@@ -182,9 +146,12 @@ namespace YMM43D.PreviewTool.Rendering
                     (GizmoHandle.RotateY, new LineMesh(device, BuildRing(GizmoHandle.RotateY), AxisYColor)),
                     (GizmoHandle.RotateZ, new LineMesh(device, BuildRing(GizmoHandle.RotateZ), AxisZColor)),
                     (GizmoHandle.ScaleX, new LineMesh(device, BuildScaleBar(Vector3.UnitX), AxisXColor)),
+                    (GizmoHandle.ScaleX, new SurfaceMesh(device, BuildScaleTip(Vector3.UnitX), [AxisXColor])),
                     (GizmoHandle.ScaleY, new LineMesh(device, BuildScaleBar(Vector3.UnitY), AxisYColor)),
+                    (GizmoHandle.ScaleY, new SurfaceMesh(device, BuildScaleTip(Vector3.UnitY), [AxisYColor])),
                     (GizmoHandle.ScaleZ, new LineMesh(device, BuildScaleBar(Vector3.UnitZ), AxisZColor)),
-                    (GizmoHandle.ScaleAll, new LineMesh(device, BuildCenterBox(), CenterColor)),
+                    (GizmoHandle.ScaleZ, new SurfaceMesh(device, BuildScaleTip(Vector3.UnitZ), [AxisZColor])),
+                    (GizmoHandle.ScaleAll, new SurfaceMesh(device, BuildCenterBox(), [CenterColor])),
                 ];
 
             public void Dispose()

@@ -1,40 +1,13 @@
-using System.Numerics;
+﻿using System.Numerics;
 
 namespace YMM43D.Graphics.Models
 {
-    public readonly record struct ModelSpringJoint(
-        int Bone,
-
-        Vector3 Axis,
-        float Length,
-
-        float Stiffness,
-
-        float Drag,
-
-        Vector3 Gravity,
-
-        float HitRadius = 0f,
-
-        float Slack = 0f);
-
-    public readonly record struct ModelSpringCollider(
-        int Bone,
-
-        Vector3 Offset,
-        float Radius,
-
-        Vector3 Tail,
-        bool IsCapsule);
-
     public sealed record ModelSpring(ModelSpringJoint[] Joints)
     {
         public ModelSpringCollider[] Colliders { get; init; } = [];
 
         public const float DefaultStiffness = 1f;
-
         public const float DefaultDrag = 0.4f;
-
         public const float DefaultHitRadius = 0.02f;
 
         public static ModelSpring? From(
@@ -56,8 +29,7 @@ namespace YMM43D.Graphics.Models
                 var bone = waiting.Dequeue();
 
                 if (Reach(bones, bone) is { } reach)
-                    joints.Add(new ModelSpringJoint(
-                        bone, reach.Axis, reach.Length, stiffness, drag, gravity, hitRadius));
+                    joints.Add(new ModelSpringJoint(bone, reach.Axis, reach.Length, stiffness, drag, gravity, hitRadius));
 
                 for (var i = 0; i < bones.Length; i++)
                 {
@@ -107,8 +79,7 @@ namespace YMM43D.Graphics.Models
                         ? Nearest(centre, Vector3.Transform(collider.Tail, hit), tip)
                         : centre;
 
-                    slack = MathF.Max(
-                        slack, collider.Radius + joint.HitRadius - Vector3.Distance(tip, near));
+                    slack = MathF.Max(slack, collider.Radius + joint.HitRadius - Vector3.Distance(tip, near));
                 }
 
                 joints[i] = joint with { Slack = slack };

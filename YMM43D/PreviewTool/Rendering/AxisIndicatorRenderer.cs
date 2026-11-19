@@ -17,22 +17,14 @@ namespace YMM43D.PreviewTool.Rendering
         private const float PositiveArm = 1f;
 
         private const float NegativeArm = 0.45f;
-
         private const float CapRadius = 0.17f;
-
         private const float ViewSize = 2.7f;
-
         private const float ViewDistance = 4f;
-
         private const float SizeRatio = 0.2f;
-
         private const float MinSize = 52f;
         private const float MaxSize = 108f;
-
         private const float Margin = 10f;
-
         private const float PickSlop = 1.6f;
-
         private const float MinPickRadius = 8f;
 
         private static readonly (Vector3 Tip, ViewDirection Direction)[] Tips =
@@ -53,11 +45,10 @@ namespace YMM43D.PreviewTool.Rendering
 
         public AxisIndicatorRenderer()
         {
-            resources = new DeviceResourceCache<IndicatorResources>(
-                device => new IndicatorResources(device));
+            resources = new DeviceResourceCache<IndicatorResources>(device => new IndicatorResources(device));
         }
 
-        public void Draw(in Render3DContext render, in CameraPose pose, float width, float height)
+        public void Draw(in Render3DContext render, in CameraPose pose, float width, float height, float pixelScale)
         {
             lastTransform = null;
 
@@ -79,13 +70,12 @@ namespace YMM43D.PreviewTool.Rendering
 
             var settings = new DrawSettings { IgnoreDepth = true, SkipDepthWrite = true };
 
-            render.Context.RSSetViewport(
-                new Viewport(width - size - Margin, height - size - Margin, size, size));
+            render.Context.RSSetViewport(new Viewport((width - size - Margin) * pixelScale, (height - size - Margin) * pixelScale, size * pixelScale, size * pixelScale));
 
             foreach (var mesh in shared.Axes)
                 shared.Pipeline.Draw(render.Context, TransformConstants.CreateUnlit(transform, 1f), settings, mesh);
 
-            render.Context.RSSetViewport(new Viewport(0, 0, width, height));
+            render.Context.RSSetViewport(new Viewport(0, 0, width * pixelScale, height * pixelScale));
 
             lastTransform = transform;
             lastOrigin = new Vector2(width - size - Margin, height - size - Margin);

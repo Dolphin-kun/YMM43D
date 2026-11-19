@@ -17,7 +17,6 @@ namespace YMM43D.PreviewTool.Rendering
         private static readonly Color4 ReachColor = new(0.65f, 0.55f, 0.22f, 1f);
 
         private const int RingSegments = 24;
-
         private const int RayCount = 8;
 
         private readonly DeviceResourceCache<MarkerResources> resources;
@@ -27,10 +26,7 @@ namespace YMM43D.PreviewTool.Rendering
             resources = new DeviceResourceCache<MarkerResources>(device => new MarkerResources(device));
         }
 
-        public void Draw(
-            in Render3DContext render,
-            IReadOnlyList<SceneMarkerResolver.PlacedMarker> markers,
-            IItem? selected)
+        public void Draw(in Render3DContext render, IReadOnlyList<SceneMarkerResolver.PlacedMarker> markers, IItem? selected)
         {
             if (markers.Count == 0)
                 return;
@@ -114,8 +110,7 @@ namespace YMM43D.PreviewTool.Rendering
             return [.. lines];
         }
 
-        private static Vector3 OnCircle(float radius, int step, int count)
-            => OnCircle(Vector3.UnitX, Vector3.UnitY, radius, step, count);
+        private static Vector3 OnCircle(float radius, int step, int count) => OnCircle(Vector3.UnitX, Vector3.UnitY, radius, step, count);
 
         private static Vector3 OnCircle(in Vector3 right, in Vector3 up, float radius, int step, int count)
         {
@@ -163,8 +158,7 @@ namespace YMM43D.PreviewTool.Rendering
 
         private sealed class MarkerResources(ID3D11Device device) : IDisposable
         {
-            private readonly RenderPipeline<TransformConstants> pipeline = new(
-                device, Vertex.InputElements, new VertexColorMaterial(device));
+            private readonly RenderPipeline<TransformConstants> pipeline = new(device, Vertex.InputElements, new VertexColorMaterial(device));
 
             private readonly Dictionary<(MarkerKind Kind, bool IsSelected), LineMesh> bodies = [];
 
@@ -178,10 +172,7 @@ namespace YMM43D.PreviewTool.Rendering
                 if (marker.Kind != MarkerKind.PointLight || marker.Reach <= 0f)
                     return;
 
-                Draw(
-                    render,
-                    Reach(),
-                    Matrix4x4.CreateScale(marker.Reach) * Matrix4x4.CreateTranslation(marker.Position));
+                Draw(render, Reach(), Matrix4x4.CreateScale(marker.Reach) * Matrix4x4.CreateTranslation(marker.Position));
             }
 
             private void Draw(in Render3DContext render, LineMesh mesh, in Matrix4x4 world)
@@ -203,8 +194,7 @@ namespace YMM43D.PreviewTool.Rendering
                 if (outline.Length == 0)
                     return null;
 
-                return bodies[key] = new LineMesh(
-                    device, outline, isSelected ? LightColor : Dim(LightColor));
+                return bodies[key] = new LineMesh(device, outline, isSelected ? LightColor : Dim(LightColor));
             }
 
             private static Color4 Dim(in Color4 color) => new(color.R * 0.65f, color.G * 0.65f, color.B * 0.65f, 1f);

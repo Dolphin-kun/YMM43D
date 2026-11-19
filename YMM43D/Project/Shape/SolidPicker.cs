@@ -3,7 +3,6 @@ using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
-using System.Windows.Input;
 using YukkuriMovieMaker.Commons;
 
 namespace YMM43D.Project.Shape
@@ -134,13 +133,11 @@ namespace YMM43D.Project.Shape
 
         public void Attach(Shape3DParameter? owner)
         {
-            if (parameter is not null)
-                parameter.PropertyChanged -= OnParameterPropertyChanged;
+            parameter?.PropertyChanged -= OnParameterPropertyChanged;
 
             parameter = owner;
 
-            if (parameter is not null)
-                parameter.PropertyChanged += OnParameterPropertyChanged;
+            parameter?.PropertyChanged += OnParameterPropertyChanged;
 
             Refresh();
         }

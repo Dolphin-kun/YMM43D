@@ -245,11 +245,8 @@ namespace YMM43D.Project.Model
 
         private void Clear()
         {
-            if (watched is not null)
-            {
-                watched.PropertyChanged -= OnSlotPropertyChanged;
-                watched = null;
-            }
+            watched?.PropertyChanged -= OnSlotPropertyChanged;
+            watched = null;
 
             foreach (var (attribute, control, _) in editors)
             {

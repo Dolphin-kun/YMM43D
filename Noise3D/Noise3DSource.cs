@@ -1,5 +1,4 @@
 using System.Numerics;
-using System.Runtime.InteropServices;
 using Vortice.Direct3D11;
 using YMM43D.Commons;
 using YMM43D.Graphics;
@@ -9,28 +8,7 @@ using YukkuriMovieMaker.Commons;
 
 namespace Noise3D
 {
-    [StructLayout(LayoutKind.Sequential)]
-    internal struct NoiseConstants
-    {
-        public Vector4 Color;
-
-        public Vector4 Box;
-
-        public Vector4 Camera;
-
-        public Vector4 Offset;
-
-        public Vector4 Feature;
-
-        public Vector4 Tone;
-
-        public Vector4 Fractal;
-
-        public Vector4 Warp;
-    }
-
-    internal sealed class Noise3DSource(IGraphicsDevicesAndContext devices, Noise3DParameter parameter)
-        : Shape3DSourceBase(devices)
+    internal sealed class Noise3DSource(IGraphicsDevicesAndContext devices, Noise3DParameter parameter) : Shape3DSourceBase(devices)
     {
         private const float DensityPerPixel = 0.01f;
 
@@ -65,22 +43,17 @@ namespace Noise3D
 
             var kind = NoiseVolume.KindOf(parameter.NoiseType) ?? NoiseVolumeKind.Value;
 
-            shared.Pipeline.Draw(
-                render.Context,
-                render.CreateConstants(world, item.Opacity, unlit: true),
-                CreateConstants(time, box, camera, axis, slices),
-                new DrawSettings
-                {
-                    Blend = BlendMode.Normal,
-                    Culling = FaceCulling.None,
-                    IgnoreDepth = item.IsAlwaysOnTop,
-                    SkipDepthWrite = true,
-                    Texture = shared.GetVolume(render.Context, kind, parameter.Seed),
-                    Sampler = NoiseVolume.IsPeriodic(kind)
-                        ? RenderStates.For(render.Device).LinearWrapSampler
-                        : shared.MirrorSampler,
-                },
-                mesh);
+            var settings = new DrawSettings
+            {
+                Blend = BlendMode.Normal,
+                Culling = FaceCulling.None,
+                IgnoreDepth = item.IsAlwaysOnTop,
+                SkipDepthWrite = true,
+                Texture = shared.GetVolume(render.Context, kind, parameter.Seed),
+                Sampler = NoiseVolume.IsPeriodic(kind) ? RenderStates.For(render.Device).LinearWrapSampler : shared.MirrorSampler,
+            };
+
+            shared.Pipeline.Draw(render.Context, render.CreateConstants(world, item.Opacity, unlit: true), CreateConstants(time, box, camera, axis, slices), settings, mesh);
         }
 
         private NoiseConstants CreateConstants(in FrameContext time, Vector3 box, Vector3 camera, int axis, int slices)
@@ -89,9 +62,7 @@ namespace Noise3D
 
             return new NoiseConstants
             {
-                Color = new Vector4(
-                    parameter.Color.ToVector3(),
-                    parameter.Density.GetFloat(time) / 100f * DensityPerPixel),
+                Color = new Vector4(parameter.Color.ToVector3(), parameter.Density.GetFloat(time) / 100f * DensityPerPixel),
                 Box = new Vector4(box, Math.Clamp(parameter.EdgeBlur.GetFloat(time) / 100f, 0f, 1f)),
                 Camera = new Vector4(camera, slices),
                 Offset = new Vector4(parameter.GetOffset(time), float.DegreesToRadians(parameter.Angle.GetFloat(time))),
@@ -137,10 +108,7 @@ namespace Noise3D
             private ID3D11ShaderResourceView? volumeView;
             private (NoiseVolumeKind Kind, int Seed) volumeKey;
 
-            public RenderPipeline<TransformConstants> Pipeline { get; } = new(
-                device,
-                NoiseVertex.InputElements,
-                new ShaderMaterial(device, typeof(NoiseResources).Assembly, "Noise3D.hlsl"));
+            public RenderPipeline<TransformConstants> Pipeline { get; } = new(device, NoiseVertex.InputElements, new ShaderMaterial(device, typeof(NoiseResources).Assembly, "Noise3D.hlsl"));
 
             public ID3D11SamplerState MirrorSampler { get; } = device.CreateSamplerState(new SamplerDescription
             {
@@ -175,10 +143,7 @@ namespace Noise3D
 
                 fixed (ushort* pointer = data)
                 {
-                    context.UpdateSubresource(
-                        volume, 0, null, (nint)pointer,
-                        NoiseVolume.Size * sizeof(ushort),
-                        NoiseVolume.Size * NoiseVolume.Size * sizeof(ushort));
+                    context.UpdateSubresource(volume, 0, null, (nint)pointer, NoiseVolume.Size * sizeof(ushort), NoiseVolume.Size * NoiseVolume.Size * sizeof(ushort));
                 }
 
                 volumeView = device.CreateShaderResourceView(volume);

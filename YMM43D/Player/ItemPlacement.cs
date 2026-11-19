@@ -1,5 +1,5 @@
-﻿using System.Collections.Immutable;
-using System.Numerics;
+﻿using System.Numerics;
+using Vortice.Direct2D1;
 using YMM43D.Commons;
 using YukkuriMovieMaker.Player.Video;
 using YukkuriMovieMaker.Project.Items;
@@ -11,29 +11,19 @@ namespace YMM43D.Player
         public static Matrix4x4 GetWorldMatrix(IVideoItem item, in FrameContext time)
         {
             var zoom = Matrix4x4.CreateScale(item.Zoom.GetFloat(time) / 100f);
-
             var rotation = Matrix4x4.CreateRotationZ(-float.DegreesToRadians(item.Rotation.GetFloat(time)));
-
-            var translation = Matrix4x4.CreateTranslation(WorldScale.ToWorldPosition(
-                item.X.GetFloat(time), item.Y.GetFloat(time), item.Z.GetFloat(time)));
+            var translation = Matrix4x4.CreateTranslation(WorldScale.ToWorldPosition(item.X.GetFloat(time), item.Y.GetFloat(time), item.Z.GetFloat(time)));
 
             return zoom * rotation * translation;
         }
 
         public static Matrix4x4 GetWorldMatrix(DrawDescription draw)
         {
-            var scale = new Vector3(
-                (float)draw.Zoom.X,
-                (float)draw.Zoom.Y,
-                (float)(draw.Zoom.X + draw.Zoom.Y) / 2f);
+            var scale = new Vector3(draw.Zoom.X, draw.Zoom.Y, (draw.Zoom.X + draw.Zoom.Y) / 2f);
+            var rotation = Rotation3D.ForObject(-draw.Rotation.X, -draw.Rotation.Y, -draw.Rotation.Z);
+            var translation = Matrix4x4.CreateTranslation(WorldScale.ToWorldPosition(draw.Draw.X, draw.Draw.Y, draw.Draw.Z));
 
-            var rotation = Rotation3D.ForObject(
-                -(float)draw.Rotation.X, -(float)draw.Rotation.Y, -(float)draw.Rotation.Z);
-
-            var translation = Matrix4x4.CreateTranslation(
-                WorldScale.ToWorldPosition(draw.Draw.X, draw.Draw.Y, draw.Draw.Z));
-
-            return Matrix4x4.CreateScale(scale) * rotation * translation;
+            return GetCenterMatrix(draw) * Matrix4x4.CreateScale(scale) * rotation * translation;
         }
 
         public static DrawDescription ToDrawDescription(IVideoItem item, in FrameContext time)
@@ -41,22 +31,19 @@ namespace YMM43D.Player
             var zoom = item.Zoom.GetFloat(time) / 100f;
 
             return new DrawDescription(
-                Draw: new Vector3(
-                    item.X.GetFloat(time), item.Y.GetFloat(time), item.Z.GetFloat(time)),
+                Draw: new Vector3(item.X.GetFloat(time), item.Y.GetFloat(time), item.Z.GetFloat(time)),
                 CenterPoint: Vector2.Zero,
                 Zoom: new Vector2(zoom, zoom),
                 Rotation: new Vector3(0f, 0f, item.Rotation.GetFloat(time)),
                 Camera: Matrix4x4.Identity,
-                ZoomInterpolationMode: Vortice.Direct2D1.InterpolationMode.Linear,
+                ZoomInterpolationMode: InterpolationMode.Linear,
                 Opacity: GetOpacity(item, time),
                 Invert: item.IsInverted,
-                Controllers: ImmutableList<VideoEffectController>.Empty);
+                Controllers: []);
         }
 
         public static Matrix4x4 WithCamera(in Matrix4x4 local, in Matrix4x4 cameraMatrix)
-            => cameraMatrix == Matrix4x4.Identity
-                ? local
-                : local * WorldScale.ToYUpMatrix(cameraMatrix);
+            => cameraMatrix == Matrix4x4.Identity ? local : local * WorldScale.ToYUpMatrix(cameraMatrix);
 
         public static ScreenPlacement GetScreenPlacement(IVideoItem item, in FrameContext time)
         {
@@ -69,7 +56,14 @@ namespace YMM43D.Player
                 item.Z.GetFloat(time));
         }
 
-        public static float GetOpacity(IVideoItem item, in FrameContext time)
+        private static Matrix4x4 GetCenterMatrix(DrawDescription draw)
+        {
+            var center = WorldScale.ToWorldPosition(draw.CenterPoint.X, draw.CenterPoint.Y, 0f);
+
+            return center.LengthSquared() < 1e-12f ? Matrix4x4.Identity : Matrix4x4.CreateTranslation(-center);
+        }
+
+        private static float GetOpacity(IVideoItem item, in FrameContext time)
         {
             var opacity = item.Opacity.GetFloat(time) / 100f;
 

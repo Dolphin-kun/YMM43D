@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using System.Windows.Media;
 using Vortice.Direct3D11;
 using YMM43D.Graphics;
@@ -6,20 +6,20 @@ using YMM43D.Graphics.Materials;
 using YMM43D.Graphics.Meshes;
 using YMM43D.Plugin;
 using YMM43D.Commons;
+using YMM43D.Project.Shape.Modifiers;
+using YukkuriMovieMaker.Player.Video;
 using YukkuriMovieMaker.Commons;
 
 namespace YMM43D.Project.Shape
 {
     internal sealed class Shape3DSource(IGraphicsDevicesAndContext devices, Shape3DParameter parameter)
-        : Shape3DSourceBase(devices)
+        : Shape3DSourceBase(devices), I3DGeometrySource
     {
         private readonly Shape3DParameter parameter = parameter;
         private readonly DeviceResourceCache<SolidResources> resources = new(device => new SolidResources(device));
+        private readonly ShapeMaterialPainter painter = new();
 
-        private SurfaceGeometry? geometry;
-        private SurfaceGeometry? builtMesh;
-        private SolidShape builtShape;
-        private Vector2[] builtOutline = [];
+        private Built? built;
 
         public override void Draw(in Render3DContext render, DrawContext3D item)
         {
@@ -27,12 +27,37 @@ namespace YMM43D.Project.Shape
                 return;
 
             var world = GetLocalMatrix(item.Time) * item.World;
-            var constants = render.CreateConstants(world, item.Opacity, parameter.IsUnlit, item.AlphaCutoff, parameter.GetGloss(item.Time));
+            var geometry = (render.IsOutput ? null : parameter.PreviewGeometry(item.Time)) ?? Geometry(item.Time);
 
-            var mesh = shared.GetMesh(Geometry(item.Time), parameter.ResolvedColors);
+            if (geometry.Faces.Length == 0)
+                return;
+
+            if (parameter.ShownMaterials is { Count: > 0 } materials)
+            {
+                painter.Draw(render, item, world, geometry, materials, parameter.IsUnlit);
+                return;
+            }
+
+            var constants = render.CreateConstants(world, item.Opacity, parameter.IsUnlit, item.AlphaCutoff, parameter.GetGloss(item.Time));
+            var mesh = shared.GetMesh(geometry, parameter.ResolvedColors);
 
             shared.Pipeline.Draw(render.Context, constants, item.ToDrawSettings(FaceCulling.Front), mesh);
             shared.Pipeline.Draw(render.Context, constants, item.ToDrawSettings(FaceCulling.Back), mesh);
+        }
+
+        public bool TryGetGeometry(
+            in FrameContext itemTime,
+            out SurfaceGeometry geometry,
+            out IReadOnlyList<Vortice.Mathematics.Color4> colors,
+            out Matrix4x4 local)
+        {
+            geometry = Geometry(itemTime);
+            colors = parameter.ShownMaterials is { Count: > 0 } materials
+                ? [.. materials.Select(material => material.Color.ToColor4())]
+                : [.. parameter.ResolvedColors.Select(color => color.ToColor4())];
+            local = GetLocalMatrix(itemTime);
+
+            return geometry.Faces.Length > 0;
         }
 
         private SolidShape Shape()
@@ -43,26 +68,29 @@ namespace YMM43D.Project.Shape
             var shape = Shape();
             var outline = parameter.IsCustom ? parameter.OutlinePoints(itemTime) : [];
 
-            if (geometry is { } found
-                && builtShape == shape
-                && ReferenceEquals(builtMesh, parameter.HasMesh ? parameter.EditedGeometry() : null)
-                && builtOutline.SequenceEqual(outline))
+            var mesh = parameter.UsesEditedGeometry ? parameter.EditedGeometry(itemTime) : null;
+
+            if (built is { } found
+                && found.Shape == shape
+                && ReferenceEquals(found.Mesh, mesh)
+                && found.Outline.SequenceEqual(outline))
             {
-                return found;
+                return found.Geometry;
             }
 
-            builtMesh = parameter.HasMesh ? parameter.EditedGeometry() : null;
-
-            builtShape = shape;
-            builtOutline = [.. outline];
-
-            if (parameter.HasMesh)
-                return geometry = parameter.EditedGeometry();
-
-            return geometry = shape.Kind == SolidKind.Custom
+            var made = mesh ?? (shape.Kind == SolidKind.Custom
                 ? OutlineSolid.Build(outline, shape.Form, shape.Depth / 100f, shape.Segments)
-                : Solids.Get(shape.Kind, shape.Segments, shape.Thickness);
+                : Solids.Get(shape.Kind, shape.Segments, shape.Thickness));
+
+            built = new Built(shape, mesh, [.. outline], made);
+
+            return made;
         }
+
+        protected override void Prepare(TimelineItemSourceDescription description)
+            => parameter.Targets = parameter.Modifiers.Any(modifier => modifier is BooleanModifier { IsEnabled: true }) ? BooleanTargets.Resolve(description, parameter) : null;
+
+        private sealed record Built(SolidShape Shape, SurfaceGeometry? Mesh, Vector2[] Outline, SurfaceGeometry Geometry);
 
         private Matrix4x4 GetLocalMatrix(in FrameContext itemTime) => parameter.GetLocalMatrix(itemTime);
 
@@ -71,6 +99,7 @@ namespace YMM43D.Project.Shape
 
         public override void Dispose()
         {
+            painter.Dispose();
             resources.Dispose();
             base.Dispose();
         }

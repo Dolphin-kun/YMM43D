@@ -26,7 +26,6 @@ namespace BeamLight3D
     public readonly record struct BeamShape(int Rings, int Shells, int Blur)
     {
         public const int MinDetail = 8;
-
         public const int MaxDetail = 128;
 
         public static BeamShape Create(int detail, int blur)

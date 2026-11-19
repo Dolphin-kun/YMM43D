@@ -5,6 +5,42 @@ namespace YMM43D.Graphics.Models
 {
     public static class FbxModelLoader
     {
+        private const double FbxSecond = 46186158000d;
+
+        private readonly record struct FbxCurve(float[] Times, float[] Values, float Fallback)
+        {
+            public float At(float seconds)
+            {
+                if (Times.Length == 0)
+                    return Fallback;
+
+                if (seconds <= Times[0])
+                    return Values[0];
+
+                if (seconds >= Times[^1])
+                    return Values[^1];
+
+                var low = 0;
+                var high = Times.Length - 1;
+
+                while (high - low > 1)
+                {
+                    var middle = (low + high) / 2;
+
+                    if (Times[middle] <= seconds)
+                        low = middle;
+                    else
+                        high = middle;
+                }
+
+                var span = Times[high] - Times[low];
+
+                return span > 1e-9f
+                    ? Values[low] + (Values[high] - Values[low]) * (seconds - Times[low]) / span
+                    : Values[low];
+            }
+        }
+
         public static ModelData Load(string path)
         {
             var full = Path.GetFullPath(path);
@@ -24,11 +60,14 @@ namespace YMM43D.Graphics.Models
             private readonly Dictionary<long, int> images = [];
             private readonly Dictionary<(long Material, string Slot), int> slotImages = [];
 
-            private UnityPackage? unity;
             private bool searchedUnity;
             private readonly Dictionary<long, Matrix4x4> worlds = [];
             private readonly Dictionary<(long Skin, long Model), int> boneOfModel = [];
             private readonly List<(long Skin, long Model)> boneModels = [];
+
+            private readonly List<(long Model, int Start, int Count)> loose = [];
+            private readonly Dictionary<long, int> boneOfAnyModel = [];
+            private readonly Dictionary<long, int> looseRoots = [];
 
             private readonly Dictionary<string, List<ModelMorphDelta>> shapes = [];
             private readonly List<string> shapeOrder = [];
@@ -54,9 +93,351 @@ namespace YMM43D.Graphics.Models
                 }
 
                 LinkBones();
+                HoldLooseParts();
+                BonesForWholeTree();
+                ReadAnimations();
                 FinishShapes();
 
                 return builder.Build();
+            }
+
+            private void HoldLooseParts()
+            {
+                for (var i = 0; i < boneModels.Count; i++)
+                    boneOfAnyModel.TryAdd(boneModels[i].Model, i);
+
+                if (loose.Count == 0)
+                    return;
+
+                var held = new Dictionary<long, int>();
+
+                foreach (var (model, start, count) in loose)
+                {
+                    if (!held.TryGetValue(model, out var bone))
+                        held[model] = bone = HolderFor(model);
+
+                    if (bone < 0)
+                        continue;
+
+                    builder.BindVertices(start, count, new ModelInfluence((ushort)bone, 0, 0, 0, new Vector4(1f, 0f, 0f, 0f)));
+                }
+            }
+
+            private void BonesForWholeTree()
+            {
+                if (boneModels.Count > 0)
+                    return;
+
+                var any = false;
+
+                foreach (var node in objects.Values)
+                {
+                    if (node.Name == "AnimationStack")
+                    {
+                        any = true;
+                        break;
+                    }
+                }
+
+                if (!any)
+                    return;
+
+                var found = new List<long>();
+
+                foreach (var (id, node) in objects)
+                {
+                    if (node.Name == "Model" && !boneOfAnyModel.ContainsKey(id))
+                        found.Add(id);
+                }
+
+                var at = builder.Bones.Count;
+
+                for (var i = 0; i < found.Count; i++)
+                    boneOfAnyModel[found[i]] = at + i;
+
+                foreach (var id in found)
+                {
+                    var node = objects[id];
+                    var parent = ParentModelOf(id);
+
+                    Matrix4x4.Invert(WorldOf(id) * builder.Root, out var inverse);
+
+                    builder.Bones.Add(new ModelBone(
+                        PartName(node),
+                        parent != 0 && boneOfAnyModel.TryGetValue(parent, out var holder) ? holder : -1,
+                        LocalMatrix(node),
+                        inverse));
+
+                    looseRoots[id] = boneOfAnyModel[id];
+                }
+            }
+
+            private int HolderFor(long model)
+            {
+                if (!objects.TryGetValue(model, out var holder))
+                    return -1;
+
+                var local = Matrix4x4.Identity;
+                var walk = model;
+                var parent = -1;
+                var depth = 0;
+
+                while (walk != 0 && depth++ < 64)
+                {
+                    if (boneOfAnyModel.TryGetValue(walk, out var found))
+                    {
+                        parent = found;
+                        break;
+                    }
+
+                    if (objects.GetValueOrDefault(walk) is { } above)
+                        local *= LocalMatrix(above);
+
+                    walk = ParentModelOf(walk);
+                }
+
+                if (parent < 0 && !IsAnimated(model))
+                    return -1;
+
+                if (!Matrix4x4.Invert(WorldOf(model) * builder.Root, out var inverse))
+                    return -1;
+
+                builder.Bones.Add(new ModelBone(PartName(holder), parent, local, inverse));
+                boneOfAnyModel.TryAdd(model, builder.Bones.Count - 1);
+
+                if (parent < 0)
+                    looseRoots[model] = builder.Bones.Count - 1;
+
+                return builder.Bones.Count - 1;
+            }
+
+            private bool IsAnimated(long model)
+            {
+                foreach (var (child, property) in propertiesOf.GetValueOrDefault(model) ?? [])
+                {
+                    if (KindOf(property) is not null
+                        && objects.GetValueOrDefault(child) is { Name: "AnimationCurveNode" })
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+
+            private void ReadAnimations()
+            {
+                if (builder.Bones.Count == 0)
+                    return;
+
+                var bonesOfModel = new Dictionary<long, List<int>>();
+
+                for (var i = 0; i < boneModels.Count; i++)
+                {
+                    var model = boneModels[i].Model;
+
+                    (bonesOfModel.TryGetValue(model, out var found) ? found : bonesOfModel[model] = []).Add(i);
+                }
+
+                foreach (var (model, bone) in looseRoots)
+                {
+                    if (!bonesOfModel.TryGetValue(model, out var found))
+                        bonesOfModel[model] = [bone];
+                    else if (!found.Contains(bone))
+                        found.Add(bone);
+                }
+
+                var drives = new Dictionary<long, List<(long Model, string Property)>>();
+
+                foreach (var (owner, list) in propertiesOf)
+                {
+                    foreach (var (child, property) in list)
+                    {
+                        (drives.TryGetValue(child, out var found) ? found : drives[child] = [])
+                            .Add((owner, property));
+                    }
+                }
+
+                var number = 0;
+
+                foreach (var (stackId, stack) in objects)
+                {
+                    if (stack.Name != "AnimationStack")
+                        continue;
+
+                    number++;
+
+                    var tracks = new List<ModelTrack>();
+                    var moved = new Dictionary<int, ModelAnimatedBone>();
+                    var duration = 0f;
+
+                    foreach (var layerId in childrenOf.GetValueOrDefault(stackId) ?? [])
+                    {
+                        if (objects.GetValueOrDefault(layerId) is not { Name: "AnimationLayer" })
+                            continue;
+
+                        foreach (var holderId in childrenOf.GetValueOrDefault(layerId) ?? [])
+                        {
+                            if (objects.GetValueOrDefault(holderId) is not { Name: "AnimationCurveNode" } holder)
+                                continue;
+
+                            foreach (var (model, property) in drives.GetValueOrDefault(holderId) ?? [])
+                            {
+                                if (KindOf(property) is not { } what
+                                    || !bonesOfModel.TryGetValue(model, out var bones)
+                                    || objects.GetValueOrDefault(model)?.Child("Properties70") is not { } rest)
+                                {
+                                    continue;
+                                }
+
+                                var fallback = Vector(rest, property, what == ModelTrackKind.Scale
+                                    ? Vector3.One
+                                    : Vector3.Zero);
+
+                                var channels = ChannelsOf(holderId, holder, fallback);
+                                var times = UnionOfTimes(channels);
+
+                                if (times.Length == 0)
+                                    continue;
+
+                                duration = MathF.Max(duration, times[^1]);
+
+                                var values = new float[times.Length * 3];
+
+                                for (var i = 0; i < times.Length; i++)
+                                {
+                                    values[i * 3] = channels[0].At(times[i]);
+                                    values[i * 3 + 1] = channels[1].At(times[i]);
+                                    values[i * 3 + 2] = channels[2].At(times[i]);
+                                }
+
+                                foreach (var bone in bones)
+                                {
+                                    if (!moved.ContainsKey(bone) && RestOf(model, bone) is { } at)
+                                        moved[bone] = at;
+
+                                    if (moved.ContainsKey(bone))
+                                        tracks.Add(new ModelTrack(bone, -1, what, times, values, false));
+                                }
+                            }
+                        }
+                    }
+
+                    if (tracks.Count == 0)
+                        continue;
+
+                    if (stack.Child("Properties70") is { } settings)
+                        duration = MathF.Max(duration, (float)(Value(settings, "LocalStop", 0d) / FbxSecond));
+
+                    builder.Animations.Add(new ModelAnimation(AnimationName(stack, number), duration, [.. tracks], [.. moved.Values]));
+                }
+            }
+
+            private static string AnimationName(FbxNode stack, int number) => Label(stack) is { Length: > 0 } name ? name : $"動き {number}";
+
+            private static string PartName(FbxNode node) => Label(node) is { Length: > 0 } name ? name : "（付いているもの）";
+
+            private static string Label(FbxNode node)
+            {
+                var text = node.Text(1);
+                var end = text.IndexOf('\0');
+
+                return end >= 0 ? text[..end] : text;
+            }
+
+            private static ModelTrackKind? KindOf(string property) => property switch
+            {
+                "Lcl Translation" => ModelTrackKind.Translation,
+                "Lcl Rotation" => ModelTrackKind.Angles,
+                "Lcl Scaling" => ModelTrackKind.Scale,
+                _ => null,
+            };
+
+            private FbxCurve[] ChannelsOf(long holderId, FbxNode holder, in Vector3 fallback)
+            {
+                var defaults = holder.Child("Properties70") is { } properties
+                    ? new Vector3(
+                        (float)Value(properties, "d|X", fallback.X),
+                        (float)Value(properties, "d|Y", fallback.Y),
+                        (float)Value(properties, "d|Z", fallback.Z))
+                    : fallback;
+
+                var made = new FbxCurve[3];
+
+                made[0] = new FbxCurve([], [], defaults.X);
+                made[1] = new FbxCurve([], [], defaults.Y);
+                made[2] = new FbxCurve([], [], defaults.Z);
+
+                foreach (var (curveId, channel) in propertiesOf.GetValueOrDefault(holderId) ?? [])
+                {
+                    if (objects.GetValueOrDefault(curveId) is not { Name: "AnimationCurve" } curve)
+                        continue;
+
+                    var slot = channel switch
+                    {
+                        "d|X" => 0,
+                        "d|Y" => 1,
+                        "d|Z" => 2,
+                        _ => -1,
+                    };
+
+                    if (slot < 0)
+                        continue;
+
+                    var stamps = curve.LongsOf("KeyTime");
+                    var amounts = curve.DoublesOf("KeyValueFloat");
+                    var count = Math.Min(stamps.Length, amounts.Length);
+
+                    if (count == 0)
+                        continue;
+
+                    var times = new float[count];
+                    var values = new float[count];
+
+                    for (var i = 0; i < count; i++)
+                    {
+                        times[i] = (float)(stamps[i] / FbxSecond);
+                        values[i] = (float)amounts[i];
+                    }
+
+                    made[slot] = new FbxCurve(times, values, made[slot].Fallback);
+                }
+
+                return made;
+            }
+
+            private static float[] UnionOfTimes(FbxCurve[] channels)
+            {
+                var all = new SortedSet<float>();
+
+                foreach (var channel in channels)
+                {
+                    foreach (var time in channel.Times)
+                        all.Add(time);
+                }
+
+                return [.. all];
+            }
+
+            private ModelAnimatedBone? RestOf(long model, int bone)
+            {
+                if (objects.GetValueOrDefault(model) is not { } node
+                    || node.Child("Properties70") is not { } properties
+                    || !Matrix4x4.Invert(LocalMatrix(node), out var inverse))
+                {
+                    return null;
+                }
+
+                return new ModelAnimatedBone(
+                    bone,
+                    Vector(properties, "Lcl Translation", Vector3.Zero),
+                    Quaternion.Identity,
+                    Vector(properties, "Lcl Scaling", Vector3.One),
+                    inverse)
+                {
+                    Angles = Vector(properties, "Lcl Rotation", Vector3.Zero),
+                    Joint = JointOf(properties),
+                };
             }
 
             private void LinkBones()
@@ -162,32 +543,27 @@ namespace YMM43D.Graphics.Models
                 if (node.Child("Properties70") is not { } properties)
                     return Matrix4x4.Identity;
 
+                return JointOf(properties).Compose(
+                    Vector(properties, "Lcl Translation", Vector3.Zero),
+                    Vector(properties, "Lcl Rotation", Vector3.Zero),
+                    Vector(properties, "Lcl Scaling", Vector3.One));
+            }
+
+            private static ModelJoint JointOf(FbxNode properties)
+            {
                 var order = (int)Value(properties, "RotationOrder", 0);
+                var post = ModelJoint.Turn(Vector(properties, "PostRotation", Vector3.Zero), order);
 
-                var translation = Vector(properties, "Lcl Translation", Vector3.Zero);
-                var rotation = Euler(Vector(properties, "Lcl Rotation", Vector3.Zero), order);
-                var scale = Vector(properties, "Lcl Scaling", Vector3.One);
+                Matrix4x4.Invert(post, out var postInverse);
 
-                var preRotation = Euler(Vector(properties, "PreRotation", Vector3.Zero), order);
-                var postRotation = Euler(Vector(properties, "PostRotation", Vector3.Zero), order);
-                Matrix4x4.Invert(postRotation, out var postInverse);
-
-                var rotationOffset = Vector(properties, "RotationOffset", Vector3.Zero);
-                var rotationPivot = Vector(properties, "RotationPivot", Vector3.Zero);
-                var scalingOffset = Vector(properties, "ScalingOffset", Vector3.Zero);
-                var scalingPivot = Vector(properties, "ScalingPivot", Vector3.Zero);
-
-                return Matrix4x4.CreateTranslation(-scalingPivot)
-                     * Matrix4x4.CreateScale(scale)
-                     * Matrix4x4.CreateTranslation(scalingPivot)
-                     * Matrix4x4.CreateTranslation(scalingOffset)
-                     * Matrix4x4.CreateTranslation(-rotationPivot)
-                     * postInverse
-                     * rotation
-                     * preRotation
-                     * Matrix4x4.CreateTranslation(rotationPivot)
-                     * Matrix4x4.CreateTranslation(rotationOffset)
-                     * Matrix4x4.CreateTranslation(translation);
+                return new ModelJoint(
+                    Vector(properties, "ScalingPivot", Vector3.Zero),
+                    Vector(properties, "ScalingOffset", Vector3.Zero),
+                    Vector(properties, "RotationPivot", Vector3.Zero),
+                    Vector(properties, "RotationOffset", Vector3.Zero),
+                    ModelJoint.Turn(Vector(properties, "PreRotation", Vector3.Zero), order),
+                    postInverse,
+                    order);
             }
 
             private static Matrix4x4 GeometricMatrix(FbxNode node)
@@ -200,25 +576,8 @@ namespace YMM43D.Graphics.Models
                 var scale = Vector(properties, "GeometricScaling", Vector3.One);
 
                 return Matrix4x4.CreateScale(scale)
-                     * Euler(rotation, (int)Value(properties, "RotationOrder", 0))
+                     * ModelJoint.Turn(rotation, (int)Value(properties, "RotationOrder", 0))
                      * Matrix4x4.CreateTranslation(translation);
-            }
-
-            private static Matrix4x4 Euler(Vector3 degrees, int order)
-            {
-                var x = Matrix4x4.CreateRotationX(float.DegreesToRadians(degrees.X));
-                var y = Matrix4x4.CreateRotationY(float.DegreesToRadians(degrees.Y));
-                var z = Matrix4x4.CreateRotationZ(float.DegreesToRadians(degrees.Z));
-
-                return order switch
-                {
-                    1 => x * z * y,
-                    2 => y * z * x,
-                    3 => y * x * z,
-                    4 => z * x * y,
-                    5 => z * y * x,
-                    _ => x * y * z,
-                };
             }
 
             private static Vector3 Vector(FbxNode properties, string name, Vector3 fallback)
@@ -226,8 +585,7 @@ namespace YMM43D.Graphics.Models
                 if (Find(properties, name) is not { } property || property.Properties.Length < 7)
                     return fallback;
 
-                return new Vector3(
-                    (float)Double(property, 4), (float)Double(property, 5), (float)Double(property, 6));
+                return new Vector3((float)Double(property, 4), (float)Double(property, 5), (float)Double(property, 6));
             }
 
             private static double Value(FbxNode properties, string name, double fallback)
@@ -271,6 +629,7 @@ namespace YMM43D.Graphics.Models
 
                 var influences = ReadSkin(geometry, pointCount, geometric);
                 var placed = influences is null ? world : Matrix4x4.Identity;
+                var from = builder.VertexCount;
 
                 Matrix4x4.Invert(placed, out var inverse);
                 var normalMatrix = Matrix4x4.Transpose(inverse);
@@ -332,10 +691,7 @@ namespace YMM43D.Graphics.Models
                             if (!known.TryGetValue(vertexKey, out made[c]))
                             {
                                 var position = Vector3.Transform(
-                                    new Vector3(
-                                        (float)positions[point * 3],
-                                        (float)positions[point * 3 + 1],
-                                        (float)positions[point * 3 + 2]),
+                                    new Vector3((float)positions[point * 3], (float)positions[point * 3 + 1], (float)positions[point * 3 + 2]),
                                     placed);
 
                                 var normal = normals.Vector3At(normalAt);
@@ -365,6 +721,9 @@ namespace YMM43D.Graphics.Models
                 }
 
                 ReadShapes(geometry, madeFrom, placed);
+
+                if (influences is null && builder.VertexCount > from)
+                    loose.Add((modelId, from, builder.VertexCount - from));
             }
 
             private void ReadShapes(FbxNode geometry, Dictionary<int, List<uint>> madeFrom, in Matrix4x4 placed)
@@ -422,13 +781,11 @@ namespace YMM43D.Graphics.Models
                 return shownShapes.Contains(name);
             }
 
-            private static bool IsDivider(string name)
-                => name.Length > 2 && name.StartsWith('-') && name.EndsWith('-');
+            private static bool IsDivider(string name) => name.Length > 2 && name.StartsWith('-') && name.EndsWith('-');
 
             private static int Depth(string name) => name.Count(letter => letter is '.' or '_');
 
-            private void AddShape(
-                string name, FbxNode shape, Dictionary<int, List<uint>> madeFrom, in Matrix4x4 direction)
+            private void AddShape(string name, FbxNode shape, Dictionary<int, List<uint>> madeFrom, in Matrix4x4 direction)
             {
                 var points = shape.IntegersOf("Indexes");
                 var offsets = shape.DoublesOf("Vertices");
@@ -448,8 +805,7 @@ namespace YMM43D.Graphics.Models
                         continue;
 
                     var offset = Vector3.TransformNormal(
-                        new Vector3(
-                            (float)offsets[i * 3], (float)offsets[i * 3 + 1], (float)offsets[i * 3 + 2]),
+                        new Vector3((float)offsets[i * 3], (float)offsets[i * 3 + 1], (float)offsets[i * 3 + 2]),
                         direction);
 
                     if (offset.LengthSquared() < ModelBuilder.MorphThreshold * ModelBuilder.MorphThreshold)
@@ -467,8 +823,7 @@ namespace YMM43D.Graphics.Models
                     if (shapes[name].Count == 0)
                         continue;
 
-                    builder.Expressions.Add(
-                        new ModelExpression(name, string.Empty, [new ModelExpressionBind(builder.Morphs.Count, 1f)]));
+                    builder.Expressions.Add(new ModelExpression(name, string.Empty, [new ModelExpressionBind(builder.Morphs.Count, 1f)]));
 
                     builder.Morphs.Add(new ModelMorph(name, [.. shapes[name]]));
                 }
@@ -599,9 +954,7 @@ namespace YMM43D.Graphics.Models
 
             private void FillFlatNormal(uint a, uint b, uint c)
             {
-                var normal = Vector3.Cross(
-                    builder.PositionOf(b) - builder.PositionOf(a),
-                    builder.PositionOf(c) - builder.PositionOf(a));
+                var normal = Vector3.Cross(builder.PositionOf(b) - builder.PositionOf(a), builder.PositionOf(c) - builder.PositionOf(a));
 
                 if (normal.LengthSquared() <= 1e-20f)
                     return;
@@ -684,9 +1037,7 @@ namespace YMM43D.Graphics.Models
                 if (geometry.Child("LayerElementMaterial") is not { } layer)
                     return new MaterialValues([], true);
 
-                return new MaterialValues(
-                    layer.IntegersOf("Materials"),
-                    layer.TextOf("MappingInformationType") == "AllSame");
+                return new MaterialValues(layer.IntegersOf("Materials"), layer.TextOf("MappingInformationType") == "AllSame");
             }
 
             private List<long> MaterialSlots(long modelId)
@@ -722,11 +1073,8 @@ namespace YMM43D.Graphics.Models
 
             private ModelSurface Surface(List<long> slots, int slot)
             {
-                if (slot < 0 || slot >= slots.Count
-                    || objects.GetValueOrDefault(slots[slot]) is not { } material)
-                {
+                if (slot < 0 || slot >= slots.Count || objects.GetValueOrDefault(slots[slot]) is not { } material)
                     return ModelSurface.Default;
-                }
 
                 var id = slots[slot];
                 var surface = ModelSurface.Default;
@@ -791,10 +1139,10 @@ namespace YMM43D.Graphics.Models
                     if (!searchedUnity)
                     {
                         searchedUnity = true;
-                        unity = UnityPackage.Open(directory, MaterialNames());
+                        field = UnityPackage.Open(directory, MaterialNames());
                     }
 
-                    return unity;
+                    return field;
                 }
             }
 
@@ -822,11 +1170,8 @@ namespace YMM43D.Graphics.Models
 
                 try
                 {
-                    if (FindTexture(materialId, names) is { } texture
-                        && ImageBytes(texture) is { Length: > 0 } data)
-                    {
+                    if (FindTexture(materialId, names) is { } texture && ImageBytes(texture) is { Length: > 0 } data)
                         return slotImages[key] = builder.AddImage(ModelImageDecoder.Decode(data));
-                    }
                 }
                 catch (Exception)
                 {

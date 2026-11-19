@@ -5,13 +5,9 @@ namespace YMM43D.Graphics.Models
     public sealed class ModelSpringState
     {
         private const int MaxCatchUp = 30;
-
         private const float StepReach = 0.5f;
-
         private const int MaxSubSteps = 8;
-
         private const float StepSeconds = 1f / 60f;
-
         private const float JumpReach = 8f;
 
         private ModelData? source;
@@ -98,8 +94,7 @@ namespace YMM43D.Graphics.Models
             lastPose = null;
         }
 
-        public Matrix4x4[]? Last(ModelData model, Matrix4x4[]? pose)
-            => ReferenceEquals(source, model) && Same(pose, lastPose) ? result : null;
+        public Matrix4x4[]? Last(ModelData model, Matrix4x4[]? pose) => ReferenceEquals(source, model) && Same(pose, lastPose) ? result : null;
 
         private void Remember(Matrix4x4[]? pose)
         {
@@ -159,8 +154,7 @@ namespace YMM43D.Graphics.Models
             return moved > longest * MathF.Max(scale, 1e-3f) * JumpReach;
         }
 
-        private int SubSteps(
-            ModelData model, IReadOnlyList<ModelSpring> springs, in Matrix4x4 world, float share)
+        private int SubSteps(ModelData model, IReadOnlyList<ModelSpring> springs, in Matrix4x4 world, float share)
         {
             var moved = Vector3.Distance(world.Translation, lastWorld.Translation) * share;
 
@@ -184,8 +178,7 @@ namespace YMM43D.Graphics.Models
             return Math.Clamp((int)MathF.Ceiling(moved / reach), 1, MaxSubSteps);
         }
 
-        private static float ScaleOf(in Matrix4x4 place)
-            => new Vector3(place.M11, place.M12, place.M13).Length();
+        private static float ScaleOf(in Matrix4x4 place) => new Vector3(place.M11, place.M12, place.M13).Length();
 
         public Matrix4x4[]? Last(ModelData model) => ReferenceEquals(source, model) ? result : null;
 
@@ -274,8 +267,7 @@ namespace YMM43D.Graphics.Models
 
                     var global = moved * back;
 
-                    if (Matrix4x4.Invert(
-                        model.Bones[joint.Bone].Local * ParentOf(model, globals, joint.Bone), out var undo))
+                    if (Matrix4x4.Invert(model.Bones[joint.Bone].Local * ParentOf(model, globals, joint.Bone), out var undo))
                     {
                         made[joint.Bone] = global * undo;
                     }

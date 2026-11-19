@@ -1,5 +1,4 @@
-﻿using System.ComponentModel;
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 using System.Numerics;
 using System.Windows.Media;
 using YMM43D.Commons;
@@ -14,131 +13,86 @@ namespace YMM43D.Project.Items
     public sealed class LightItem : BaseItem, ISceneLightSource, ISceneMarkerSource
     {
         private const string Lamp = "3D光源";
-
         private const string Shade = "影";
 
-        private const int FirstOrder = 100;
+        private const int AfterGeneral = 100;
 
-        [Display(GroupName = Lamp, Name = "種類",
-            Description = "平行光は向きだけ、点光源は置いた場所から周り、スポットライトは円錐の中を照らします", Order = FirstOrder)]
+        [Display(GroupName = Lamp, Name = "種類", Description = "平行光は向きだけ、点光源は置いた場所から周り、スポットライトは円錐の中を照らします", Order = AfterGeneral)]
         [EnumComboBox]
-        public LightKind Kind
-        {
-            get => kind;
-            set
-            {
-                Set(ref kind, value);
-                OnPropertyChanged(nameof(IsSpot));
-                OnPropertyChanged(nameof(IsAimed));
-                OnPropertyChanged(nameof(IsPlaced));
-                OnPropertyChanged(nameof(IsShadowed));
-            }
-        }
-        private LightKind kind = LightKind.Directional;
+        public LightKind Kind { get; set => Set(ref field, value, nameof(Kind), nameof(IsSpot), nameof(IsAimed), nameof(IsPlaced)); } = LightKind.Directional;
 
-        [Browsable(false)]
-        [EditorBrowsable(EditorBrowsableState.Never)]
         public bool IsSpot => Kind == LightKind.Spot;
 
-        [Browsable(false)]
-        [EditorBrowsable(EditorBrowsableState.Never)]
         public bool IsAimed => Kind is LightKind.Directional or LightKind.Spot;
 
-        [Browsable(false)]
-        [EditorBrowsable(EditorBrowsableState.Never)]
         public bool IsPlaced => Kind is LightKind.Point or LightKind.Spot;
 
-        [Display(GroupName = Lamp, Name = "水平角",
-            Description = "光が来る向き。0 で正面から", Order = FirstOrder + 1)]
+        [Display(GroupName = Lamp, Name = "水平角", Description = "光が来る左右の向き", Order = AfterGeneral)]
         [AnimationSlider("F1", "°", -180, 180)]
         [ShowPropertyEditorWhen(nameof(IsAimed), true)]
         public Animation Yaw { get; } = new(SceneLighting.DefaultYaw, -100000, 100000);
 
-        [Display(GroupName = Lamp, Name = "垂直角",
-            Description = "光が来る高さ。正で上から", Order = FirstOrder + 2)]
+        [Display(GroupName = Lamp, Name = "垂直角", Description = "光が来る上下の向き", Order = AfterGeneral)]
         [AnimationSlider("F1", "°", -90, 90)]
         [ShowPropertyEditorWhen(nameof(IsAimed), true)]
         public Animation Pitch { get; } = new(SceneLighting.DefaultPitch, -90, 90);
 
-        [Display(GroupName = Lamp, Name = "X", Description = "光を置く位置。右が正", Order = FirstOrder + 3)]
+        [Display(GroupName = Lamp, Name = "X", Description = "光を置く横の位置で、右が正です", Order = AfterGeneral)]
         [AnimationSlider("F1", "px", -2000, 2000)]
         [ShowPropertyEditorWhen(nameof(IsPlaced), true)]
         public Animation X { get; } = new(0, -1000000, 1000000);
 
-        [Display(GroupName = Lamp, Name = "Y", Description = "下が正。画面の座標と同じ向き", Order = FirstOrder + 4)]
+        [Display(GroupName = Lamp, Name = "Y", Description = "光を置く縦の位置で、下が正です", Order = AfterGeneral)]
         [AnimationSlider("F1", "px", -2000, 2000)]
         [ShowPropertyEditorWhen(nameof(IsPlaced), true)]
         public Animation Y { get; } = new(-500, -1000000, 1000000);
 
-        [Display(GroupName = Lamp, Name = "Z", Description = "手前が正", Order = FirstOrder + 5)]
+        [Display(GroupName = Lamp, Name = "Z", Description = "光を置く奥行きの位置で、手前が正です", Order = AfterGeneral)]
         [AnimationSlider("F1", "px", -5000, 5000)]
         [ShowPropertyEditorWhen(nameof(IsPlaced), true)]
         public Animation Z { get; } = new(500, -1000000, 1000000);
 
-        [Display(GroupName = Lamp, Name = "届く距離",
-            Description = "この距離まで届きます。遠いほど弱くなります", Order = FirstOrder + 6)]
+        [Display(GroupName = Lamp, Name = "届く距離", Description = "光が届く距離", Order = AfterGeneral)]
         [AnimationSlider("F1", "px", 100, 5000)]
         [ShowPropertyEditorWhen(nameof(IsPlaced), true)]
         public Animation Reach { get; } = new(2000, 1, 1000000);
 
-        [Display(GroupName = Lamp, Name = "広がり",
-            Description = "円錐の開き具合。小さいほど細く絞られます", Order = FirstOrder + 7)]
+        [Display(GroupName = Lamp, Name = "広がり", Description = "円錐の開き具合", Order = AfterGeneral)]
         [AnimationSlider("F1", "°", SceneLight.MinSpread, SceneLight.MaxSpread)]
         [ShowPropertyEditorWhen(nameof(IsSpot), true)]
         public Animation Spread { get; } = new(30, SceneLight.MinSpread, SceneLight.MaxSpread);
 
-        [Display(GroupName = Lamp, Name = "ふちのぼかし",
-            Description = "0 でくっきり、100 で中心から外へなだらかに暗くなります", Order = FirstOrder + 8)]
+        [Display(GroupName = Lamp, Name = "ふちのぼかし", Description = "円錐のふちを外へなだらかに暗くします", Order = AfterGeneral)]
         [AnimationSlider("F0", "%", 0, 100)]
         [ShowPropertyEditorWhen(nameof(IsSpot), true)]
         public Animation EdgeBlur { get; } = new(50, 0, 100);
 
-        [Display(GroupName = Lamp, Name = "色", Order = FirstOrder + 9)]
+        [Display(GroupName = Lamp, Name = "色", Description = "光の色", Order = AfterGeneral)]
         [ColorPicker]
         public Color LightColor { get => lightColor; set => Set(ref lightColor, value); }
         private Color lightColor = Colors.White;
 
-        [Display(GroupName = Lamp, Name = "明るさ", Order = FirstOrder + 10)]
+        [Display(GroupName = Lamp, Name = "明るさ", Description = "光の明るさ", Order = AfterGeneral)]
         [AnimationSlider("F0", "%", 0, 200)]
         public Animation Brightness { get; } = new(SceneLighting.DefaultBrightness * 100, 0, 10000);
 
-        [Display(GroupName = Shade, Name = "影を落とす",
-            Description = "光をさえぎった物の後ろを暗くします", Order = 100)]
+        [Display(GroupName = Shade, Name = "影を落とす", Description = "光をさえぎった物の後ろを暗くします", Order = AfterGeneral)]
         [ToggleSlider]
-        public bool CastsShadow
-        {
-            get => castsShadow;
-            set
-            {
-                Set(ref castsShadow, value);
-                OnPropertyChanged(nameof(IsShadowed));
-            }
-        }
-        private bool castsShadow;
+        public bool CastsShadow { get; set => Set(ref field, value); }
 
-        [Browsable(false)]
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        public bool IsShadowed => CastsShadow;
-
-        [Display(GroupName = Shade, Name = "影の濃さ",
-            Description = "100 で光がまったく届かなくなります", Order = 200)]
+        [Display(GroupName = Shade, Name = "影の濃さ", Description = "影になったところの暗さ", Order = AfterGeneral)]
         [AnimationSlider("F0", "%", 0, 100)]
-        [ShowPropertyEditorWhen(nameof(IsShadowed), true)]
+        [ShowPropertyEditorWhen(nameof(CastsShadow), true)]
         public Animation ShadowStrength { get; } = new(80, 0, 100);
 
-        [Display(GroupName = Shade, Name = "影のぼかし",
-            Description = "0 でくっきり、大きいほど影のふちがやわらかくなります", Order = 300)]
+        [Display(GroupName = Shade, Name = "影のぼかし", Description = "影のふちのやわらかさ", Order = AfterGeneral)]
         [AnimationSlider("F0", "%", 0, 100)]
-        [ShowPropertyEditorWhen(nameof(IsShadowed), true)]
+        [ShowPropertyEditorWhen(nameof(CastsShadow), true)]
         public Animation ShadowSoftness { get; } = new(20, 0, 100);
 
         public override string Label => "3D光源";
 
-        public override Color ItemColor
-        {
-            get => itemColor;
-            set => Set(ref itemColor, value);
-        }
+        public override Color ItemColor { get => itemColor; set => Set(ref itemColor, value); }
         private Color itemColor = Color.FromRgb(0xFF, 0xD5, 0x4F);
 
         public override TimeSpan OriginalContentLength => TimeSpan.Zero;
@@ -151,43 +105,24 @@ namespace YMM43D.Project.Items
 
             if (Kind == LightKind.Spot)
             {
-                return WithShade(SceneLight.Spot(
-                    GetPosition(itemTime),
-                    GetShines(itemTime),
-                    color,
-                    WorldScale.ToWorld(Reach.GetFloat(itemTime)),
-                    Spread.GetFloat(itemTime),
-                    EdgeBlur.GetFloat(itemTime) / 100f), itemTime);
+                var spot = SceneLight.Spot(GetPosition(itemTime), GetShines(itemTime), color, GetReach(itemTime), Spread.GetFloat(itemTime), EdgeBlur.GetFloat(itemTime) / 100f);
+
+                return WithShade(spot, itemTime);
             }
 
             if (Kind == LightKind.Point)
-            {
-                return SceneLight.Point(
-                    GetPosition(itemTime), color, WorldScale.ToWorld(Reach.GetFloat(itemTime)));
-            }
+                return SceneLight.Point(GetPosition(itemTime), color, GetReach(itemTime));
 
-            return WithShade(
-                SceneLight.FromAngles(Yaw.GetFloat(itemTime), Pitch.GetFloat(itemTime), color), itemTime);
+            return WithShade(SceneLight.FromAngles(Yaw.GetFloat(itemTime), Pitch.GetFloat(itemTime), color), itemTime);
         }
 
-        private SceneLight WithShade(in SceneLight light, in FrameContext itemTime)
-            => CastsShadow
-                ? light.WithShadow(ShadowStrength.GetFloat(itemTime) / 100f, ShadowSoftness.GetFloat(itemTime) / 100f)
-                : light;
+        private SceneLight WithShade(in SceneLight light, in FrameContext itemTime) => CastsShadow ? light.WithShadow(ShadowStrength.GetFloat(itemTime) / 100f, ShadowSoftness.GetFloat(itemTime) / 100f) : light;
 
         public SceneMarker GetMarker(in FrameContext itemTime) => Kind switch
         {
-            LightKind.Spot => SceneMarker.ForSpotLight(
-                GetPosition(itemTime),
-                GetShines(itemTime),
-                WorldScale.ToWorld(Reach.GetFloat(itemTime)),
-                Spread.GetFloat(itemTime)),
-
-            LightKind.Point => SceneMarker.ForPointLight(
-                GetPosition(itemTime), WorldScale.ToWorld(Reach.GetFloat(itemTime))),
-
-            _ => SceneMarker.ForDirectionalLight(
-                SceneLight.ToDirection(Yaw.GetFloat(itemTime), Pitch.GetFloat(itemTime))),
+            LightKind.Spot => SceneMarker.ForSpotLight(GetPosition(itemTime), GetShines(itemTime), GetReach(itemTime), Spread.GetFloat(itemTime)),
+            LightKind.Point => SceneMarker.ForPointLight(GetPosition(itemTime), GetReach(itemTime)),
+            _ => SceneMarker.ForDirectionalLight(SceneLight.ToDirection(Yaw.GetFloat(itemTime), Pitch.GetFloat(itemTime))),
         };
 
         public void MoveMarker(in Vector3 shift, in FrameContext itemTime, in EditScope scope)
@@ -200,7 +135,6 @@ namespace YMM43D.Project.Items
 
             var yaw = Yaw.GetFloat(itemTime);
             var pitch = Pitch.GetFloat(itemTime);
-
             var moved = SceneLight.ToDirection(yaw, pitch) * SceneMarker.DirectionalDistance + shift;
 
             if (moved.LengthSquared() < 1e-8f)
@@ -212,17 +146,15 @@ namespace YMM43D.Project.Items
             scope.Nudge(Pitch, Math.Clamp(raised, -90f, 90f) - pitch);
         }
 
-        private Vector3 GetPosition(in FrameContext itemTime)
-            => WorldScale.ToWorldPosition(X.GetFloat(itemTime), Y.GetFloat(itemTime), Z.GetFloat(itemTime));
+        private Vector3 GetPosition(in FrameContext itemTime) => WorldScale.ToWorldPosition(X.GetFloat(itemTime), Y.GetFloat(itemTime), Z.GetFloat(itemTime));
 
-        private Vector3 GetShines(in FrameContext itemTime)
-            => -SceneLight.ToDirection(Yaw.GetFloat(itemTime), Pitch.GetFloat(itemTime));
+        private Vector3 GetShines(in FrameContext itemTime) => -SceneLight.ToDirection(Yaw.GetFloat(itemTime), Pitch.GetFloat(itemTime));
 
-        protected override IEnumerable<IAnimatable> GetAnimatables()
-            => [Yaw, Pitch, X, Y, Z, Reach, Spread, EdgeBlur, Brightness, ShadowStrength, ShadowSoftness];
+        private float GetReach(in FrameContext itemTime) => WorldScale.ToWorld(Reach.GetFloat(itemTime));
 
-        public override IAsyncEnumerable<ExoItem> GetExoItemsAsync(ExoOutputDescription outputDescription)
-            => AsyncEnumerable.Empty<ExoItem>();
+        protected override IEnumerable<IAnimatable> GetAnimatables() => [Yaw, Pitch, X, Y, Z, Reach, Spread, EdgeBlur, Brightness, ShadowStrength, ShadowSoftness];
+
+        public override IAsyncEnumerable<ExoItem> GetExoItemsAsync(ExoOutputDescription outputDescription) => AsyncEnumerable.Empty<ExoItem>();
 
         public override IEnumerable<string> GetFiles() => [];
 

@@ -1,4 +1,3 @@
-
 namespace YMM43D.Commons
 {
     internal sealed class CameraChangeTracker

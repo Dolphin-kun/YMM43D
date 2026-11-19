@@ -1,5 +1,4 @@
-
-using YMM43D.Commons;
+﻿using YMM43D.Commons;
 using YukkuriMovieMaker.Player.Video;
 using YukkuriMovieMaker.Project;
 using YukkuriMovieMaker.Project.Items;
@@ -13,13 +12,9 @@ namespace YMM43D.Player
         public static CameraState Resolve(TimelineItemSourceDescription description)
             => Resolve(TimelineLookup.Find(description), description.TimelinePosition.Frame, description.FPS);
 
-        public static CameraState Resolve(Timeline timeline)
-            => Resolve(timeline, timeline.CurrentFrame, Math.Max(1, timeline.VideoInfo.FPS));
+        public static CameraState Resolve(Timeline timeline) => Resolve(timeline, timeline.CurrentFrame, Math.Max(1, timeline.VideoInfo.FPS));
 
-        private static CameraState Resolve(Timeline? timeline, int frame, int fps)
-            => Find(timeline, frame, fps) is { } active
-                ? active.Source.GetState(active.ItemTime)
-                : CameraState.Default;
+        public static ActiveCamera? Find(Timeline timeline) => Find(timeline, timeline.CurrentFrame, Math.Max(1, timeline.VideoInfo.FPS));
 
         public static ActiveCamera? Find(Timeline? timeline, int frame, int fps)
         {
@@ -45,7 +40,7 @@ namespace YMM43D.Player
             return found;
         }
 
-        public static ActiveCamera? Find(Timeline timeline)
-            => Find(timeline, timeline.CurrentFrame, Math.Max(1, timeline.VideoInfo.FPS));
+        private static CameraState Resolve(Timeline? timeline, int frame, int fps)
+            => Find(timeline, frame, fps) is { } active ? active.Source.GetState(active.ItemTime) : CameraState.Default;
     }
 }

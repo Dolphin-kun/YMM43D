@@ -1,7 +1,5 @@
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
-using System.Numerics;
-using System.Runtime.InteropServices;
 using YMM43D.Commons;
 using YMM43D.Plugin;
 using YukkuriMovieMaker.Commons;
@@ -13,7 +11,7 @@ using YukkuriMovieMaker.Plugin.Effects;
 
 namespace Shatter3D
 {
-    [VideoEffect("砕け散る3D", ["3D"], ["砕け散る", "クラッシュ", "crash", "割れ", "ガラス"])]
+    [VideoEffect("砕け散る3D", ["3D"], ["砕け散る", "クラッシュ", "割れ", "ガラス", "crash"])]
     public class Shatter3DEffect : VideoEffect3DBase
     {
         private const string Group = "砕け散る3D";
@@ -22,221 +20,94 @@ namespace Shatter3D
 
         public override string Label => "砕け散る3D";
 
-        [Display(GroupName = Group, Name = "開始時間",
-            Description = "アイテムの頭から何秒後に砕けるか", Order = 100)]
+        [Display(GroupName = Group, Name = "開始時間", Description = "アイテムの頭から何秒後に砕けるか")]
         [TextBoxSlider("F2", "秒", -10, 10)]
         [Range(-100000, 100000)]
         [DefaultValue(0d)]
-        public double StartTime { get => startTime; set => Set(ref startTime, value); }
-        private double startTime;
+        public double StartTime { get; set => Set(ref field, value); }
 
-        [Display(GroupName = Group, Name = "再生速度",
-            Description = "砕けが進む速さ", Order = 200)]
+        [Display(GroupName = Group, Name = "再生速度", Description = "砕けが進む速さ")]
         [TextBoxSlider("F1", "%", -100, 100)]
         [Range(-100000, 100000)]
         [DefaultValue(100d)]
-        public double PlaybackRate { get => playbackRate; set => Set(ref playbackRate, value); }
-        private double playbackRate = 100;
+        public double PlaybackRate { get; set => Set(ref field, value); } = 100;
 
-        [Display(GroupName = Group, Name = "破片の大きさ",
-            Description = "1枚あたりの差し渡し。小さいほど細かく割れます", Order = 300)]
+        [Display(GroupName = Group, Name = "破片の大きさ", Description = "1枚あたりの差し渡し")]
         [TextBoxSlider("F1", "px", 4, 200)]
         [Range(1, 100000)]
         [DefaultValue(50d)]
-        public double Size { get => size; set => Set(ref size, Math.Max(1, value)); }
-        private double size = 50;
+        public double Size { get; set => Set(ref field, Math.Max(1, value)); } = 50;
 
-        [Display(GroupName = FromGroup, Name = "X", Description = "衝撃が来る位置", Order = 100)]
+        [Display(GroupName = FromGroup, Name = "X", Description = "衝撃が来る横の位置")]
         [AnimationSlider("F1", "px", -500, 500)]
         public Animation X { get; } = new(0, -100000, 100000);
 
-        [Display(GroupName = FromGroup, Name = "Y", Description = "衝撃が来る位置", Order = 200)]
+        [Display(GroupName = FromGroup, Name = "Y", Description = "衝撃が来る縦の位置")]
         [AnimationSlider("F1", "px", -500, 500)]
         public Animation Y { get; } = new(0, -100000, 100000);
 
-        [Display(GroupName = FromGroup, Name = "Z", Description = "衝撃が来る位置。手前が正", Order = 300)]
+        [Display(GroupName = FromGroup, Name = "Z", Description = "衝撃が来る奥行きの位置で、手前が正です")]
         [AnimationSlider("F1", "px", -500, 500)]
         public Animation Z { get; } = new(0, -100000, 100000);
 
-        [Display(GroupName = DetailGroup, Name = "飛ぶ速さ", Order = 100)]
+        [Display(GroupName = DetailGroup, Name = "飛ぶ速さ", Description = "破片が飛び散る速さ")]
         [TextBoxSlider("F1", "%", 0, 200)]
         [Range(0, 100000)]
         [DefaultValue(100d)]
-        public double FlySpeed { get => flySpeed; set => Set(ref flySpeed, value); }
-        private double flySpeed = 100;
+        public double FlySpeed { get; set => Set(ref field, value); } = 100;
 
-        [Display(GroupName = DetailGroup, Name = "落ちる速さ", Order = 200)]
+        [Display(GroupName = DetailGroup, Name = "落ちる速さ", Description = "破片が落ちる速さ")]
         [TextBoxSlider("F1", "%", 0, 200)]
         [Range(0, 100000)]
         [DefaultValue(100d)]
-        public double FallSpeed { get => fallSpeed; set => Set(ref fallSpeed, value); }
-        private double fallSpeed = 100;
+        public double FallSpeed { get; set => Set(ref field, value); } = 100;
 
-        [Display(GroupName = DetailGroup, Name = "遅れ",
-            Description = "破片ごとに飛び始めをずらす量", Order = 300)]
+        [Display(GroupName = DetailGroup, Name = "遅れ", Description = "破片ごとに飛び始めをずらす量")]
         [TextBoxSlider("F1", "%", 0, 100)]
         [Range(0, 100000)]
         [DefaultValue(100d)]
-        public double Delay { get => delay; set => Set(ref delay, value); }
-        private double delay = 100;
+        public double Delay { get; set => Set(ref field, value); } = 100;
 
-        [Display(GroupName = DetailGroup, Name = "衝撃",
-            Description = "当たったところに近い破片ほど強く弾く量", Order = 400)]
+        [Display(GroupName = DetailGroup, Name = "衝撃", Description = "当たったところに近い破片ほど強く弾く量")]
         [TextBoxSlider("F1", "%", 0, 100)]
         [Range(0, 100000)]
         [DefaultValue(100d)]
-        public double Impact { get => impact; set => Set(ref impact, value); }
-        private double impact = 100;
+        public double Impact { get; set => Set(ref field, value); } = 100;
 
-        [Display(GroupName = DetailGroup, Name = "回転のばらつき", Order = 500)]
+        [Display(GroupName = DetailGroup, Name = "回転のばらつき", Description = "破片の回り方をばらつかせる量")]
         [TextBoxSlider("F1", "%", 0, 100)]
         [Range(0, 100000)]
         [DefaultValue(100d)]
-        public double RandomRotate { get => randomRotate; set => Set(ref randomRotate, value); }
-        private double randomRotate = 100;
+        public double RandomRotate { get; set => Set(ref field, value); } = 100;
 
-        [Display(GroupName = DetailGroup, Name = "方向のばらつき", Order = 600)]
+        [Display(GroupName = DetailGroup, Name = "方向のばらつき", Description = "破片の飛ぶ向きをばらつかせる量")]
         [TextBoxSlider("F1", "%", 0, 100)]
         [Range(0, 100000)]
         [DefaultValue(100d)]
-        public double RandomVector { get => randomVector; set => Set(ref randomVector, value); }
-        private double randomVector = 100;
+        public double RandomVector { get; set => Set(ref field, value); } = 100;
 
-        [Display(GroupName = DetailGroup, Name = "陰影", Description = "光源にしたがって陰影をつけます。切ると、元の色のまま塗ります", Order = 700)]
+        [Display(GroupName = DetailGroup, Name = "陰影", Description = "光源にしたがって陰影をつけます")]
         [ToggleSlider]
         public bool IsLit { get => !IsUnlit; set => IsUnlit = !value; }
 
-        [Browsable(false)]
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        public bool IsUnlit
-        {
-            get => isUnlit;
-            set
-            {
-                Set(ref isUnlit, value);
-                OnPropertyChanged(nameof(IsLit));
-            }
-        }
-        private bool isUnlit;
+        public bool IsUnlit { get; set => Set(ref field, value, nameof(IsUnlit), nameof(IsLit)); }
 
-        [Display(GroupName = DetailGroup, Name = "つや",
-            Description = "光が映り込んだ明るい点の強さ", Order = 800)]
+        [Display(GroupName = DetailGroup, Name = "つや", Description = "光が映り込んだ明るい点の強さ")]
         [AnimationSlider("F0", "%", 0, 100)]
         [ShowPropertyEditorWhen(nameof(IsUnlit), false)]
         public Animation Gloss { get; } = new(0, 0, 1000);
 
-        [Display(GroupName = DetailGroup, Name = "つやの鋭さ",
-            Description = "大きいほど映り込みが小さく締まり、磨いたように見えます", Order = 900)]
+        [Display(GroupName = DetailGroup, Name = "つやの鋭さ", Description = "映り込んだ明るい点の締まり具合")]
         [AnimationSlider("F0", "%", 0, 100)]
         [ShowPropertyEditorWhen(nameof(IsUnlit), false)]
         public Animation GlossSharpness { get; } = new(50, 0, 100);
 
-        internal SurfaceGloss GetGloss(in FrameContext time)
-            => IsUnlit ? SurfaceGloss.None : SurfaceGloss.FromPercent(Gloss.GetFloat(time), GlossSharpness.GetFloat(time));
+        internal SurfaceGloss GetGloss(in FrameContext time) => IsUnlit ? SurfaceGloss.None : SurfaceGloss.FromPercent(Gloss.GetFloat(time), GlossSharpness.GetFloat(time));
 
-        public override IVideoEffectProcessor CreateVideoEffect(IGraphicsDevicesAndContext devices)
-            => AttachProcessor(new Shatter3DProcessor(this, devices));
+        public override IVideoEffectProcessor CreateVideoEffect(IGraphicsDevicesAndContext devices) => AttachProcessor(new Shatter3DProcessor(this, devices));
 
-        protected override IEnumerable<IAnimatable> GetAnimatables()
-            => [X, Y, Z, Gloss, GlossSharpness, CameraSyncAnimation];
+        protected override IEnumerable<IAnimatable> GetAnimatables() => [X, Y, Z, Gloss, GlossSharpness, CameraSyncAnimation];
 
-        public override IEnumerable<string> CreateExoVideoFilters(
-            int keyFrameIndex, ExoOutputDescription exoOutputDescription) => [];
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    internal struct ShatterConstants
-    {
-        public float Seconds;
-        public float FlySpeed;
-        public float FallSpeed;
-        public float Delay;
-
-        public Vector3 ImpactPoint;
-        public float Impact;
-
-        public float RandomRotate;
-        public float RandomVector;
-        public float SpinRate;
-        public float Padding;
-    }
-
-    internal sealed class Shatter3DProcessor(Shatter3DEffect effect, IGraphicsDevicesAndContext devices)
-        : Deform3DProcessorBase<ShatterConstants>(effect, devices)
-    {
-        private const float FlyPerSecond = 1.2f;
-        private const float FallPerSecond = 1.6f;
-        private const float SpinPerSecond = 6f;
-        private const float DelaySeconds = 0.6f;
-
-        private readonly Shatter3DEffect effect = effect;
-
-        protected override string ShaderName => "Shatter.hlsl";
-
-        protected override bool IsUnlit => effect.IsUnlit;
-
-        protected override SurfaceGloss GetGloss(in FrameContext time) => effect.GetGloss(time);
-
-        protected override DeformGrid GetGrid(in FrameContext time)
-        {
-            if (!TryGetSize(out var size, out _) || size.X <= 0f || size.Y <= 0f)
-                return DeformGrid.Create(16, 16, separated: true);
-
-            var piece = (float)Math.Max(effect.Size, 1);
-
-            return DeformGrid.Create(
-                (int)MathF.Ceiling(size.X / piece),
-                (int)MathF.Ceiling(size.Y / piece),
-                separated: true);
-        }
-
-        protected override ShatterConstants GetConstants(in FrameContext time) => new()
-        {
-            Seconds = ElapsedSeconds(time),
-            FlySpeed = FlyPerSecond * Percent(effect.FlySpeed),
-            FallSpeed = FallPerSecond * Percent(effect.FallSpeed),
-            Delay = DelaySeconds * Percent(effect.Delay),
-            ImpactPoint = ImpactPoint(time),
-            Impact = Percent(effect.Impact),
-            RandomRotate = Percent(effect.RandomRotate),
-            RandomVector = Percent(effect.RandomVector),
-            SpinRate = SpinPerSecond,
-        };
-
-        protected override DeformExtent GetExtent(in FrameContext time)
-        {
-            var seconds = ElapsedSeconds(time);
-            if (seconds <= 0f)
-                return new DeformExtent(0f, 0f);
-
-            var flown = FlyPerSecond * Percent(effect.FlySpeed)
-                      * (1f + Percent(effect.Impact)) * seconds;
-
-            var fallen = FallPerSecond * Percent(effect.FallSpeed) * seconds * seconds;
-
-            var reach = MathF.Min(flown + fallen, 16f);
-
-            return new DeformExtent(reach, MathF.Min(flown, 16f));
-        }
-
-        private float ElapsedSeconds(in FrameContext time)
-        {
-            var seconds = (float)time.Frame / Math.Max(time.Fps, 1);
-
-            return (seconds - (float)effect.StartTime) * Percent(effect.PlaybackRate);
-        }
-
-        private Vector3 ImpactPoint(in FrameContext time)
-        {
-            if (!TryGetSize(out var size, out _) || size.X <= 0f || size.Y <= 0f)
-                return Vector3.Zero;
-
-            return new Vector3(
-                effect.X.GetFloat(time) / size.X,
-                -effect.Y.GetFloat(time) / size.Y,
-                effect.Z.GetFloat(time) / size.X);
-        }
-
-        private static float Percent(double value) => (float)value / 100f;
+        public override IEnumerable<string> CreateExoVideoFilters(int keyFrameIndex, ExoOutputDescription exoOutputDescription) => [];
     }
 }

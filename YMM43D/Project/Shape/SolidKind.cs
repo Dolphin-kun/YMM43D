@@ -11,7 +11,7 @@ namespace YMM43D.Project.Shape
         [Display(Name = "四面体", Description = "正三角形4枚")]
         Tetrahedron,
 
-        [Display(Name = "立方体", Description = "正方形6枚。六面体ともいいます")]
+        [Display(Name = "立方体", Description = "正方形6枚")]
         Cube,
 
         [Display(Name = "八面体", Description = "正三角形8枚")]
@@ -35,25 +35,20 @@ namespace YMM43D.Project.Shape
         [Display(Name = "ドーナツ", Description = "太さで穴の大きさが決まります")]
         Torus,
 
-        [Display(Name = "自由な形",
-            Description = "下書きの点をつないだ形から立体を作ります。3Dプレビューで点を掴んで動かせます")]
+        [Display(Name = "自由な形", Description = "下書きの点をつないだ形から立体を作り、3Dプレビューで点を掴んで動かせます")]
         Custom,
     }
 
     public static class Solids
     {
         public const int DefaultSegments = 32;
-
         public const int DefaultThickness = 30;
-
         private const int MaxCached = 64;
 
         private static readonly Lock gate = new();
-
         private static readonly Dictionary<(SolidKind, int, int), SurfaceGeometry> cache = [];
 
-        public static bool IsCurved(SolidKind kind)
-            => kind is SolidKind.Sphere or SolidKind.Cylinder or SolidKind.Cone or SolidKind.Torus;
+        public static bool IsCurved(SolidKind kind) => kind is SolidKind.Sphere or SolidKind.Cylinder or SolidKind.Cone or SolidKind.Torus;
 
         public static int GroupCountOf(SolidKind kind) => kind switch
         {
@@ -100,9 +95,6 @@ namespace YMM43D.Project.Shape
             _ => Primitives.Plane(),
         };
 
-        private static (SolidKind, int, int) Key(SolidKind kind, int segments, int thickness)
-            => IsCurved(kind)
-                ? (kind, segments, kind == SolidKind.Torus ? thickness : 0)
-                : (kind, 0, 0);
+        private static (SolidKind, int, int) Key(SolidKind kind, int segments, int thickness) => IsCurved(kind) ? (kind, segments, kind == SolidKind.Torus ? thickness : 0) : (kind, 0, 0);
     }
 }

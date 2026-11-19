@@ -5,7 +5,6 @@ namespace YMM43D.Commons
     public static class CameraFrustum
     {
         public const float Depth = 1.2f;
-
         private const float PeakHeight = 1.4f;
 
         public static Vector3[] LocalCorners(in Vector2 tangent)
@@ -21,8 +20,7 @@ namespace YMM43D.Commons
             ];
         }
 
-        public static Vector3 LocalPeak(in Vector2 tangent)
-            => new(0f, tangent.Y * Depth * PeakHeight, -Depth);
+        public static Vector3 LocalPeak(in Vector2 tangent) => new(0f, tangent.Y * Depth * PeakHeight, -Depth);
 
         public static Vector3[] WorldCorners(in CameraPose pose, in Vector2 tangent)
         {

@@ -9,44 +9,35 @@ namespace YMM43D.PreviewTool
     internal sealed class FreeCameraController
     {
         private const float RotateSpeed = 0.5f;
-
         private const float PanStep = 0.03f;
         private const float DollyRatio = 0.2f;
-
         private const float FineRatio = 0.25f;
-
         private const float RollSpeed = 0.3f;
-
         private const float MinPivotDistance = 0.5f;
         private const float MaxPivotDistance = 200f;
-
         private const float FocusMargin = 2.5f;
 
         private enum DragMode { None, Rotate, Pan, Roll }
-
-        private CameraState state = CameraState.Default;
-
-        private float pivotDistance = SceneProjection.DefaultFocalDistance;
 
         private bool initialized;
         private bool pivotInitialized;
         private DragMode drag;
         private Point lastMousePosition;
 
-        public CameraState State => state;
+        public CameraState State { get; private set; } = CameraState.Default;
 
         public void EnsureInitialized(in CameraState camera)
         {
             if (initialized)
                 return;
 
-            state = camera;
+            State = camera;
             initialized = true;
 
             if (pivotInitialized)
                 return;
 
-            pivotDistance = GuessPivotDistance(camera);
+            PivotDistance = GuessPivotDistance(camera);
             pivotInitialized = true;
         }
 
@@ -65,22 +56,17 @@ namespace YMM43D.PreviewTool
             if (!float.IsFinite(distance) || distance < MinPivotDistance)
                 return;
 
-            pivotDistance = MathF.Min(distance, MaxPivotDistance);
+            PivotDistance = MathF.Min(distance, MaxPivotDistance);
             pivotInitialized = true;
         }
 
-        public CameraPose GetPose() => state.GetPose();
+        public CameraPose GetPose() => State.GetPose();
 
-        public float PivotDistance => pivotDistance;
+        public float PivotDistance { get; private set; } = SceneProjection.DefaultFocalDistance;
 
-        public void Apply(in CameraMove move) => state = move.ApplyTo(state);
+        public void Apply(in CameraMove move) => State = move.ApplyTo(State);
 
-        public CameraMove? HandleMouse(
-            Point position,
-            D3D11Host.MouseEventKind kind,
-            int delta,
-            ModifierKeys modifiers,
-            in CameraState basis)
+        public CameraMove? HandleMouse(Point position, D3D11Host.MouseEventKind kind, int delta, ModifierKeys modifiers, in CameraState basis)
         {
             switch (kind)
             {
@@ -127,18 +113,14 @@ namespace YMM43D.PreviewTool
             return DragMode.Rotate;
         }
 
-        private static float Speed(ModifierKeys modifiers)
-            => (modifiers & ModifierKeys.Control) != 0 ? FineRatio : 1f;
+        private static float Speed(ModifierKeys modifiers) => (modifiers & ModifierKeys.Control) != 0 ? FineRatio : 1f;
 
         private CameraMove? GetDragMove(System.Windows.Vector difference, in CameraState basis, float speed)
         {
             switch (drag)
             {
                 case DragMode.Rotate:
-                    return Orbit(
-                        -(float)difference.X * RotateSpeed * speed,
-                        -(float)difference.Y * RotateSpeed * speed,
-                        basis);
+                    return Orbit(-(float)difference.X * RotateSpeed * speed, -(float)difference.Y * RotateSpeed * speed, basis);
 
                 case DragMode.Roll:
                     return new CameraMove(0f, 0f, -(float)difference.X * RollSpeed * speed, Vector3.Zero);
@@ -149,8 +131,7 @@ namespace YMM43D.PreviewTool
                     var up = Vector3.Transform(Vector3.UnitY, rotation);
                     var step = PanStep * speed;
 
-                    return CameraMove.Translate(
-                        right * (float)-difference.X * step + up * (float)difference.Y * step);
+                    return CameraMove.Translate(right * (float)-difference.X * step + up * (float)difference.Y * step);
 
                 default:
                     return null;
@@ -159,39 +140,34 @@ namespace YMM43D.PreviewTool
 
         private CameraMove Orbit(float yaw, float pitch, in CameraState basis)
         {
-            var pivot = basis.Position + basis.Forward * pivotDistance;
+            var pivot = basis.Position + basis.Forward * PivotDistance;
 
             var turned = CameraMove.Rotate(yaw, pitch).ApplyTo(basis);
-            var moved = pivot - turned.Forward * pivotDistance;
+            var moved = pivot - turned.Forward * PivotDistance;
 
             return new CameraMove(yaw, pitch, 0f, moved - basis.Position);
         }
 
         private CameraMove Dolly(float notches, in CameraState basis)
         {
-            var travel = pivotDistance * (1f - MathF.Pow(1f - DollyRatio, notches));
+            var travel = PivotDistance * (1f - MathF.Pow(1f - DollyRatio, notches));
 
             if (!float.IsFinite(travel))
                 return CameraMove.Translate(Vector3.Zero);
 
-            pivotDistance = Math.Clamp(pivotDistance - travel, MinPivotDistance, MaxPivotDistance);
+            PivotDistance = Math.Clamp(PivotDistance - travel, MinPivotDistance, MaxPivotDistance);
 
             return CameraMove.Translate(basis.Forward * travel);
         }
 
-        public static CameraMove LevelRoll(in CameraState basis)
-            => new(0f, 0f, -basis.Roll, Vector3.Zero);
+        public static CameraMove LevelRoll(in CameraState basis) => new(0f, 0f, -basis.Roll, Vector3.Zero);
 
         public CameraMove ViewFrom(float yaw, float pitch, in CameraState basis)
         {
-            var pivot = basis.Position + basis.Forward * pivotDistance;
+            var pivot = basis.Position + basis.Forward * PivotDistance;
             var turned = basis with { Yaw = yaw, Pitch = pitch, Roll = 0f };
 
-            return new CameraMove(
-                yaw - basis.Yaw,
-                pitch - basis.Pitch,
-                -basis.Roll,
-                pivot - turned.Forward * pivotDistance - basis.Position);
+            return new CameraMove(yaw - basis.Yaw, pitch - basis.Pitch, -basis.Roll, pivot - turned.Forward * PivotDistance - basis.Position);
         }
 
         public CameraMove Focus(in WorldBounds bounds, in CameraState basis)
@@ -202,7 +178,7 @@ namespace YMM43D.PreviewTool
 
             var distance = Math.Clamp(radius * FocusMargin, MinPivotDistance, MaxPivotDistance);
 
-            pivotDistance = distance;
+            PivotDistance = distance;
             pivotInitialized = true;
 
             return CameraMove.Translate(center - basis.Forward * distance - basis.Position);

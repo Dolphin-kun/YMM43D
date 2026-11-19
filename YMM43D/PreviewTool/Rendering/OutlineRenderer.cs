@@ -13,7 +13,6 @@ namespace YMM43D.PreviewTool.Rendering
         private static readonly Color4 PointColor = new(1f, 0.62f, 0.16f, 1f);
 
         public const float Ratio = 0.018f;
-
         public const float GrabThreshold = 10f;
 
         private readonly DeviceResourceCache<OutlineResources> resources;
@@ -73,8 +72,7 @@ namespace YMM43D.PreviewTool.Rendering
 
         private sealed class OutlineResources(ID3D11Device device) : IDisposable
         {
-            public RenderPipeline<TransformConstants> Pipeline { get; } = new(
-                device, Vertex.InputElements, new VertexColorMaterial(device));
+            public RenderPipeline<TransformConstants> Pipeline { get; } = new(device, Vertex.InputElements, new VertexColorMaterial(device));
 
             public LineMesh Marker { get; } = new(device, BuildMarker(), PointColor);
 

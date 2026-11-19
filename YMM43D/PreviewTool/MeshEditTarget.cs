@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using YMM43D.Commons;
 using YMM43D.Graphics.Meshes;
 using YMM43D.Project.Shape;
@@ -6,15 +6,6 @@ using YukkuriMovieMaker.Project.Items;
 
 namespace YMM43D.PreviewTool
 {
-    public enum MeshPart
-    {
-        Vertices,
-
-        Edges,
-
-        Faces,
-    }
-
     internal readonly record struct MeshEditTarget(
         IVideoItem Item,
         Shape3DParameter Parameter,
@@ -30,7 +21,7 @@ namespace YMM43D.PreviewTool
 
             var mesh = parameter.ShownMesh();
 
-            if (mesh.Points.Length == 0 || mesh.Faces.Length == 0)
+            if (mesh.Points.Length == 0)
                 return null;
 
             var toWorld = parameter.GetLocalMatrix(time) * itemWorld;
@@ -42,39 +33,23 @@ namespace YMM43D.PreviewTool
             return new MeshEditTarget(item, parameter, time, toWorld, mesh, placed);
         }
 
-        public IEnumerable<int> VerticesOf(MeshPart part, int index)
+        public int[] LoopOf(MeshPart part, int edge)
         {
+            var mesh = Mesh;
+
             switch (part)
             {
-                case MeshPart.Edges when index >= 0 && index < Mesh.Edges.Length:
-                    yield return Mesh.Edges[index].A;
-                    yield return Mesh.Edges[index].B;
-                    break;
+                case MeshPart.Faces:
+                    var ring = new HashSet<int>(mesh.EdgeRing(edge));
 
-                case MeshPart.Faces when index >= 0 && index < Mesh.Faces.Length:
-                    foreach (var corner in Mesh.Faces[index])
-                        yield return corner;
+                    return [.. Enumerable.Range(0, mesh.Faces.Length).Where(face => mesh.FaceEdges[face].Count(ring.Contains) >= 2)];
 
-                    break;
+                case MeshPart.Edges:
+                    return mesh.EdgeLoop(edge);
 
                 default:
-                    if (index >= 0 && index < Mesh.Points.Length)
-                        yield return index;
-
-                    break;
+                    return [.. mesh.EdgeLoop(edge).SelectMany(one => new[] { mesh.Edges[one].A, mesh.Edges[one].B }).Distinct()];
             }
         }
-
-        public IEnumerable<int> LoopOf(int edge)
-        {
-            foreach (var one in Mesh.EdgeLoop(edge))
-            {
-                yield return Mesh.Edges[one].A;
-                yield return Mesh.Edges[one].B;
-            }
-        }
-
-        public bool IsEdgeChosen(int edge, IReadOnlySet<int> selection)
-            => selection.Contains(Mesh.Edges[edge].A) && selection.Contains(Mesh.Edges[edge].B);
     }
 }

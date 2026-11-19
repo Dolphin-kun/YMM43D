@@ -1,7 +1,5 @@
 ﻿using System.Collections.Immutable;
-using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
-using System.Windows.Media;
 using YMM43D.Commons;
 using YMM43D.Plugin;
 using YukkuriMovieMaker.Commons;
@@ -13,16 +11,16 @@ using YukkuriMovieMaker.Plugin.Effects;
 
 namespace PixelPoints3D
 {
-    [VideoEffect("点群3D", ["3D"], [])]
+    [VideoEffect("点群3D", ["3D"], ["点群", "点", "粒", "ドット", "パーティクル", "point cloud", "particle"])]
     public class PixelPoints3DEffect : VideoEffect3DBase, ISceneRotation3D
     {
-        public override string Label => "点群3D";
-
         private const string Grid = "点群3D";
         private const string Shape = "形";
         private const string Deform = "変形";
         private const string Scatter = "ばらつき";
         private const string Place = "配置";
+
+        public override string Label => "点群3D";
 
         [Display(GroupName = Grid, Name = "距離X", Description = "X軸方向の点と点の間隔")]
         [AnimationSlider("F1", "px", 1, 200)]
@@ -32,11 +30,11 @@ namespace PixelPoints3D
         [AnimationSlider("F1", "px", 1, 200)]
         public Animation SpacingY { get; } = new(20, 1, 2000);
 
-        [Display(GroupName = Grid, Name = "距離Z", Description = "z軸方向の点と点の間隔")]
+        [Display(GroupName = Grid, Name = "距離Z", Description = "Z軸方向の点と点の間隔")]
         [AnimationSlider("F1", "px", 1, 200)]
         public Animation SpacingZ { get; } = new(20, 1, 2000);
 
-        [Display(GroupName = Grid, Name = "奥行き", Description = "点を重ねる奥行きの厚み。0 なら1枚だけ")]
+        [Display(GroupName = Grid, Name = "奥行き", Description = "点を重ねる奥行きの厚み")]
         [AnimationSlider("F1", "px", 0, 500)]
         public Animation Depth { get; } = new(0, 0, 5000);
 
@@ -44,110 +42,67 @@ namespace PixelPoints3D
         [AnimationSlider("F0", "%", 0, 100)]
         public Animation Threshold { get; } = new(50, 0, 100);
 
-        [Display(GroupName = Shape, Name = "点を描く", Description = "格子の各点に四角い粒を描きます")]
+        [Display(GroupName = Shape, Name = "点を描く", Description = "格子の各点に粒を描きます")]
         [ToggleSlider]
-        public bool DrawPoints { get => drawPoints; set => Set(ref drawPoints, value); }
-        private bool drawPoints = true;
+        public bool DrawPoints { get; set => Set(ref field, value); } = true;
 
         [Display(GroupName = Shape, Name = "線を描く", Description = "隣り合う点どうしを線でつなぎます")]
         [ToggleSlider]
-        public bool DrawLines { get => drawLines; set => Set(ref drawLines, value); }
-        private bool drawLines;
+        public bool DrawLines { get; set => Set(ref field, value); }
 
         [Display(GroupName = Shape, Name = "面を描く", Description = "隣り合う4点を三角形2枚で埋めます")]
         [ToggleSlider]
-        public bool DrawFaces { get => drawFaces; set => Set(ref drawFaces, value); }
-        private bool drawFaces;
+        public bool DrawFaces { get; set => Set(ref field, value); }
 
-        [Display(GroupName = Shape, Name = "陰影", Description = "光源にしたがって陰影をつけます。切ると、指定した色のまま塗ります")]
+        [Display(GroupName = Shape, Name = "陰影", Description = "光源にしたがって陰影をつけます")]
         [ToggleSlider]
         public bool IsLit { get => !IsUnlit; set => IsUnlit = !value; }
 
-        [Browsable(false)]
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        public bool IsUnlit
-        {
-            get => isUnlit;
-            set
-            {
-                Set(ref isUnlit, value);
-                OnPropertyChanged(nameof(IsLit));
-            }
-        }
-        private bool isUnlit;
+        public bool IsUnlit { get; set => Set(ref field, value, nameof(IsUnlit), nameof(IsLit)); }
 
-        [Display(GroupName = Shape, Name = "つや",
-            Description = "光が映り込んだ明るい点の強さ")]
+        [Display(GroupName = Shape, Name = "つや", Description = "光が映り込んだ明るい点の強さ")]
         [AnimationSlider("F0", "%", 0, 100)]
         [ShowPropertyEditorWhen(nameof(IsUnlit), false)]
         public Animation Gloss { get; } = new(0, 0, 1000);
 
-        [Display(GroupName = Shape, Name = "つやの鋭さ",
-            Description = "大きいほど映り込みが小さく締まり、磨いたように見えます")]
+        [Display(GroupName = Shape, Name = "つやの鋭さ", Description = "映り込んだ明るい点の締まり具合")]
         [AnimationSlider("F0", "%", 0, 100)]
         [ShowPropertyEditorWhen(nameof(IsUnlit), false)]
         public Animation GlossSharpness { get; } = new(50, 0, 100);
 
-        internal SurfaceGloss GetGloss(in FrameContext time)
-            => IsUnlit ? SurfaceGloss.None : SurfaceGloss.FromPercent(Gloss.GetFloat(time), GlossSharpness.GetFloat(time));
+        [Display(AutoGenerateField = true)]
+        public ImmutableList<PointParams> PointSettings { get; set => Set(ref field, value); } = [new PointParams()];
 
         [Display(AutoGenerateField = true)]
-        public ImmutableList<PointParams> PointSettings { get => pointSettings; set => Set(ref pointSettings, value); }
-        private ImmutableList<PointParams> pointSettings = [new PointParams()];
+        public ImmutableList<LineParams> LineSettings { get; set => Set(ref field, value); } = [];
 
         [Display(AutoGenerateField = true)]
-        public ImmutableList<LineParams> LineSettings { get => lineSettings; set => Set(ref lineSettings, value); }
-        private ImmutableList<LineParams> lineSettings = [];
-
-        [Display(AutoGenerateField = true)]
-        public ImmutableList<FaceParams> FaceSettings { get => faceSettings; set => Set(ref faceSettings, value); }
-        private ImmutableList<FaceParams> faceSettings = [];
-
-        internal PointParams? Point => DrawPoints ? PointSettings.FirstOrDefault() : null;
-
-        internal LineParams? Line => DrawLines ? LineSettings.FirstOrDefault() : null;
-
-        internal FaceParams? Face => DrawFaces ? FaceSettings.FirstOrDefault() : null;
+        public ImmutableList<FaceParams> FaceSettings { get; set => Set(ref field, value); } = [];
 
         [Display(GroupName = Deform, Name = "種類", Description = "点の並びをどう歪ませるか")]
         [EnumComboBox]
-        public DeformKind DeformKind
-        {
-            get => deformKind;
-            set
-            {
-                Set(ref deformKind, value);
-                OnPropertyChanged(nameof(IsDeformed));
-                OnPropertyChanged(nameof(IsWave));
-            }
-        }
-        private DeformKind deformKind = DeformKind.None;
+        public DeformKind DeformKind { get; set => Set(ref field, value, nameof(DeformKind), nameof(IsDeformed), nameof(IsWave)); } = DeformKind.None;
 
-        [Browsable(false)]
-        [EditorBrowsable(EditorBrowsableState.Never)]
         public bool IsDeformed => DeformKind != DeformKind.None;
 
-        [Browsable(false)]
-        [EditorBrowsable(EditorBrowsableState.Never)]
         public bool IsWave => DeformKind == DeformKind.Wave;
 
-        [Display(GroupName = Deform, Name = "強さ", Description = "歪ませる量。負にすると逆向きに歪みます")]
+        [Display(GroupName = Deform, Name = "強さ", Description = "歪ませる量で、負にすると逆向きに歪みます")]
         [AnimationSlider("F0", "%", -100, 100)]
         [ShowPropertyEditorWhen(nameof(IsDeformed), true)]
         public Animation DeformAmount { get; } = new(50, -100000, 100000);
 
-        [Display(GroupName = Deform, Name = "向き", Description = "変形の軸。波が進む向き、ねじれの回転軸、球の極になります")]
+        [Display(GroupName = Deform, Name = "向き", Description = "変形の軸で、波が進む向き・ねじれの回転軸・球の極になります")]
         [EnumComboBox]
         [ShowPropertyEditorWhen(nameof(IsDeformed), true)]
-        public DeformAxis DeformAxis { get => deformAxis; set => Set(ref deformAxis, value); }
-        private DeformAxis deformAxis = DeformAxis.Y;
+        public DeformAxis DeformAxis { get; set => Set(ref field, value); } = DeformAxis.Y;
 
         [Display(GroupName = Deform, Name = "周期", Description = "波1つ分の長さ")]
         [AnimationSlider("F1", "px", 10, 1000)]
         [ShowPropertyEditorWhen(nameof(IsWave), true)]
         public Animation DeformPeriod { get; } = new(200, 1, 100000);
 
-        [Display(GroupName = Deform, Name = "位相", Description = "波やねじれのずれ。動かすと流れます")]
+        [Display(GroupName = Deform, Name = "位相", Description = "波やねじれのずれ")]
         [AnimationSlider("F0", "°", -360, 360)]
         [ShowPropertyEditorWhen(nameof(IsDeformed), true)]
         public Animation DeformPhase { get; } = new(0, -360000, 360000);
@@ -164,44 +119,45 @@ namespace PixelPoints3D
         [AnimationSlider("F1", "px", -500, 500)]
         public Animation ScatterZ { get; } = new(0, -100000, 100000);
 
-        [Display(GroupName = Scatter, Name = "シード", Description = "ばらつき方を変えます")]
+        [Display(GroupName = Scatter, Name = "シード", Description = "ばらつき方を決める乱数の種")]
         [AnimationSlider("F0", "", 0, 100)]
         public Animation Seed { get; } = new(0, 0, 10000);
 
-        [Display(GroupName = Place, Name = "位置X")]
+        [Display(GroupName = Place, Name = "位置X", Description = "点群全体を横に動かす量")]
         [AnimationSlider("F1", "px", -500, 500)]
         public Animation PositionX { get; } = new(0, -100000, 100000);
 
-        [Display(GroupName = Place, Name = "位置Y")]
+        [Display(GroupName = Place, Name = "位置Y", Description = "点群全体を縦に動かす量")]
         [AnimationSlider("F1", "px", -500, 500)]
         public Animation PositionY { get; } = new(0, -100000, 100000);
 
-        [Display(GroupName = Place, Name = "位置Z")]
+        [Display(GroupName = Place, Name = "位置Z", Description = "点群全体を奥行き方向に動かす量")]
         [AnimationSlider("F1", "px", -500, 500)]
         public Animation PositionZ { get; } = new(0, -100000, 100000);
 
-        [Display(GroupName = Place, Name = "大きさ")]
+        [Display(GroupName = Place, Name = "大きさ", Description = "点群全体の大きさ")]
         [AnimationSlider("F1", "%", 0, 400)]
         public Animation Scale { get; } = new(100, 0, 10000);
 
-        [Display(GroupName = Place, Name = "回転X")]
+        [Display(GroupName = Place, Name = "回転X", Description = "点群全体の X 軸まわりの回転")]
         [AnimationSlider("F1", "°", -180, 180)]
         public Animation RotationX { get; } = new(0, -36000, 36000);
 
-        [Display(GroupName = Place, Name = "回転Y")]
+        [Display(GroupName = Place, Name = "回転Y", Description = "点群全体の Y 軸まわりの回転")]
         [AnimationSlider("F1", "°", -180, 180)]
         public Animation RotationY { get; } = new(0, -36000, 36000);
 
-        [Display(GroupName = Place, Name = "回転Z")]
+        [Display(GroupName = Place, Name = "回転Z", Description = "点群全体の Z 軸まわりの回転")]
         [AnimationSlider("F1", "°", -180, 180)]
         public Animation RotationZ { get; } = new(0, -36000, 36000);
 
-        public PixelPoints3DEffect()
-        {
-            SubscribeChildUndoRedoable(PointSettings);
-            SubscribeChildUndoRedoable(LineSettings);
-            SubscribeChildUndoRedoable(FaceSettings);
-        }
+        internal PointParams? Point => DrawPoints ? PointSettings.FirstOrDefault() : null;
+
+        internal LineParams? Line => DrawLines ? LineSettings.FirstOrDefault() : null;
+
+        internal FaceParams? Face => DrawFaces ? FaceSettings.FirstOrDefault() : null;
+
+        internal SurfaceGloss GetGloss(in FrameContext time) => IsUnlit ? SurfaceGloss.None : SurfaceGloss.FromPercent(Gloss.GetFloat(time), GlossSharpness.GetFloat(time));
 
         public override async ValueTask EndEditAsync()
         {
@@ -212,182 +168,13 @@ namespace PixelPoints3D
             FaceSettings = Sync(DrawFaces, FaceSettings);
         }
 
-        private static ImmutableList<T> Sync<T>(bool enabled, ImmutableList<T> current) where T : new()
-            => enabled != current.IsEmpty ? current : enabled ? [new T()] : [];
+        private static ImmutableList<T> Sync<T>(bool enabled, ImmutableList<T> current) where T : new() => enabled != current.IsEmpty ? current : enabled ? [new T()] : [];
 
-        public override IVideoEffectProcessor CreateVideoEffect(IGraphicsDevicesAndContext devices)
-            => AttachProcessor(new PixelPoints3DProcessor(this, devices));
+        public override IVideoEffectProcessor CreateVideoEffect(IGraphicsDevicesAndContext devices) => AttachProcessor(new PixelPoints3DProcessor(this, devices));
 
-        protected override IEnumerable<IAnimatable> GetAnimatables() =>
-        [
-            SpacingX, SpacingY, SpacingZ, Depth, Threshold,
-            ..PointSettings, ..LineSettings, ..FaceSettings,
-            DeformAmount, DeformPeriod, DeformPhase,
-            ScatterX, ScatterY, ScatterZ, Seed,
-            PositionX, PositionY, PositionZ, Scale,
-            RotationX, RotationY, RotationZ,
-            Gloss, GlossSharpness,
-            CameraSyncAnimation,
-        ];
+        protected override IEnumerable<IAnimatable> GetAnimatables()
+            => [SpacingX, SpacingY, SpacingZ, Depth, Threshold, .. PointSettings, .. LineSettings, .. FaceSettings, DeformAmount, DeformPeriod, DeformPhase, ScatterX, ScatterY, ScatterZ, Seed, PositionX, PositionY, PositionZ, Scale, RotationX, RotationY, RotationZ, Gloss, GlossSharpness, CameraSyncAnimation];
 
-        public override IEnumerable<string> CreateExoVideoFilters(
-            int keyFrameIndex, ExoOutputDescription exoOutputDescription) => [];
-    }
-
-    public class PointParams : Animatable
-    {
-        [Display(GroupName = "点", Name = "大きさ", Description = "四角形なら一辺、円なら直径の長さ")]
-        [AnimationSlider("F1", "px", 0, 50)]
-        public Animation Size { get; } = new(4, 0, 500);
-
-        [Display(GroupName = "点", Name = "形", Description = "粒の形")]
-        [EnumComboBox]
-        public PointShape Shape { get => shape; set => Set(ref shape, value); }
-        private PointShape shape = PointShape.Square;
-
-        [Display(GroupName = "点", Name = "色の種類", Description = "単色で塗るか、その位置の画像の色を使うか")]
-        [EnumComboBox]
-        public PointColorSource ColorSource
-        {
-            get => colorSource;
-            set
-            {
-                Set(ref colorSource, value);
-                OnPropertyChanged(nameof(IsSolidColor));
-            }
-        }
-        private PointColorSource colorSource = PointColorSource.Solid;
-
-        [Browsable(false)]
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        public bool IsSolidColor => ColorSource == PointColorSource.Solid;
-
-        [Display(GroupName = "点", Name = "色", Description = "粒の色")]
-        [ColorPicker]
-        [ShowPropertyEditorWhen(nameof(IsSolidColor), true)]
-        public Color Color { get => color; set => Set(ref color, value); }
-        private Color color = Colors.White;
-
-        protected override IEnumerable<IAnimatable> GetAnimatables() => [Size];
-    }
-
-    public class LineParams : Animatable
-    {
-        [Display(GroupName = "線", Name = "太さ", Description = "つなぐ線の太さ")]
-        [AnimationSlider("F1", "px", 0, 20)]
-        public Animation Width { get; } = new(2, 0, 500);
-
-        [Display(GroupName = "線", Name = "ランダム", Description = "線を引かない割合。上げるほど、つながり方がまばらになります")]
-        [AnimationSlider("F0", "%", 0, 100)]
-        public Animation Randomness { get; } = new(0, 0, 100);
-
-        [Display(GroupName = "線", Name = "色の種類", Description = "単色で塗るか、その位置の画像の色を使うか")]
-        [EnumComboBox]
-        public PointColorSource ColorSource
-        {
-            get => colorSource;
-            set
-            {
-                Set(ref colorSource, value);
-                OnPropertyChanged(nameof(IsSolidColor));
-            }
-        }
-        private PointColorSource colorSource = PointColorSource.Solid;
-
-        [Browsable(false)]
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        public bool IsSolidColor => ColorSource == PointColorSource.Solid;
-
-        [Display(GroupName = "線", Name = "色", Description = "線の色")]
-        [ColorPicker]
-        [ShowPropertyEditorWhen(nameof(IsSolidColor), true)]
-        public Color Color { get => color; set => Set(ref color, value); }
-        private Color color = Colors.White;
-
-        protected override IEnumerable<IAnimatable> GetAnimatables() => [Width, Randomness];
-    }
-
-    public class FaceParams : Animatable
-    {
-        [Display(GroupName = "面", Name = "不透明度", Description = "面だけに掛かる不透明度")]
-        [AnimationSlider("F0", "%", 0, 100)]
-        public Animation Opacity { get; } = new(100, 0, 100);
-
-        [Display(GroupName = "面", Name = "不透明度のばらつき", Description = "面ごとに不透明度をランダムに散らす量")]
-        [AnimationSlider("F0", "%", 0, 100)]
-        public Animation OpacityRandomness { get; } = new(0, 0, 100);
-
-        [Display(GroupName = "面", Name = "色の種類", Description = "単色で塗るか、その位置の画像の色を使うか")]
-        [EnumComboBox]
-        public PointColorSource ColorSource
-        {
-            get => colorSource;
-            set
-            {
-                Set(ref colorSource, value);
-                OnPropertyChanged(nameof(IsSolidColor));
-            }
-        }
-        private PointColorSource colorSource = PointColorSource.Image;
-
-        [Browsable(false)]
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        public bool IsSolidColor => ColorSource == PointColorSource.Solid;
-
-        [Display(GroupName = "面", Name = "色", Description = "面の色")]
-        [ColorPicker]
-        [ShowPropertyEditorWhen(nameof(IsSolidColor), true)]
-        public Color Color { get => color; set => Set(ref color, value); }
-        private Color color = Colors.White;
-
-        protected override IEnumerable<IAnimatable> GetAnimatables() => [Opacity, OpacityRandomness];
-    }
-
-    public enum DeformKind
-    {
-        [Display(Name = "なし", Description = "歪ませません")]
-        None,
-
-        [Display(Name = "波", Description = "選んだ軸に沿って進む波で、奥行き方向に押し引きします")]
-        Wave,
-
-        [Display(Name = "ねじれ", Description = "選んだ軸のまわりに、進むほど強くひねります")]
-        Twist,
-
-        [Display(Name = "膨らみ", Description = "軸の中心ほど大きく持ち上げて、丸く盛り上げます")]
-        Bulge,
-
-        [Display(Name = "球に巻く", Description = "平らな並びを、選んだ軸を極とする球の面に貼り付けます")]
-        Sphere,
-    }
-
-    public enum DeformAxis
-    {
-        [Display(Name = "X軸", Description = "横")]
-        X,
-
-        [Display(Name = "Y軸", Description = "縦")]
-        Y,
-
-        [Display(Name = "Z軸", Description = "奥行き")]
-        Z,
-    }
-
-    public enum PointShape
-    {
-        [Display(Name = "四角形", Description = "四角い粒を描きます")]
-        Square,
-
-        [Display(Name = "円", Description = "丸い粒を描きます")]
-        Circle,
-    }
-
-    public enum PointColorSource
-    {
-        [Display(Name = "単色", Description = "指定した色で塗ります")]
-        Solid,
-
-        [Display(Name = "画像", Description = "その位置の画像の色を使います")]
-        Image,
+        public override IEnumerable<string> CreateExoVideoFilters(int keyFrameIndex, ExoOutputDescription exoOutputDescription) => [];
     }
 }

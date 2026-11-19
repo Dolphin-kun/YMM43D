@@ -1,6 +1,8 @@
-﻿using Vortice.DXGI;
-using Vortice.Direct2D1;
+﻿using Vortice.Direct2D1;
+using Vortice.Direct3D;
 using Vortice.Direct3D11;
+using Vortice.DXGI;
+using YMM43D.Commons;
 using YMM43D.Graphics;
 using YukkuriMovieMaker.Commons;
 
@@ -8,14 +10,7 @@ namespace YMM43D.Player
 {
     public sealed class RenderSurface3D : IDisposable
     {
-        private const ulong WriteKey = 0;
-
-        private const ulong ReadKey = 1;
-
-        private const int SyncTimeoutMs = 500;
-
         private const int SizeGranularity = 128;
-
         private const int RetiredGenerations = 2;
 
         private readonly List<DisposeCollector> retired = [];
@@ -31,6 +26,8 @@ namespace YMM43D.Player
         public ID3D11RenderTargetView? RenderTargetView { get; private set; }
 
         public ID3D11DepthStencilView? DepthStencilView { get; private set; }
+
+        public ID3D11ShaderResourceView? DepthView { get; private set; }
 
         public ID2D1Bitmap1? Bitmap { get; private set; }
 
@@ -57,8 +54,7 @@ namespace YMM43D.Player
             height = Quantize(height);
 
             var device = (lease ??= GraphicsDevicePool.Acquire()).Device;
-
-            disposer = new DisposeCollector();
+            var made = disposer = new DisposeCollector();
 
             var colorDesc = new Texture2DDescription
             {
@@ -73,40 +69,35 @@ namespace YMM43D.Player
                 MiscFlags = ResourceOptionFlags.SharedKeyedMutex,
             };
 
-            ID3D11Texture2D renderTarget = Collect(device.CreateTexture2D(colorDesc));
-            RenderTargetView = Collect(device.CreateRenderTargetView(renderTarget));
-            writeMutex = Collect(renderTarget.QueryInterface<IDXGIKeyedMutex>());
+            var renderTarget = made.CollectEx(device.CreateTexture2D(colorDesc));
+            RenderTargetView = made.CollectEx(device.CreateRenderTargetView(renderTarget));
+            writeMutex = made.CollectEx(renderTarget.QueryInterface<IDXGIKeyedMutex>());
 
             var depthDesc = colorDesc with
             {
-                Format = Format.D24_UNorm_S8_UInt,
-                BindFlags = BindFlags.DepthStencil,
+                Format = Format.R24G8_Typeless,
+                BindFlags = BindFlags.DepthStencil | BindFlags.ShaderResource,
                 MiscFlags = ResourceOptionFlags.None,
             };
 
-            var depthBuffer = Collect(device.CreateTexture2D(depthDesc));
-            DepthStencilView = Collect(device.CreateDepthStencilView(depthBuffer));
+            var depthBuffer = made.CollectEx(device.CreateTexture2D(depthDesc));
+            var stencilDesc = new DepthStencilViewDescription(depthBuffer, DepthStencilViewDimension.Texture2D, Format.D24_UNorm_S8_UInt);
+            var viewDesc = new ShaderResourceViewDescription(depthBuffer, ShaderResourceViewDimension.Texture2D, Format.R24_UNorm_X8_Typeless);
+
+            DepthStencilView = made.CollectEx(device.CreateDepthStencilView(depthBuffer, stencilDesc));
+            DepthView = made.CollectEx(device.CreateShaderResourceView(depthBuffer, viewDesc));
 
             using var dxgiResource = renderTarget.QueryInterface<IDXGIResource>();
-            var sharedTexture = Collect(ymmDevice.OpenSharedResource<ID3D11Texture2D>(dxgiResource.SharedHandle));
-            readMutex = Collect(sharedTexture.QueryInterface<IDXGIKeyedMutex>());
+            var sharedTexture = made.CollectEx(ymmDevice.OpenSharedResource<ID3D11Texture2D>(dxgiResource.SharedHandle));
+            readMutex = made.CollectEx(sharedTexture.QueryInterface<IDXGIKeyedMutex>());
 
             using var surface = sharedTexture.QueryInterface<IDXGISurface>();
-            Bitmap = Collect(deviceContext.CreateBitmapFromDxgiSurface(surface));
+            Bitmap = made.CollectEx(deviceContext.CreateBitmapFromDxgiSurface(surface));
 
             Size = (width, height);
             ymmDeviceKey = ymmDevice.NativePointer;
             isBroken = false;
         }
-
-        private bool Fits(int width, int height)
-            => Size.Width >= width
-            && Size.Height >= height
-            && Size.Width <= Quantize(width) * 2
-            && Size.Height <= Quantize(height) * 2;
-
-        private static int Quantize(int length)
-            => (Math.Max(length, 1) + SizeGranularity - 1) / SizeGranularity * SizeGranularity;
 
         public bool BeginWrite()
         {
@@ -115,7 +106,7 @@ namespace YMM43D.Player
             if (writeMutex is null || isBroken)
                 return false;
 
-            return TryAcquire(writeMutex, WriteKey);
+            return TryAcquire(writeMutex, KeyedMutexes.WriteKey);
         }
 
         public void EndWrite()
@@ -123,10 +114,28 @@ namespace YMM43D.Player
             if (writeMutex is null || isBroken)
                 return;
 
-            writeMutex.ReleaseSync(ReadKey);
+            writeMutex.ReleaseSync(KeyedMutexes.ReadKey);
 
-            holdsReadLock = readMutex is not null && TryAcquire(readMutex, ReadKey);
+            holdsReadLock = readMutex is not null && TryAcquire(readMutex, KeyedMutexes.ReadKey);
         }
+
+        public void Dispose()
+        {
+            ReleaseResources();
+
+            foreach (var generation in retired)
+                generation.Dispose();
+
+            retired.Clear();
+
+            lease?.Dispose();
+            lease = null;
+        }
+
+        private bool Fits(int width, int height)
+            => Size.Width >= width && Size.Height >= height && Size.Width <= Quantize(width) * 2 && Size.Height <= Quantize(height) * 2;
+
+        private static int Quantize(int length) => (Math.Max(length, 1) + SizeGranularity - 1) / SizeGranularity * SizeGranularity;
 
         private void ReleaseReadLock()
         {
@@ -134,27 +143,16 @@ namespace YMM43D.Player
                 return;
 
             holdsReadLock = false;
-            readMutex.ReleaseSync(WriteKey);
+            readMutex.ReleaseSync(KeyedMutexes.WriteKey);
         }
 
         private bool TryAcquire(IDXGIKeyedMutex mutex, ulong key)
         {
-            try
-            {
-                mutex.AcquireSync(key, SyncTimeoutMs);
+            if (KeyedMutexes.TryAcquire(mutex, key))
                 return true;
-            }
-            catch
-            {
-                isBroken = true;
-                return false;
-            }
-        }
 
-        private T Collect<T>(T resource) where T : IDisposable
-        {
-            disposer!.Collect(resource);
-            return resource;
+            isBroken = true;
+            return false;
         }
 
         private void ReleaseResources()
@@ -182,21 +180,9 @@ namespace YMM43D.Player
 
             Bitmap = null;
             DepthStencilView = null;
+            DepthView = null;
             RenderTargetView = null;
             Size = default;
-        }
-
-        public void Dispose()
-        {
-            ReleaseResources();
-
-            foreach (var generation in retired)
-                generation.Dispose();
-
-            retired.Clear();
-
-            lease?.Dispose();
-            lease = null;
         }
     }
 }

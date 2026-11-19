@@ -14,9 +14,6 @@ namespace YMM43D.Commons
 
         public static IDisposable SuppressRegistration() => new Suppression();
 
-        public static void Register(object parameter, I3DProvider provider)
-            => Register(parameter, provider, null);
-
         public static void Register(object parameter, I3DProvider provider, IGraphicsDevicesAndContext? devices)
         {
             ArgumentNullException.ThrowIfNull(parameter);
@@ -33,8 +30,6 @@ namespace YMM43D.Commons
             if (registry.TryGetValue(parameter, out var registrations) && registrations.Remove(provider))
                 registry.Remove(parameter);
         }
-
-        public static I3DProvider? Find(object? parameter) => Find(parameter, null);
 
         public static I3DProvider? Find(object? parameter, IGraphicsDevicesAndContext? devices)
         {
@@ -78,10 +73,10 @@ namespace YMM43D.Commons
 
                     if (SourceKey.Of(devices) is { } key)
                     {
-                        foreach (var entry in entries)
+                        foreach (var (provider, source) in entries)
                         {
-                            if (ReferenceEquals(entry.Source, key))
-                                return entry.Provider;
+                            if (ReferenceEquals(source, key))
+                                return provider;
                         }
                     }
 

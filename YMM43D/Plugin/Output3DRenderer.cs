@@ -9,14 +9,10 @@ using YukkuriMovieMaker.Project.Items;
 
 namespace YMM43D.Plugin
 {
-    public delegate void Draw3DCallback(in Render3DContext render, DrawContext3D item);
-
     public sealed class Output3DRenderer : IDisposable
     {
         private const int MaxRenderSize = 4096;
-
         private const float VisibleMargin = 0.5f;
-
         private const float MaxDensity = 32f;
 
         private readonly Renderer3DTo2D renderer = new();
@@ -38,49 +34,36 @@ namespace YMM43D.Plugin
 
             var camera = SceneCameraResolver.Resolve(description);
             var view = camera.GetPose().ViewMatrix;
-            var pixelsPerTangent = SceneProjection.GetPixelsPerTangent(
-                camera, description.ScreenSize.Height);
+            var pixelsPerTangent = SceneProjection.GetPixelsPerTangent(camera, description.ScreenSize.Height);
 
             var scene = SceneDepthCollector.Collect(description, self, devices);
             var lighting = SceneLightingResolver.Resolve(description);
 
             var placedWorld = world * (placement ?? scene.OwnerPlacement) * scene.OwnerGroupTransform;
-
-            var screenPlacement = (hostAppliesPlacement ? scene.OwnerScreenPlacement : ScreenPlacement.None)
-                .Then(scene.OwnerGroupScreen);
-
+            var screenPlacement = (hostAppliesPlacement ? scene.OwnerScreenPlacement : ScreenPlacement.None).Then(scene.OwnerGroupScreen);
             var tangentToImage = ImageProjection.TangentToImage(pixelsPerTangent, screenPlacement);
-
-            var visible = ImageArea.ForScreen(
-                new Vector2((float)description.ScreenSize.Width, (float)description.ScreenSize.Height),
-                screenPlacement,
-                VisibleMargin);
+            var visible = ImageArea.ForScreen(ScreenSize(description), screenPlacement, VisibleMargin);
 
             var area = CoversScreen(scene.Owner)
                 ? ScreenArea(description, screenPlacement)
-                : RenderArea.Measure(
-                    bounds, placedWorld, view, tangentToImage, visible,
-                    SceneProjection.NearPlane, MaxRenderSize);
+                : RenderArea.Measure(bounds, placedWorld, view, tangentToImage, visible, SceneProjection.NearPlane, MaxRenderSize);
 
             if (area is not { } target)
-            {
                 return renderer.RenderEmpty(devices);
-            }
 
             imageReach = scene.OwnerGroupScreen.Depth == 0f ? target.Reach : 0f;
 
-            var item = new DrawContext3D
-            {
-                World = placedWorld,
-                Opacity = 1f,
-                Time = itemTime,
-            };
-
-            var projection = ImageProjection.Compose(
-                tangentToImage, target.Origin, target.Width, target.Height);
+            var item = new DrawContext3D { World = placedWorld, Opacity = 1f, Time = itemTime };
+            var projection = ImageProjection.Compose(tangentToImage, target.Origin, target.Width, target.Height);
 
             return renderer.Render(
-                devices, target.Width, target.Height, view, projection, target.Origin, lighting,
+                devices,
+                target.Width,
+                target.Height,
+                view,
+                projection,
+                target.Origin,
+                lighting,
                 scene.Casters,
                 CoversScreen(scene.Owner) ? new Color4(0f, 0f, 0f, 1f) : new Color4(0f, 0f, 0f, 0f),
                 render =>
@@ -91,7 +74,9 @@ namespace YMM43D.Plugin
                 Density(screenPlacement.HostScale, target));
         }
 
-        public static float Density(float hostScale, in RenderArea target)
+        public void Dispose() => renderer.Dispose();
+
+        private static float Density(float hostScale, in RenderArea target)
         {
             if (!float.IsFinite(hostScale) || hostScale <= 1f)
                 return 1f;
@@ -106,12 +91,12 @@ namespace YMM43D.Plugin
 
         private static bool CoversScreen(IVideoItem? owner) => owner is EffectItem;
 
+        private static Vector2 ScreenSize(TimelineItemSourceDescription description)
+            => new(description.ScreenSize.Width, description.ScreenSize.Height);
+
         private static RenderArea? ScreenArea(TimelineItemSourceDescription description, in ScreenPlacement screenPlacement)
         {
-            var screen = ImageArea.ForScreen(
-                new Vector2((float)description.ScreenSize.Width, (float)description.ScreenSize.Height),
-                screenPlacement,
-                0f);
+            var screen = ImageArea.ForScreen(ScreenSize(description), screenPlacement, 0f);
 
             var width = Math.Min((int)MathF.Ceiling(screen.Max.X - screen.Min.X), MaxRenderSize);
             var height = Math.Min((int)MathF.Ceiling(screen.Max.Y - screen.Min.Y), MaxRenderSize);
@@ -119,9 +104,7 @@ namespace YMM43D.Plugin
             return width > 0 && height > 0 ? new RenderArea(width, height, screen.Min) : null;
         }
 
-        private static void DrawOccluders(
-            in Render3DContext render,
-            IReadOnlyList<SceneDepthCollector.Occluder> occluders)
+        private static void DrawOccluders(in Render3DContext render, IReadOnlyList<SceneDepthCollector.Occluder> occluders)
         {
             foreach (var occluder in occluders)
             {
@@ -131,25 +114,8 @@ namespace YMM43D.Plugin
                     continue;
                 }
 
-                var context = new DrawContext3D
-                {
-                    World = occluder.World,
-                    Opacity = 1f,
-                    Time = occluder.Time,
-                    DepthOnly = true,
-                };
-
-                try
-                {
-                    occluder.Provider.Draw(render, context);
-                }
-                catch
-                {
-                }
+                occluder.DrawDepth(render);
             }
         }
-
-        public void Dispose() => renderer.Dispose();
     }
-
 }

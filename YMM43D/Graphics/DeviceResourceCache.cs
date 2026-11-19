@@ -1,13 +1,8 @@
-using System.Diagnostics.CodeAnalysis;
+﻿using System.Diagnostics.CodeAnalysis;
 using Vortice.Direct3D11;
 
 namespace YMM43D.Graphics
 {
-    public interface IDeviceResourceCache
-    {
-        void Clear();
-    }
-
     public sealed class DeviceResourceCache<T> : IDeviceResourceCache, IDisposable where T : IDisposable
     {
         private readonly Lock gate = new();
@@ -21,8 +16,7 @@ namespace YMM43D.Graphics
             GraphicsDevicePool.RegisterCache(this);
         }
 
-        public T Get(ID3D11Device device)
-            => TryGet(device, out var value) ? value : throw new ObjectDisposedException(GetType().Name);
+        public T Get(ID3D11Device device) => TryGet(device, out var value) ? value : throw new ObjectDisposedException(GetType().Name);
 
         public bool TryGet(ID3D11Device device, [MaybeNullWhen(false)] out T value)
         {

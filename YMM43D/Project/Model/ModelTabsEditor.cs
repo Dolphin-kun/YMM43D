@@ -87,13 +87,11 @@ namespace YMM43D.Project.Model
 
         public void Attach(Model3DParameter? owner)
         {
-            if (parameter is not null)
-                parameter.PropertyChanged -= OnParameterPropertyChanged;
+            parameter?.PropertyChanged -= OnParameterPropertyChanged;
 
             parameter = owner;
 
-            if (parameter is not null)
-                parameter.PropertyChanged += OnParameterPropertyChanged;
+            parameter?.PropertyChanged += OnParameterPropertyChanged;
 
             Refresh();
         }

@@ -8,8 +8,7 @@ namespace YMM43D.Graphics.Models
     {
         public static ModelImage Decode(Stream stream)
         {
-            var decoder = BitmapDecoder.Create(
-                stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+            var decoder = BitmapDecoder.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
 
             var frame = decoder.Frames[0];
             var converted = new FormatConvertedBitmap(frame, PixelFormats.Pbgra32, null, 0);

@@ -21,27 +21,7 @@ namespace YMM43D.PreviewTool
 
         public bool IsDragging => parameter is not null;
 
-        public static bool CanSlide(in MeshEditTarget target, IReadOnlyCollection<int> selection)
-        {
-            if (selection.Count == 0)
-                return false;
-
-            var rails = target.Mesh.SlideRails(new HashSet<int>(selection));
-
-            foreach (var one in selection)
-            {
-                if (one >= 0 && one < rails.Length && rails[one].Forward >= 0)
-                    return true;
-            }
-
-            return false;
-        }
-
-        public bool Begin(
-            in MeshEditTarget target,
-            IReadOnlyCollection<int> selection,
-            in PickRay ray,
-            in Vector3 viewDirection)
+        public bool Begin(in MeshEditTarget target, IReadOnlyCollection<int> selection, in PickRay ray, in Vector3 viewDirection)
         {
             if (selection.Count == 0 || target.Item.IsLocked)
                 return false;
@@ -86,8 +66,7 @@ namespace YMM43D.PreviewTool
             if (ray.IntersectPlane(planePoint, planeNormal) is not { } hit)
                 return false;
 
-            var wanted = Math.Clamp(
-                Vector3.Dot(hit - anchor, rail) / rail.LengthSquared(), -1f, 1f);
+            var wanted = Math.Clamp(Vector3.Dot(hit - anchor, rail) / rail.LengthSquared(), -1f, 1f);
 
             if (MathF.Abs(wanted - applied) < 1e-4f)
                 return false;

@@ -6,19 +6,20 @@ using YukkuriMovieMaker.Player.Video;
 
 namespace YMM43D.Plugin
 {
-    public abstract class Shape3DSourceBase(IGraphicsDevicesAndContext devices)
-        : IShapeSource2, I3DProvider, I3DBounds, I3DAlive
+    public abstract class Shape3DSourceBase(IGraphicsDevicesAndContext devices) : IShapeSource2, I3DProvider, I3DBounds, I3DAlive
     {
         private readonly Output3DRenderer renderer = new();
-        private ID2D1Image? output;
-        private bool isDisposed;
-
-        public bool IsAlive => !isDisposed;
+        public bool IsAlive { get; private set; } = true;
 
         protected IGraphicsDevicesAndContext Devices { get; } = devices;
 
-        public ID2D1Image Output => output ?? throw new InvalidOperationException(
-            "まだ画像が生成されていません。Update を先に呼んでください。");
+        internal Action? Disposed { get; set; }
+
+        public ID2D1Image Output
+        {
+            get => field ?? throw new InvalidOperationException("まだ画像が生成されていません。Update を先に呼んでください。");
+            private set;
+        }
 
         public virtual IEnumerable<VideoController> Controllers => [];
 
@@ -32,26 +33,22 @@ namespace YMM43D.Plugin
 
         public void Update(TimelineItemSourceDescription timelineItemSourceDescription)
         {
+            Prepare(timelineItemSourceDescription);
+
             var itemTime = FrameContext.FromItem(timelineItemSourceDescription);
 
-            output = renderer.Render(
-                Devices,
-                timelineItemSourceDescription,
-                GetWorldBounds(itemTime),
-                Matrix4x4.Identity,
-                Draw,
-                out _,
-                self: this,
-                hostAppliesPlacement: true);
+            Output = renderer.Render(Devices, timelineItemSourceDescription, GetWorldBounds(itemTime), Matrix4x4.Identity, Draw, out _, self: this, hostAppliesPlacement: true);
 
             SceneRevision.Advance();
         }
 
-        internal Action? Disposed { get; set; }
+        protected virtual void Prepare(TimelineItemSourceDescription description)
+        {
+        }
 
         public virtual void Dispose()
         {
-            isDisposed = true;
+            IsAlive = false;
             Disposed?.Invoke();
             Disposed = null;
             renderer.Dispose();

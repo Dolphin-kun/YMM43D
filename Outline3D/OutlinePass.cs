@@ -1,5 +1,4 @@
 ﻿using System.Numerics;
-using System.Runtime.InteropServices;
 using Vortice.Direct3D;
 using Vortice.Direct3D11;
 using Vortice.DXGI;
@@ -10,48 +9,9 @@ using YukkuriMovieMaker.Commons;
 
 namespace Outline3D
 {
-    [StructLayout(LayoutKind.Sequential)]
-    internal struct OutlineConstants
-    {
-        public Vector4 Region;
-
-        public Vector4 Target;
-
-        public Vector4 Inverse;
-
-        public Vector4 Placement;
-
-        public Vector4 Stroke;
-
-        public Vector4 Shape;
-
-        public Vector4 StrokeColor;
-
-        public Vector4 BrushArea;
-
-        public Vector4 DepthMap;
-    }
-
-    internal readonly record struct OutlineLook(
-        float Thickness,
-        float Blur,
-        float Sides,
-        float Smoothness,
-        bool IsOutlineOnly,
-        bool IsAngular,
-        Vector2 Offset,
-        float Zoom,
-        float Rotation,
-        Vector4 Color,
-        ID3D11ShaderResourceView? Brush,
-        Vector2 BrushSize);
-
-    internal delegate void SourceDraw(in Render3DContext render, DrawContext3D item);
-
     internal sealed class OutlinePass : IDisposable
     {
         private const int MaxTargetSize = 16384;
-
         private const float MinimumZoom = 1e-3f;
 
         private readonly DisposeCollector disposer = new();
@@ -70,15 +30,11 @@ namespace Outline3D
 
             var assembly = typeof(OutlinePass).Assembly;
 
-            vertexShader = Collect(device.CreateVertexShader(
-                ShaderLibrary.Compile(assembly, "Outline3D.hlsl", "VSMain", "vs_5_0")));
-            seedShader = Collect(device.CreatePixelShader(
-                ShaderLibrary.Compile(assembly, "Outline3D.hlsl", "SeedPS", "ps_5_0")));
-            jumpShader = Collect(device.CreatePixelShader(
-                ShaderLibrary.Compile(assembly, "Outline3D.hlsl", "JumpPS", "ps_5_0")));
-            compositeShader = Collect(device.CreatePixelShader(
-                ShaderLibrary.Compile(assembly, "Outline3D.hlsl", "CompositePS", "ps_5_0")));
-            constantBuffer = Collect(D3D11Buffers.CreateConstantBuffer<OutlineConstants>(device));
+            vertexShader = disposer.CollectEx(device.CreateVertexShader(ShaderLibrary.Compile(assembly, "Outline3D.hlsl", "VSMain", "vs_5_0")));
+            seedShader = disposer.CollectEx(device.CreatePixelShader(ShaderLibrary.Compile(assembly, "Outline3D.hlsl", "SeedPS", "ps_5_0")));
+            jumpShader = disposer.CollectEx(device.CreatePixelShader(ShaderLibrary.Compile(assembly, "Outline3D.hlsl", "JumpPS", "ps_5_0")));
+            compositeShader = disposer.CollectEx(device.CreatePixelShader(ShaderLibrary.Compile(assembly, "Outline3D.hlsl", "CompositePS", "ps_5_0")));
+            constantBuffer = disposer.CollectEx(D3D11Buffers.CreateConstantBuffer<OutlineConstants>(device));
         }
 
         public void Draw(in Render3DContext render, DrawContext3D item, WorldBounds bounds, in OutlineLook look, SourceDraw drawSource)
@@ -113,9 +69,7 @@ namespace Outline3D
             if (region.Z <= region.X || region.W <= region.Y)
                 return;
 
-            targets = targets is { } current && current.Width == width && current.Height == height
-                ? current
-                : Recreate(width, height);
+            targets = targets is { } current && current.Width == width && current.Height == height ? current : Recreate(width, height);
 
             var angle = float.DegreesToRadians(look.Rotation);
             var sides = Math.Clamp(MathF.Round(look.Sides), 3f, 256f);
@@ -130,11 +84,7 @@ namespace Outline3D
                 Stroke = new Vector4(thickness, blur, MathF.Max(look.Smoothness / 100f * 1.5f, 1e-3f), 1f),
                 Shape = new Vector4(look.IsAngular ? 1f : 0f, sides, MathF.Cos(MathF.PI / sides), look.IsOutlineOnly ? 1f : 0f),
                 StrokeColor = look.Color,
-                BrushArea = new Vector4(
-                    pixelsPerItemPixel,
-                    MathF.Max(look.BrushSize.X, 1f),
-                    MathF.Max(look.BrushSize.Y, 1f),
-                    look.Brush is null ? 0f : 1f),
+                BrushArea = new Vector4(pixelsPerItemPixel, MathF.Max(look.BrushSize.X, 1f), MathF.Max(look.BrushSize.Y, 1f), look.Brush is null ? 0f : 1f),
                 DepthMap = new Vector4(projection.M33, projection.M34, projection.M43, WorldScale.ToWorld(1f)),
             };
 
@@ -210,7 +160,7 @@ namespace Outline3D
                 Texture = item.Texture,
             });
 
-            context.OMSetRenderTargets((ID3D11RenderTargetView)null!, (ID3D11DepthStencilView?)null);
+            context.OMSetRenderTargets((ID3D11RenderTargetView)null!, null);
         }
 
         private static SeedTarget Seed(ID3D11DeviceContext context, Targets targets, OutlineConstants constants)
@@ -219,15 +169,14 @@ namespace Outline3D
 
             context.UpdateSubresource(in constants, targets.Owner.constantBuffer);
             context.PSSetShaderResource(6, null!);
-            context.OMSetRenderTargets(target.Target, (ID3D11DepthStencilView?)null);
+            context.OMSetRenderTargets(target.Target, null);
             context.PSSetShader(targets.Owner.seedShader);
             context.Draw(4, 0);
 
             return target;
         }
 
-        private static SeedTarget Spread(
-            ID3D11DeviceContext context, Targets targets, OutlineConstants constants, SeedTarget written, float reach, Vector4 region)
+        private static SeedTarget Spread(ID3D11DeviceContext context, Targets targets, OutlineConstants constants, SeedTarget written, float reach, Vector4 region)
         {
             var longest = MathF.Max(region.Z - region.X, region.W - region.Y);
             var limit = MathF.Min(reach, longest);
@@ -249,8 +198,7 @@ namespace Outline3D
             return Jump(context, targets, constants, written, 1);
         }
 
-        private static SeedTarget Jump(
-            ID3D11DeviceContext context, Targets targets, OutlineConstants constants, SeedTarget from, int step)
+        private static SeedTarget Jump(ID3D11DeviceContext context, Targets targets, OutlineConstants constants, SeedTarget from, int step)
         {
             var to = ReferenceEquals(from, targets.SeedsA) ? targets.SeedsB : targets.SeedsA;
 
@@ -258,7 +206,7 @@ namespace Outline3D
             context.UpdateSubresource(in constants, targets.Owner.constantBuffer);
 
             context.PSSetShaderResource(6, null!);
-            context.OMSetRenderTargets(to.Target, (ID3D11DepthStencilView?)null);
+            context.OMSetRenderTargets(to.Target, null);
             context.PSSetShaderResource(6, from.View);
             context.Draw(4, 0);
 
@@ -310,11 +258,9 @@ namespace Outline3D
             return true;
         }
 
-        private static Vector2 ToPixel(Vector4 clip, int width, int height)
-            => new((clip.X / clip.W + 1f) / 2f * width, (1f - clip.Y / clip.W) / 2f * height);
+        private static Vector2 ToPixel(Vector4 clip, int width, int height) => new((clip.X / clip.W + 1f) / 2f * width, (1f - clip.Y / clip.W) / 2f * height);
 
-        private static Vector4 MeasureRegion(
-            Vector2[]? corners, Vector2 center, Vector2 offset, in OutlineLook look, float reach, int width, int height)
+        private static Vector4 MeasureRegion(Vector2[]? corners, Vector2 center, Vector2 offset, in OutlineLook look, float reach, int width, int height)
         {
             if (corners is null)
                 return new Vector4(0f, 0f, width, height);
@@ -345,12 +291,6 @@ namespace Outline3D
 
         private static Vector2 Ceiling(Vector2 value) => new(MathF.Ceiling(value.X), MathF.Ceiling(value.Y));
 
-        private T Collect<T>(T resource) where T : IDisposable
-        {
-            disposer.Collect(resource);
-            return resource;
-        }
-
         private Targets Recreate(int width, int height)
         {
             targets?.Dispose();
@@ -378,13 +318,13 @@ namespace Outline3D
 
                 var device = owner.device;
 
-                var mask = Collect(device.CreateTexture2D(Describe(width, height, Format.B8G8R8A8_UNorm, BindFlags.RenderTarget)));
-                MaskTarget = Collect(device.CreateRenderTargetView(mask));
-                MaskView = Collect(device.CreateShaderResourceView(mask));
+                var mask = disposer.CollectEx(device.CreateTexture2D(Describe(width, height, Format.B8G8R8A8_UNorm, BindFlags.RenderTarget)));
+                MaskTarget = disposer.CollectEx(device.CreateRenderTargetView(mask));
+                MaskView = disposer.CollectEx(device.CreateShaderResourceView(mask));
 
-                var depth = Collect(device.CreateTexture2D(Describe(width, height, Format.R32_Typeless, BindFlags.DepthStencil)));
-                DepthTarget = Collect(device.CreateDepthStencilView(depth, new DepthStencilViewDescription(DepthStencilViewDimension.Texture2D, Format.D32_Float)));
-                DepthView = Collect(device.CreateShaderResourceView(depth, new ShaderResourceViewDescription(depth, Vortice.Direct3D.ShaderResourceViewDimension.Texture2D, Format.R32_Float)));
+                var depth = disposer.CollectEx(device.CreateTexture2D(Describe(width, height, Format.R32_Typeless, BindFlags.DepthStencil)));
+                DepthTarget = disposer.CollectEx(device.CreateDepthStencilView(depth, new DepthStencilViewDescription(DepthStencilViewDimension.Texture2D, Format.D32_Float)));
+                DepthView = disposer.CollectEx(device.CreateShaderResourceView(depth, new ShaderResourceViewDescription(depth, ShaderResourceViewDimension.Texture2D, Format.R32_Float)));
 
                 SeedsA = CreateSeeds(device, width, height);
                 SeedsB = CreateSeeds(device, width, height);
@@ -410,11 +350,9 @@ namespace Outline3D
 
             private SeedTarget CreateSeeds(ID3D11Device device, int width, int height)
             {
-                var texture = Collect(device.CreateTexture2D(Describe(width, height, Format.R32G32B32A32_Float, BindFlags.RenderTarget)));
+                var texture = disposer.CollectEx(device.CreateTexture2D(Describe(width, height, Format.R32G32B32A32_Float, BindFlags.RenderTarget)));
 
-                return new SeedTarget(
-                    Collect(device.CreateRenderTargetView(texture)),
-                    Collect(device.CreateShaderResourceView(texture)));
+                return new SeedTarget(disposer.CollectEx(device.CreateRenderTargetView(texture)), disposer.CollectEx(device.CreateShaderResourceView(texture)));
             }
 
             private static Texture2DDescription Describe(int width, int height, Format format, BindFlags bind) => new()
@@ -428,12 +366,6 @@ namespace Outline3D
                 Usage = ResourceUsage.Default,
                 BindFlags = bind | BindFlags.ShaderResource,
             };
-
-            private T Collect<T>(T resource) where T : IDisposable
-            {
-                disposer.Collect(resource);
-                return resource;
-            }
 
             public void Dispose() => disposer.Dispose();
         }

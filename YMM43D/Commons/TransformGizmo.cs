@@ -2,124 +2,42 @@ using System.Numerics;
 
 namespace YMM43D.Commons
 {
-    public enum GizmoHandle
-    {
-        None,
-
-        MoveX,
-
-        MoveY,
-
-        MoveZ,
-
-        PlaneXY,
-
-        PlaneYZ,
-
-        PlaneZX,
-
-        RotateX,
-
-        RotateY,
-
-        RotateZ,
-
-        ScaleX,
-
-        ScaleY,
-
-        ScaleZ,
-
-        ScaleAll,
-
-        Inflate,
-
-        Free,
-    }
-
-    public enum GizmoStyle
-    {
-        Move,
-
-        Turn,
-
-        Scale,
-    }
-
-    public enum GizmoMode
-    {
-        Move,
-
-        Rotate,
-
-        Scale,
-
-        Select,
-
-        LoopCut,
-
-        Inflate,
-    }
-
-    public enum GizmoSpace
-    {
-        World,
-
-        Local,
-    }
-
     public readonly record struct TransformGizmo(Vector3 Origin, float Scale, Matrix4x4 Orientation)
     {
         public const float AxisLength = 1f;
-
-        public const float RingRadius = 0.75f;
-
-        public const int RingSegments = 48;
-
         public const float HeadLength = 0.18f;
-
         public const float ScaleLength = 0.82f;
-
         public const float ScaleBox = 0.09f;
 
+        public const float RingRadius = 0.75f;
+        public const int RingSegments = 48;
+
         public const float PlaneNear = 0.26f;
-
         public const float PlaneFar = 0.5f;
-
         public const int PlaneCorners = 4;
 
-        private const float ScreenRatio = 0.18f;
-
         public const float GrabThreshold = 9f;
-
         public const float CenterGrab = 11f;
-
         public const float CenterReach = 2.4f;
 
         public const float BoneRatio = 0.6f;
+        private const float ScreenRatio = 0.18f;
 
-        public static TransformGizmo Create(
-            in Vector3 origin, in Vector3 cameraPosition, in Matrix4x4? orientation = null, float ratio = 1f)
+        public static TransformGizmo Create(in Vector3 origin, in Vector3 cameraPosition, in Matrix4x4? orientation = null, float ratio = 1f)
             => AtDistance(origin, Vector3.Distance(origin, cameraPosition), orientation, ratio);
 
-        public static TransformGizmo AtDistance(
-            in Vector3 origin, float distance, in Matrix4x4? orientation = null, float ratio = 1f)
+        public static TransformGizmo AtDistance(in Vector3 origin, float distance, in Matrix4x4? orientation = null, float ratio = 1f)
             => new(origin, MathF.Max(0.05f, distance * ScreenRatio * ratio), orientation ?? Matrix4x4.Identity);
 
-        public static bool IsAxis(GizmoHandle handle)
-            => handle is GizmoHandle.MoveX or GizmoHandle.MoveY or GizmoHandle.MoveZ;
+        public static bool IsAxis(GizmoHandle handle) => handle is GizmoHandle.MoveX or GizmoHandle.MoveY or GizmoHandle.MoveZ;
 
-        public static bool IsPlane(GizmoHandle handle)
-            => handle is GizmoHandle.PlaneXY or GizmoHandle.PlaneYZ or GizmoHandle.PlaneZX;
+        public static bool IsPlane(GizmoHandle handle) => handle is GizmoHandle.PlaneXY or GizmoHandle.PlaneYZ or GizmoHandle.PlaneZX;
 
-        public static bool IsTurn(GizmoHandle handle)
-            => handle is GizmoHandle.RotateX or GizmoHandle.RotateY or GizmoHandle.RotateZ;
+        public static bool IsTurn(GizmoHandle handle) => handle is GizmoHandle.RotateX or GizmoHandle.RotateY or GizmoHandle.RotateZ;
 
-        public static bool IsScale(GizmoHandle handle)
-            => handle is GizmoHandle.ScaleX or GizmoHandle.ScaleY or GizmoHandle.ScaleZ;
+        public static bool IsScale(GizmoHandle handle) => handle is GizmoHandle.ScaleX or GizmoHandle.ScaleY or GizmoHandle.ScaleZ;
 
-        public static bool ShowsHandles(GizmoMode mode)
-            => mode is not (GizmoMode.Select or GizmoMode.LoopCut or GizmoMode.Inflate);
+        public static bool ShowsHandles(GizmoMode mode) => mode is not (GizmoMode.Select or GizmoMode.LoopCut or GizmoMode.Inflate);
 
         public static GizmoStyle StyleOf(GizmoMode mode) => mode switch
         {
@@ -138,11 +56,9 @@ namespace YMM43D.Commons
 
         public Vector3 Axis(GizmoHandle handle) => Along(AxisDirection(handle));
 
-        public Vector3 AxisEnd(GizmoHandle handle)
-            => Origin + Axis(handle) * (AxisLength * Scale);
+        public Vector3 AxisEnd(GizmoHandle handle) => Origin + Axis(handle) * (AxisLength * Scale);
 
-        public Vector3 ScaleEnd(GizmoHandle handle)
-            => Origin + Axis(handle) * (ScaleLength * Scale);
+        public Vector3 ScaleEnd(GizmoHandle handle) => Origin + Axis(handle) * (ScaleLength * Scale);
 
         public static Vector3 PlaneNormalDirection(GizmoHandle handle) => handle switch
         {
@@ -173,8 +89,7 @@ namespace YMM43D.Commons
             };
         }
 
-        public Vector3 PlanePoint(GizmoHandle handle, int index)
-            => Origin + Vector3.TransformNormal(PlaneCorner(handle, index) * Scale, Orientation);
+        public Vector3 PlanePoint(GizmoHandle handle, int index) => Origin + Vector3.TransformNormal(PlaneCorner(handle, index) * Scale, Orientation);
 
         public static Vector3 TurnDirection(GizmoHandle handle) => handle switch
         {
@@ -199,8 +114,7 @@ namespace YMM43D.Commons
             };
         }
 
-        public Vector3 RingPoint(GizmoHandle handle, int index)
-            => Origin + Vector3.TransformNormal(RingOffset(handle, index) * Scale, Orientation);
+        public Vector3 RingPoint(GizmoHandle handle, int index) => Origin + Vector3.TransformNormal(RingOffset(handle, index) * Scale, Orientation);
 
         private Vector3 Along(in Vector3 direction)
         {

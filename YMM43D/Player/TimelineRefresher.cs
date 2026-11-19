@@ -1,6 +1,5 @@
 ﻿using System.Collections.Concurrent;
 using YMM43D.Commons;
-
 using YukkuriMovieMaker.Project;
 using YukkuriMovieMaker.Project.Items;
 
@@ -18,11 +17,15 @@ namespace YMM43D.Player
         private int lastKnownFrame = -1;
         private bool isPending;
 
+        private bool IsDue => Environment.TickCount64 - lastRefreshAt >= MinIntervalMs;
+
         public static TimelineRefresher For(Timeline timeline) => shared.GetOrAdd(timeline.ID, _ => new TimelineRefresher());
+
+        public static FrameContext GetTime(Timeline timeline) => new(timeline.CurrentFrame, Math.Max(1, timeline.Length), Math.Max(1, timeline.VideoInfo.FPS));
 
         public bool RefreshIfCameraChanged(Timeline timeline)
         {
-            if (tracker.HasChanged(SceneCameraResolver.Resolve(timeline), Resolve(timeline)))
+            if (tracker.HasChanged(SceneCameraResolver.Resolve(timeline), SceneLightingResolver.Resolve(timeline)))
                 isPending = true;
 
             return Apply(timeline);
@@ -35,15 +38,10 @@ namespace YMM43D.Player
             if (!IsDue)
                 return;
 
-            tracker.Sync(SceneCameraResolver.Resolve(timeline), Resolve(timeline));
+            tracker.Sync(SceneCameraResolver.Resolve(timeline), SceneLightingResolver.Resolve(timeline));
 
             Apply(timeline);
         }
-
-        private static SceneLighting Resolve(Timeline timeline)
-            => SceneLightingResolver.Resolve(timeline);
-
-        private bool IsDue => Environment.TickCount64 - lastRefreshAt >= MinIntervalMs;
 
         private bool Apply(Timeline timeline)
         {
@@ -67,9 +65,6 @@ namespace YMM43D.Player
 
             return true;
         }
-
-        public static FrameContext GetTime(Timeline timeline)
-            => new(timeline.CurrentFrame, Math.Max(1, timeline.Length), Math.Max(1, timeline.VideoInfo.FPS));
 
         private static void NotifyCameraSync(Timeline timeline)
         {
@@ -95,9 +90,7 @@ namespace YMM43D.Player
         private static void NudgeCurrentFrame(Timeline timeline)
         {
             var current = timeline.CurrentFrame;
-            var neighbour = current < timeline.Length - 1
-                ? current + 1
-                : current - 1;
+            var neighbour = current < timeline.Length - 1 ? current + 1 : current - 1;
 
             if (neighbour < 0)
                 return;

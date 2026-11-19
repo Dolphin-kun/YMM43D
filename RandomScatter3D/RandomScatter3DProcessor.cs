@@ -10,12 +10,10 @@ using YukkuriMovieMaker.Player.Video;
 
 namespace RandomScatter3D
 {
-    internal sealed class RandomScatter3DProcessor(RandomScatter3DEffect effect, IGraphicsDevicesAndContext devices)
-        : VideoEffect3DProcessorBase(effect, devices)
+    internal sealed class RandomScatter3DProcessor(RandomScatter3DEffect effect, IGraphicsDevicesAndContext devices) : VideoEffect3DProcessorBase(effect, devices)
     {
         private readonly RandomScatter3DEffect effect = effect;
-        private readonly DeviceResourceCache<RenderPipeline<TransformConstants>> pipelines = new(
-            device => new RenderPipeline<TransformConstants>(device, new PlaneMesh(device), new TextureMaterial(device)));
+        private readonly DeviceResourceCache<RenderPipeline<TransformConstants>> pipelines = new(device => new RenderPipeline<TransformConstants>(device, new PlaneMesh(device), new TextureMaterial(device)));
 
         private I3DProvider? solidSource;
 
@@ -25,14 +23,15 @@ namespace RandomScatter3D
 
         protected override bool UsesGroupMemberBounds => false;
 
-        protected override void OnUpdating(EffectDescription effectDescription)
-            => solidSource = Live3D.KeepLast(
-                GroupMemberSolid ?? FindSolidSource(effectDescription), solidSource);
+        protected override void OnUpdating(EffectDescription effectDescription) => solidSource = Live3D.KeepLast(GroupMemberSolid ?? FindSolidSource(effectDescription), solidSource);
 
         private I3DProvider? FindSolidSource(EffectDescription description)
-            => SceneDepthCollector.FindOwner(description) is { } owner
-                ? SceneDepthCollector.FindSources(owner, Devices).FirstOrDefault(source => !ReferenceEquals(source, this))
-                : null;
+        {
+            if (SceneDepthCollector.FindOwner(description) is not { } owner)
+                return null;
+
+            return SceneDepthCollector.FindSources(owner, Devices).FirstOrDefault(source => !ReferenceEquals(source, this));
+        }
 
         protected override bool TryInheritTransform(out Matrix4x4 local, out Matrix4x4 world)
         {
@@ -76,8 +75,12 @@ namespace RandomScatter3D
 
             var texture = item.Texture ?? GetTexture(render.Device);
 
-            if (texture is null || !TryGetSize(out var size, out _) || !pipelines.TryGet(render.Device, out var pipeline))
+            if (texture is null
+                || !TryGetSize(out var size, out _)
+                || !pipelines.TryGet(render.Device, out var pipeline))
+            {
                 return;
+            }
 
             var gloss = effect.GetGloss(time);
             var settings = item.ToDrawSettings(FaceCulling.None, texture);
@@ -88,16 +91,9 @@ namespace RandomScatter3D
                     continue;
 
                 var scale = Matrix4x4.CreateScale(WorldScale.ToWorld(size.X * copy.Scale), WorldScale.ToWorld(size.Y * copy.Scale), 1f);
+                var scene = render.CreateConstants(Place(copy, scale, facing, item.World), item.Opacity * copy.Alpha, effect.IsUnlit, item.AlphaCutoff, gloss);
 
-                pipeline.Draw(
-                    render.Context,
-                    render.CreateConstants(
-                        Place(copy, scale, facing, item.World),
-                        item.Opacity * copy.Alpha,
-                        effect.IsUnlit,
-                        item.AlphaCutoff,
-                        gloss),
-                    settings);
+                pipeline.Draw(render.Context, scene, settings);
             }
         }
 
@@ -105,11 +101,10 @@ namespace RandomScatter3D
         {
             var position = WorldScale.ToWorldPosition(copy.Position.X, copy.Position.Y, copy.Position.Z);
 
-            return effect.FacesCamera
-                ? scale * Matrix4x4.CreateRotationZ(-float.DegreesToRadians(copy.Angles.Z)) * facing
-                  * Matrix4x4.CreateTranslation(Vector3.Transform(position, itemWorld))
-                : scale * Rotation3D.ForObject(copy.Angles.X, copy.Angles.Y, copy.Angles.Z)
-                  * Matrix4x4.CreateTranslation(position) * itemWorld;
+            if (effect.FacesCamera)
+                return scale * Matrix4x4.CreateRotationZ(-float.DegreesToRadians(copy.Angles.Z)) * facing * Matrix4x4.CreateTranslation(Vector3.Transform(position, itemWorld));
+
+            return scale * Rotation3D.ForObject(copy.Angles.X, copy.Angles.Y, copy.Angles.Z) * Matrix4x4.CreateTranslation(position) * itemWorld;
         }
 
         private readonly record struct Copy(Vector3 Position, Vector3 Angles, float Scale, float Alpha);
@@ -129,22 +124,17 @@ namespace RandomScatter3D
             {
                 var start = new Vector3(Signed(seed, index, 0), Signed(seed, index, 1), Signed(seed, index, 2)) * range / 2f;
                 var velocity = Direction(seed, index) * (Unit(seed, index, 6) * maxSpeed);
-
-                var angles = new Vector3(Signed(seed, index, 7), Signed(seed, index, 8), Signed(seed, index, 9)) * maxAngle
-                           + new Vector3(Signed(seed, index, 10), Signed(seed, index, 11), Signed(seed, index, 12)) * maxSpin * frame;
-
+                var tilt = new Vector3(Signed(seed, index, 7), Signed(seed, index, 8), Signed(seed, index, 9));
+                var spin = new Vector3(Signed(seed, index, 10), Signed(seed, index, 11), Signed(seed, index, 12));
+                var angles = tilt * maxAngle + spin * maxSpin * frame;
                 var position = Wrap(start + velocity * frame, range);
+                var scale = 1f - variation * Unit(seed, index, 13);
 
-                yield return new Copy(
-                    position,
-                    angles,
-                    1f - variation * Unit(seed, index, 13),
-                    ScatterEdge.Alpha(position, velocity, range, fade));
+                yield return new Copy(position, angles, scale, ScatterEdge.Alpha(position, velocity, range, fade));
             }
         }
 
-        private static float Unit(int seed, int index, int channel)
-            => Math.Clamp(StatelessRandom.GetFloat([seed, index, channel]), 0f, 1f);
+        private static float Unit(int seed, int index, int channel) => Math.Clamp(StatelessRandom.GetFloat([seed, index, channel]), 0f, 1f);
 
         private static float Signed(int seed, int index, int channel) => Unit(seed, index, channel) * 2f - 1f;
 
@@ -159,8 +149,7 @@ namespace RandomScatter3D
 
         private static Vector3 Wrap(Vector3 position, Vector3 range)
         {
-            static float Axis(float value, float span)
-                => span <= 0f ? 0f : ((value + span / 2f) % span + span) % span - span / 2f;
+            static float Axis(float value, float span) => span <= 0f ? 0f : ((value + span / 2f) % span + span) % span - span / 2f;
 
             return new Vector3(Axis(position.X, range.X), Axis(position.Y, range.Y), Axis(position.Z, range.Z));
         }
@@ -168,14 +157,17 @@ namespace RandomScatter3D
         protected override WorldBounds GetLocalBounds(in FrameContext itemTime)
         {
             var range = effect.GetRange(itemTime);
-
-            var reach = solidSource is I3DBounds solid && solid.GetLocalBounds(itemTime) is { IsEmpty: false } bounds
-                ? MathF.Max(bounds.Min.Length(), bounds.Max.Length())
-                : TryGetSize(out var size, out _) ? WorldScale.ToWorld(MathF.Max(size.X, size.Y) / 2f) : 0f;
-
-            var extent = Vector3.Abs(WorldScale.ToWorldPosition(range.X / 2f, range.Y / 2f, range.Z / 2f)) + new Vector3(reach);
+            var extent = Vector3.Abs(WorldScale.ToWorldPosition(range.X / 2f, range.Y / 2f, range.Z / 2f)) + new Vector3(GetReach(itemTime));
 
             return new WorldBounds(-extent, extent);
+        }
+
+        private float GetReach(in FrameContext itemTime)
+        {
+            if (solidSource is I3DBounds solid && solid.GetLocalBounds(itemTime) is { IsEmpty: false } bounds)
+                return MathF.Max(bounds.Min.Length(), bounds.Max.Length());
+
+            return TryGetSize(out var size, out _) ? WorldScale.ToWorld(MathF.Max(size.X, size.Y) / 2f) : 0f;
         }
 
         public override void Dispose()

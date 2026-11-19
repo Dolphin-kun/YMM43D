@@ -1,25 +1,24 @@
-using System.Numerics;
+﻿using System.Numerics;
 using System.Reflection;
 using Vortice.Direct3D11;
+using Vortice.Mathematics;
 using YMM43D.Commons;
 using YMM43D.Graphics;
 using YMM43D.Graphics.Materials;
+using YMM43D.Graphics.Meshes;
 using YukkuriMovieMaker.Commons;
 
 namespace YMM43D.Plugin
 {
-    public abstract class Deform3DProcessorBase<TConstants>
-        : VideoEffect3DProcessorBase where TConstants : unmanaged
+    public abstract class Deform3DProcessorBase<TConstants> : VideoEffect3DProcessorBase where TConstants : unmanaged
     {
         private readonly DeviceResourceCache<DeformResources> resources;
 
-        protected Deform3DProcessorBase(VideoEffect3DBase owner, IGraphicsDevicesAndContext devices)
-            : base(owner, devices)
+        protected Deform3DProcessorBase(VideoEffect3DBase owner, IGraphicsDevicesAndContext devices) : base(owner, devices)
         {
             var assembly = GetType().Assembly;
 
-            resources = new DeviceResourceCache<DeformResources>(
-                device => new DeformResources(device, assembly, ShaderName));
+            resources = new DeviceResourceCache<DeformResources>(device => new DeformResources(device, assembly, ShaderName));
         }
 
         protected abstract string ShaderName { get; }
@@ -34,14 +33,36 @@ namespace YMM43D.Plugin
 
         protected virtual SurfaceGloss GetGloss(in FrameContext time) => SurfaceGloss.None;
 
-        private float DepthScale => TryGetSize(out var size, out _)
-            ? WorldScale.ToWorld(size.X)
-            : 1f;
+        private float DepthScale => TryGetSize(out var size, out _) ? WorldScale.ToWorld(size.X) : 1f;
 
         protected override bool KeepsGroupMemberSolid => true;
 
+        protected override bool UsesGroupMemberBounds => false;
+
+        protected override bool AcceptsOwnSolid(I3DProvider solid, in FrameContext itemTime)
+            => solid is I3DGeometrySource source && source.TryGetGeometry(itemTime, out _, out _, out _);
+
         public override void Draw(in Render3DContext render, DrawContext3D item)
         {
+            var time = EffectDescription is { } description ? FrameContext.FromItem(description) : item.Time;
+
+            if (resources.TryGet(render.Device, out var ready)
+                && GroupMemberSolid is I3DGeometrySource provider
+                && provider.TryGetGeometry(time, out var geometry, out var colors, out var local))
+            {
+                var mesh = ready.GetSolidMesh(geometry, colors, GetGrid(time));
+                var solidWorld = mesh.Fit * local * item.World;
+
+                ready.SolidPipeline.Draw(
+                    render.Context,
+                    render.CreateConstants(solidWorld, item, IsUnlit, GetGloss(time)),
+                    GetConstants(time),
+                    item.ToDrawSettings(FaceCulling.None),
+                    mesh);
+
+                return;
+            }
+
             if (TryDrawGroupMemberSolid(render, item))
                 return;
 
@@ -49,19 +70,13 @@ namespace YMM43D.Plugin
             if (texture is null || !resources.TryGet(render.Device, out var shared))
                 return;
 
-            var time = EffectDescription is { } description
-                ? FrameContext.FromItem(description)
-                : item.Time;
-
             var world = Matrix4x4.CreateScale(1f, 1f, DepthScale) * item.World;
 
             var scene = render.CreateConstants(world, item, IsUnlit, GetGloss(time));
             var constants = GetConstants(time);
-
             var settings = item.ToDrawSettings(FaceCulling.None, texture);
 
-            shared.Pipeline.Draw(
-                render.Context, scene, constants, settings, shared.GetMesh(GetGrid(time)));
+            shared.Pipeline.Draw(render.Context, scene, constants, settings, shared.GetMesh(GetGrid(time)));
         }
 
         protected override WorldBounds GetLocalBounds(in FrameContext itemTime)
@@ -69,33 +84,61 @@ namespace YMM43D.Plugin
             var extent = GetExtent(itemTime);
 
             var half = 0.5f + MathF.Max(extent.Margin, 0f);
+
+            if (GroupMemberSolid is I3DGeometrySource provider
+                && provider.TryGetGeometry(itemTime, out var geometry, out _, out var local))
+            {
+                var (center, span) = DeformSolidMesh.Measure(geometry.Vertices);
+
+                return new WorldBounds(new Vector3(-half), new Vector3(half)).Transform(Matrix4x4.CreateScale(span) * Matrix4x4.CreateTranslation(center) * local);
+            }
+
+            if (GroupMemberSolid is I3DBounds bounded)
+                return bounded.GetLocalBounds(itemTime);
+
             var depth = MathF.Max(extent.Depth, 0f) * DepthScale;
 
-            return new WorldBounds(
-                new Vector3(-half, -half, -depth),
-                new Vector3(half, half, depth));
+            return new WorldBounds(new Vector3(-half, -half, -depth), new Vector3(half, half, depth));
         }
 
         public override void Dispose()
         {
             resources.Dispose();
             base.Dispose();
+            GC.SuppressFinalize(this);
         }
 
-        private sealed class DeformResources : IDisposable
+        private sealed class DeformResources(ID3D11Device device, Assembly assembly, string shader) : IDisposable
         {
-            private readonly ID3D11Device device;
+            private const string SolidPrelude = "#define DEFORM_SOLID 1";
 
             private DeformMesh? mesh;
+            private DeformSolidMesh? solid;
+            private SurfaceGeometry? builtGeometry;
+            private Color4[] builtColors = [];
+            private DeformGrid builtGrid;
 
-            public RenderPipeline<TransformConstants> Pipeline { get; }
+            public RenderPipeline<TransformConstants> Pipeline { get; } = new(device, DeformVertex.InputElements, new ShaderMaterial(device, assembly, shader));
 
-            public DeformResources(ID3D11Device device, Assembly assembly, string shader)
+            public RenderPipeline<TransformConstants> SolidPipeline { get; } = new(device, DeformSolidVertex.InputElements, new ShaderMaterial(device, assembly, shader, SolidPrelude));
+
+            public DeformSolidMesh GetSolidMesh(SurfaceGeometry geometry, IReadOnlyList<Color4> colors, in DeformGrid grid)
             {
-                this.device = device;
+                if (solid is { } existing
+                    && ReferenceEquals(builtGeometry, geometry)
+                    && builtGrid == grid
+                    && builtColors.AsSpan().SequenceEqual([.. colors]))
+                {
+                    return existing;
+                }
 
-                Pipeline = new RenderPipeline<TransformConstants>(
-                    device, DeformVertex.InputElements, new ShaderMaterial(device, assembly, shader));
+                solid?.Dispose();
+
+                builtGeometry = geometry;
+                builtColors = [.. colors];
+                builtGrid = grid;
+
+                return solid = new DeformSolidMesh(device, geometry, colors, grid);
             }
 
             public DeformMesh GetMesh(in DeformGrid grid)
@@ -112,10 +155,11 @@ namespace YMM43D.Plugin
             {
                 mesh?.Dispose();
                 mesh = null;
+                solid?.Dispose();
+                solid = null;
+                SolidPipeline.Dispose();
                 Pipeline.Dispose();
             }
         }
     }
-
-    public readonly record struct DeformExtent(float Margin, float Depth);
 }

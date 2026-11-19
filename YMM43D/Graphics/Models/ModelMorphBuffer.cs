@@ -12,16 +12,14 @@ namespace YMM43D.Graphics.Models
         private readonly ID3D11Device device = device;
 
         private ID3D11Buffer? buffer;
-        private ID3D11ShaderResourceView? view;
         private Vector4[] offsets = [];
 
         private int touchedFrom = int.MaxValue;
         private int touchedTo = -1;
 
-        public ID3D11ShaderResourceView? View => view;
+        public ID3D11ShaderResourceView? View { get; private set; }
 
-        public ID3D11ShaderResourceView? Write(
-            ID3D11DeviceContext context, ModelData model, IReadOnlyList<float>? weights)
+        public ID3D11ShaderResourceView? Write(ID3D11DeviceContext context, ModelData model, IReadOnlyList<float>? weights)
         {
             if (!model.HasMorphs)
                 return null;
@@ -68,7 +66,7 @@ namespace YMM43D.Graphics.Models
             touchedTo = to;
 
             if (writeTo < writeFrom)
-                return view;
+                return View;
 
             var stride = Marshal.SizeOf<Vector4>();
 
@@ -80,7 +78,7 @@ namespace YMM43D.Graphics.Models
                 0,
                 new Box(writeFrom * stride, 0, 0, (writeTo + 1) * stride, 1, 1));
 
-            return view;
+            return View;
         }
 
         private void Reserve(int count)
@@ -105,13 +103,13 @@ namespace YMM43D.Graphics.Models
                 ByteWidth = stride * Math.Max(count, 1),
             });
 
-            view = device.CreateShaderResourceView(buffer);
+            View = device.CreateShaderResourceView(buffer);
         }
 
         private void Release()
         {
-            view?.Dispose();
-            view = null;
+            View?.Dispose();
+            View = null;
             buffer?.Dispose();
             buffer = null;
         }
