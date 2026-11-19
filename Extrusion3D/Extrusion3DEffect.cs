@@ -1,4 +1,3 @@
-using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Windows.Media;
 using YMM43D.Commons;
@@ -12,81 +11,51 @@ using YukkuriMovieMaker.Plugin.Effects;
 
 namespace Extrusion3D
 {
-    [VideoEffect("立体化3D", ["3D"], [])]
+    [VideoEffect("立体化3D", ["3D"], ["立体化", "立体", "厚み", "押し出し", "extrude", "extrusion"])]
     public class Extrusion3DEffect : VideoEffect3DBase
     {
+        private const string Group = "立体化3D";
+
         public override string Label => "立体化3D";
 
-        [Display(GroupName = "立体化3D", Name = "厚み", Description = "3D立体化の厚みを設定します")]
+        [Display(GroupName = Group, Name = "厚み", Description = "奥へ押し出す厚み")]
         [AnimationSlider("F1", "px", 0, 100)]
         public Animation Thickness { get; } = new(10, 0, 1000);
 
-        [Display(GroupName = "立体化3D", Name = "側面", Description = "側面の種類")]
+        [Display(GroupName = Group, Name = "側面", Description = "側面の塗り方")]
         [EnumComboBox]
-        public ExtrusionType ExtrusionType
-        {
-            get => extrusionType;
-            set
-            {
-                Set(ref extrusionType, value);
-                OnPropertyChanged(nameof(IsSolidSide));
-            }
-        }
-        private ExtrusionType extrusionType = ExtrusionType.Image;
+        public ExtrusionType ExtrusionType { get; set => Set(ref field, value, nameof(ExtrusionType), nameof(IsSolidSide)); } = ExtrusionType.Image;
 
-        [Browsable(false)]
-        [EditorBrowsable(EditorBrowsableState.Never)]
         public bool IsSolidSide => ExtrusionType == ExtrusionType.Solid;
 
-        [Display(GroupName = "立体化3D", Name = "陰影", Description = "光源にしたがって陰影をつけます。切ると、元の色のまま塗ります")]
+        [Display(GroupName = Group, Name = "色", Description = "側面を塗る色")]
+        [ColorPicker]
+        [ShowPropertyEditorWhen(nameof(IsSolidSide), true)]
+        public Color SideColor { get => sideColor; set => Set(ref sideColor, value); }
+        private Color sideColor = Colors.White;
+
+        [Display(GroupName = Group, Name = "陰影", Description = "光源にしたがって陰影をつけます")]
         [ToggleSlider]
         public bool IsLit { get => !IsUnlit; set => IsUnlit = !value; }
 
-        [Browsable(false)]
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        public bool IsUnlit
-        {
-            get => isUnlit;
-            set
-            {
-                Set(ref isUnlit, value);
-                OnPropertyChanged(nameof(IsLit));
-            }
-        }
-        private bool isUnlit;
+        public bool IsUnlit { get; set => Set(ref field, value, nameof(IsUnlit), nameof(IsLit)); }
 
-        [Display(GroupName = "立体化3D", Name = "つや",
-            Description = "光が映り込んだ明るい点の強さ")]
+        [Display(GroupName = Group, Name = "つや", Description = "光が映り込んだ明るい点の強さ")]
         [AnimationSlider("F0", "%", 0, 100)]
         [ShowPropertyEditorWhen(nameof(IsUnlit), false)]
         public Animation Gloss { get; } = new(0, 0, 1000);
 
-        [Display(GroupName = "立体化3D", Name = "つやの鋭さ",
-            Description = "大きいほど映り込みが小さく締まり、磨いたように見えます")]
+        [Display(GroupName = Group, Name = "つやの鋭さ", Description = "映り込んだ明るい点の締まり具合")]
         [AnimationSlider("F0", "%", 0, 100)]
         [ShowPropertyEditorWhen(nameof(IsUnlit), false)]
         public Animation GlossSharpness { get; } = new(50, 0, 100);
 
-        internal SurfaceGloss GetGloss(in FrameContext time)
-            => IsUnlit ? SurfaceGloss.None : SurfaceGloss.FromPercent(Gloss.GetFloat(time), GlossSharpness.GetFloat(time));
+        internal SurfaceGloss GetGloss(in FrameContext time) => IsUnlit ? SurfaceGloss.None : SurfaceGloss.FromPercent(Gloss.GetFloat(time), GlossSharpness.GetFloat(time));
 
-        [Display(GroupName = "立体化3D", Name = "色", Description = "側面の塗りつぶし色を設定します")]
-        [ColorPicker]
-        [ShowPropertyEditorWhen(nameof(IsSolidSide), true)]
-        public Color SideColor
-        {
-            get => sideColor;
-            set => Set(ref sideColor, value);
-        }
-        private Color sideColor = Colors.White;
+        public override IVideoEffectProcessor CreateVideoEffect(IGraphicsDevicesAndContext devices) => AttachProcessor(new Extrusion3DProcessor(this, devices));
 
-        public override IVideoEffectProcessor CreateVideoEffect(IGraphicsDevicesAndContext devices)
-            => AttachProcessor(new Extrusion3DProcessor(this, devices));
+        protected override IEnumerable<IAnimatable> GetAnimatables() => [Thickness, Gloss, GlossSharpness, CameraSyncAnimation];
 
-        protected override IEnumerable<IAnimatable> GetAnimatables()
-            => [Thickness, Gloss, GlossSharpness, CameraSyncAnimation];
-
-        public override IEnumerable<string> CreateExoVideoFilters(
-            int keyFrameIndex, ExoOutputDescription exoOutputDescription) => [];
+        public override IEnumerable<string> CreateExoVideoFilters(int keyFrameIndex, ExoOutputDescription exoOutputDescription) => [];
     }
 }

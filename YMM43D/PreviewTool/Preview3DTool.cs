@@ -13,9 +13,8 @@ namespace YMM43D.PreviewTool
         public Type ViewType => typeof(Preview3DView);
         public bool AllowMultipleInstances => true;
 
-        public PluginDetailsAttribute Details
-            => new() { AuthorName = "いるかぁぁ", ContentId = "nc504835" };
+        public PluginDetailsAttribute Details => new() { AuthorName = "いるかぁぁ", ContentId = "nc504835" };
 
-        public IPluginUpdater? Updater { get; } = new Ymm4InfoPluginUpdater<Preview3DTool>("1789299160303180");
+        public IPluginUpdater? Updater { get; } = new Ymm4InfoPluginUpdater<Preview3DTool>(UpdateChecker.PostId);
     }
 }

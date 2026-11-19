@@ -5,6 +5,7 @@ using Vortice.Direct3D11;
 using Vortice.DXGI;
 using YMM43D.Graphics;
 using YukkuriMovieMaker.Commons;
+using YMM43D.Commons;
 
 namespace PixelPoints3D
 {
@@ -13,7 +14,6 @@ namespace PixelPoints3D
     {
         public Vector3 Cell = cell;
         public Vector2 Corner = corner;
-
         public Vector3 Other = other;
 
         public GridVertex(Vector3 cell, Vector2 corner) : this(cell, corner, cell) { }
@@ -39,6 +39,7 @@ namespace PixelPoints3D
             for (var i = 0; i < 16; i++)
             {
                 var size = Divide(sizePixels, spacingPixels * scale);
+
                 if (size.PointCount <= maxPoints)
                     return size;
 
@@ -48,10 +49,7 @@ namespace PixelPoints3D
             return new GridSize(1, 1, 1);
         }
 
-        private static GridSize Divide(Vector3 size, Vector3 spacing) => new(
-            CountAlong(size.X, spacing.X),
-            CountAlong(size.Y, spacing.Y),
-            CountAlong(size.Z, spacing.Z));
+        private static GridSize Divide(Vector3 size, Vector3 spacing) => new(CountAlong(size.X, spacing.X), CountAlong(size.Y, spacing.Y), CountAlong(size.Z, spacing.Z));
 
         private static int CountAlong(float size, float spacing)
         {
@@ -78,9 +76,9 @@ namespace PixelPoints3D
         {
             Size = size;
 
-            Points = Collect(BuildPoints(device, size));
-            Lines = Collect(BuildLines(device, size));
-            Faces = Collect(BuildFaces(device, size));
+            Points = disposer.CollectEx(BuildPoints(device, size));
+            Lines = disposer.CollectEx(BuildLines(device, size));
+            Faces = disposer.CollectEx(BuildFaces(device, size));
         }
 
         private static GridMesh BuildPoints(ID3D11Device device, GridSize size)
@@ -213,14 +211,6 @@ namespace PixelPoints3D
             return new GridMesh(device, vertices, indices, PrimitiveTopology.TriangleList);
         }
 
-        private T Collect<T>(T resource) where T : IDisposable?
-        {
-            if (resource is not null)
-                disposer.Collect(resource);
-
-            return resource;
-        }
-
         public void Dispose() => disposer.Dispose();
 
         private sealed class GridMesh : IMesh
@@ -233,28 +223,13 @@ namespace PixelPoints3D
             public int VertexStride => GridVertex.Stride;
             public InputElementDescription[] InputElements => GridVertex.InputElements;
             public PrimitiveTopology Topology { get; }
-
             public Format IndexFormat => Format.R32_UInt;
 
-            public GridMesh(
-                ID3D11Device device,
-                GridVertex[] vertices,
-                uint[]? indices,
-                PrimitiveTopology topology)
+            public GridMesh(ID3D11Device device, GridVertex[] vertices, uint[] indices, PrimitiveTopology topology)
             {
                 Topology = topology;
-
-                VertexBuffer = D3D11Buffers.Create(device, vertices, BindFlags.VertexBuffer);
-                disposer.Collect(VertexBuffer);
-
-                if (indices is null)
-                {
-                    DrawCount = vertices.Length;
-                    return;
-                }
-
-                IndexBuffer = D3D11Buffers.Create(device, indices, BindFlags.IndexBuffer);
-                disposer.Collect(IndexBuffer);
+                VertexBuffer = disposer.CollectEx(D3D11Buffers.Create(device, vertices, BindFlags.VertexBuffer));
+                IndexBuffer = disposer.CollectEx(D3D11Buffers.Create(device, indices, BindFlags.IndexBuffer));
                 DrawCount = indices.Length;
             }
 

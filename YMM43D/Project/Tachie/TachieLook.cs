@@ -1,6 +1,5 @@
 using System.Numerics;
 using YMM43D.Commons;
-using YMM43D.Graphics;
 using YMM43D.Graphics.Models;
 using YMM43D.Project.Model;
 using YukkuriMovieMaker.Commons;
@@ -17,6 +16,13 @@ namespace YMM43D.Project.Tachie
         TimeSpan time,
         IReadOnlyList<float> mouth) : IModelLook
     {
+        private static readonly string[] OpenNames = ["A", "aa", "あ", "jawOpen"];
+        private static readonly string[] BlinkNames = ["Blink", "まばたき"];
+        private static readonly string[] BlinkSides = ["eyeBlinkLeft", "eyeBlinkRight"];
+
+        private Matrix4x4[]? baked;
+        private int bakedFrame = int.MinValue;
+
         public ModelData? Model => model;
 
         public Vector4 Tone => character.Tint.ToVector4();
@@ -53,35 +59,22 @@ namespace YMM43D.Project.Tachie
             var longest = MathF.Max(extent.X, MathF.Max(extent.Y, extent.Z));
 
             var scale = longest > 1e-9f ? WorldScale.ToWorld((float)character.Size) / longest : 1f;
+            var turn = Rotation3D.ForObject((float)character.RotationX + pose.RotationX, (float)character.RotationY + pose.RotationY, (float)character.RotationZ + pose.RotationZ);
 
             return Matrix4x4.CreateTranslation(-bounds.Center)
                  * Matrix4x4.CreateScale(scale)
-                 * Rotation3D.ForObject(
-                     (float)character.RotationX + pose.RotationX,
-                     (float)character.RotationY + pose.RotationY,
-                     (float)character.RotationZ + pose.RotationZ)
+                 * turn
                  * Matrix4x4.CreateTranslation(0f, -WorldScale.ToWorld((float)character.OffsetY), 0f);
         }
 
         public IReadOnlyList<ModelImage?> GetReplacements(ModelData model) => [];
 
-        public IReadOnlyList<(ModelBlend Blend, float Cutoff)?> GetBlends(ModelData model)
-            => new (ModelBlend, float)?[model.Materials.Length];
+        public IReadOnlyList<(ModelBlend Blend, float Cutoff)?> GetBlends(ModelData model) => new (ModelBlend, float)?[model.Materials.Length];
 
-        private const float Softness = 1f;
-
-        private const float Sway = 2f;
-
-        public IReadOnlyList<Matrix4x4>? GetPose(
-            ModelData model, in FrameContext time, in Matrix4x4 world, bool advance)
+        public IReadOnlyList<Matrix4x4>? GetPose(ModelData model, in FrameContext time, in Matrix4x4 world, bool advance)
             => Posed(model, time, advance ? world : null);
 
-        public IReadOnlyList<Matrix4x4>? GetPose(ModelData model, in FrameContext time)
-            => Posed(model, time, null);
-
-        private Matrix4x4[]? baked;
-
-        private int bakedFrame = int.MinValue;
+        public IReadOnlyList<Matrix4x4>? GetPose(ModelData model, in FrameContext time) => Posed(model, time, null);
 
         private Matrix4x4[]? Posed(ModelData model, in FrameContext time, Matrix4x4? world)
         {
@@ -93,23 +86,25 @@ namespace YMM43D.Project.Tachie
                 bakedFrame = time.Frame;
                 baked = item is null
                     ? null
-                    : BonePoses.Apply(model, item.Bones, time, item.Sample(model, time));
+                    : ModelMmd.Settle(model, BonePoses.Apply(model, item.Bones, time, item.Sample(model, time)));
             }
 
             return character.Swings && swing is not null
-                ? swing.Apply(model, item?.Bones ?? [], baked, time, world, Softness, Sway)
+                ? swing.Apply(model, item?.Bones ?? [], baked, time, world, (float)(character.Softness / 100.0), (float)(character.Sway / 100.0))
                 : baked;
         }
 
-        public IReadOnlyList<float>? GetMorphWeights(ModelData model, in FrameContext time)
-            => ModelExpressionWeights.Of(model, Wanted());
+        public IReadOnlyList<float>? GetMorphWeights(ModelData model, in FrameContext time) => ModelExpressionWeights.Of(model, Wanted());
 
         private IEnumerable<(string Name, float Strength)> Wanted()
         {
             foreach (var one in Mouth())
                 yield return one;
 
-            yield return (character.BlinkExpression, Blink());
+            var blink = Blink();
+
+            foreach (var name in BlinkTargets())
+                yield return (name, blink);
 
             foreach (var one in faces)
             {
@@ -162,16 +157,42 @@ namespace YMM43D.Project.Tachie
         {
             var wanted = shape switch
             {
-                MouthShape.I => "I",
-                MouthShape.U => "U",
-                MouthShape.E => "E",
-                MouthShape.O => "O",
-                _ => string.Empty,
+                MouthShape.I => (string[])["I", "ih", "い"],
+                MouthShape.U => ["U", "ou", "う"],
+                MouthShape.E => ["E", "ee", "え"],
+                MouthShape.O => ["O", "oh", "お"],
+                _ => [],
             };
 
-            return wanted.Length > 0 && ModelExpressionWeights.Has(model, wanted)
-                ? wanted
-                : character.MouthExpression;
+            foreach (var name in wanted)
+            {
+                if (ModelExpressionWeights.Has(model, name))
+                    return name;
+            }
+
+            return Open();
+        }
+
+        private string Open()
+        {
+            if (ModelExpressionWeights.Has(model, character.MouthExpression))
+                return character.MouthExpression;
+
+            return OpenNames.FirstOrDefault(name => ModelExpressionWeights.Has(model, name)) ?? character.MouthExpression;
+        }
+
+        private IEnumerable<string> BlinkTargets()
+        {
+            if (character.BlinkExpression.Length == 0)
+                return [];
+
+            if (ModelExpressionWeights.Has(model, character.BlinkExpression))
+                return [character.BlinkExpression];
+
+            if (BlinkNames.FirstOrDefault(name => ModelExpressionWeights.Has(model, name)) is { } found)
+                return [found];
+
+            return BlinkSides.Where(name => ModelExpressionWeights.Has(model, name));
         }
 
         private float Blink()

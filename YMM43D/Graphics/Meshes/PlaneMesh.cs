@@ -2,6 +2,7 @@ using System.Numerics;
 using Vortice.Direct3D11;
 using Vortice.Direct3D;
 using Vortice.Mathematics;
+using YMM43D.Commons;
 using YukkuriMovieMaker.Commons;
 
 namespace YMM43D.Graphics.Meshes
@@ -32,10 +33,8 @@ namespace YMM43D.Graphics.Meshes
 
             ushort[] indices = [0, 1, 2, 1, 3, 2];
 
-            VertexBuffer = D3D11Buffers.Create(device, vertices, BindFlags.VertexBuffer);
-            disposer.Collect(VertexBuffer);
-            IndexBuffer = D3D11Buffers.Create(device, indices, BindFlags.IndexBuffer);
-            disposer.Collect(IndexBuffer);
+            VertexBuffer = disposer.CollectEx(D3D11Buffers.Create(device, vertices, BindFlags.VertexBuffer));
+            IndexBuffer = disposer.CollectEx(D3D11Buffers.Create(device, indices, BindFlags.IndexBuffer));
         }
 
         public void Dispose() => disposer.Dispose();

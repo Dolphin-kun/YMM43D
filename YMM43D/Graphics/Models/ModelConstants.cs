@@ -23,12 +23,7 @@ namespace YMM43D.Graphics.Models
 
         public readonly record struct Loaded(bool Bump, bool Glow, bool Feel, bool Shade, bool Mirror);
 
-        public static ModelConstants Create(
-            ModelSurface surface,
-            ModelPaint paint,
-            in Loaded loaded,
-            float mirrorLevels,
-            float mirrorAmbient)
+        public static ModelConstants Create(ModelSurface surface, ModelPaint paint, in Loaded loaded, float mirrorLevels, float mirrorAmbient)
         {
             var scale = surface.UvScale * paint.UvScale;
             var offset = surface.UvOffset + paint.UvOffset;
@@ -36,19 +31,11 @@ namespace YMM43D.Graphics.Models
             return new ModelConstants
             {
                 Uv = new Vector4(scale.X, scale.Y, offset.X, offset.Y),
-                Bump = new Vector4(
-                    surface.UvRotation + paint.UvRotation,
-                    surface.BumpScale * paint.Bump,
-                    loaded.Bump ? 1f : 0f,
-                    0f),
+                Bump = new Vector4(surface.UvRotation + paint.UvRotation, surface.BumpScale * paint.Bump, loaded.Bump ? 1f : 0f, 0f),
                 Glow = new Vector4(surface.Glow * paint.Glow, loaded.Glow ? 1f : 0f),
                 Shade = new Vector4(surface.Shade * paint.Shade, loaded.Shade ? 1f : 0f),
                 Feel = new Vector4(surface.Metallic, surface.Roughness, loaded.Feel ? 1f : 0f, 0f),
-                Mirror = new Vector4(
-                    loaded.Mirror ? paint.Mirror : 0f,
-                    mirrorLevels,
-                    mirrorAmbient,
-                    loaded.Mirror ? 1f : 0f),
+                Mirror = new Vector4(loaded.Mirror ? paint.Mirror : 0f, mirrorLevels, mirrorAmbient, loaded.Mirror ? 1f : 0f),
                 Tune = new Vector4(paint.Metallic, paint.Smoothness, 0f, 0f),
             };
         }

@@ -17,7 +17,6 @@ namespace YMM43D.PreviewTool.Rendering
         private static readonly Color4 LinkColor = new(0.4f, 0.5f, 0.65f, 1f);
 
         private const int Dashes = 12;
-
         private const float Thickness = 0.1f;
 
         private readonly DeviceResourceCache<BoneResources> resources;
@@ -93,8 +92,7 @@ namespace YMM43D.PreviewTool.Rendering
 
         private sealed class BoneResources(ID3D11Device device) : IDisposable
         {
-            private readonly RenderPipeline<TransformConstants> pipeline = new(
-                device, Vertex.InputElements, new VertexColorMaterial(device));
+            private readonly RenderPipeline<TransformConstants> pipeline = new(device, Vertex.InputElements, new VertexColorMaterial(device));
 
             private readonly Dictionary<bool, LineMesh> bodies = [];
 
@@ -114,8 +112,7 @@ namespace YMM43D.PreviewTool.Rendering
                 Draw(render, link ??= new LineMesh(device, Dotted(), LinkColor), world);
             }
 
-            public void DrawBone(
-                in Render3DContext render, in Vector3 head, in Vector3 tail, bool isSelected)
+            public void DrawBone(in Render3DContext render, in Vector3 head, in Vector3 tail, bool isSelected)
             {
                 var direction = tail - head;
                 var length = direction.Length();
@@ -141,8 +138,7 @@ namespace YMM43D.PreviewTool.Rendering
                 if (cache.TryGetValue(isSelected, out var found))
                     return found;
 
-                return cache[isSelected] = new LineMesh(
-                    device, points, isSelected ? SelectedColor : BoneColor);
+                return cache[isSelected] = new LineMesh(device, points, isSelected ? SelectedColor : BoneColor);
             }
 
             private static Matrix4x4 Aim(in Vector3 forward)

@@ -27,17 +27,17 @@ namespace PixelPoints3D
                 return;
 
             var texture = item.Texture ?? GetTexture(render.Device);
+
             if (texture is null)
                 return;
 
-            var time = EffectDescription is { } description
-                ? FrameContext.FromItem(description)
-                : item.Time;
+            var time = EffectDescription is { } description ? FrameContext.FromItem(description) : item.Time;
 
             if (!TryGetSize(out var sizePixels, out var offsetPixels))
                 return;
 
             var extent = GetExtent(time, sizePixels);
+
             if (extent.X <= 0 || extent.Y <= 0)
                 return;
 
@@ -56,50 +56,31 @@ namespace PixelPoints3D
 
             if (effect.Face is { } face && grid.Faces is { } faces)
             {
-                var faceConstants = WithColor(constants, face.Color, face.ColorSource) with
-                {
-                    ExtraOpacity = Math.Clamp(face.Opacity.GetFloat(time) / 100f, 0f, 1f),
-                    OpacityRandomness = Math.Clamp(
-                        face.OpacityRandomness.GetFloat(time) / 100f, 0f, 1f),
-                };
+                var opacity = Math.Clamp(face.Opacity.GetFloat(time) / 100f, 0f, 1f);
+                var randomness = Math.Clamp(face.OpacityRandomness.GetFloat(time) / 100f, 0f, 1f);
+                var faceConstants = WithColor(constants, face.Color, face.ColorSource) with { ExtraOpacity = opacity, OpacityRandomness = randomness };
 
                 pipeline.Draw(render.Context, scene, faceConstants, settings, faces);
             }
 
             if (effect.Line is { } line && grid.Lines is { } lines && constants.LineHalfWidth > 0f)
             {
-                var lineConstants = WithColor(constants, line.Color, line.ColorSource) with
-                {
-                    LineRandomness = Math.Clamp(line.Randomness.GetFloat(time) / 100f, 0f, 1f),
-                };
+                var lineConstants = WithColor(constants, line.Color, line.ColorSource) with { LineRandomness = Math.Clamp(line.Randomness.GetFloat(time) / 100f, 0f, 1f) };
 
                 pipeline.Draw(render.Context, scene, lineConstants, settings, lines);
             }
 
             if (effect.Point is { } point && constants.PointHalfSize > 0f)
             {
-                var pointConstants = WithColor(constants, point.Color, point.ColorSource) with
-                {
-                    PointIsRound = point.Shape == PointShape.Circle ? 1f : 0f,
-                };
+                var pointConstants = WithColor(constants, point.Color, point.ColorSource) with { PointIsRound = point.Shape == PointShape.Circle ? 1f : 0f };
 
                 pipeline.Draw(render.Context, scene, pointConstants, settings, grid.Points);
             }
         }
 
-        private static PointCloudConstants WithColor(
-            in PointCloudConstants constants, Color color, PointColorSource source) => constants with
-            {
-                Color = color.ToVector4(),
-                UseSourceColor = source == PointColorSource.Image ? 1f : 0f,
-            };
+        private static PointCloudConstants WithColor(in PointCloudConstants constants, Color color, PointColorSource source) => constants with { Color = color.ToVector4(), UseSourceColor = source == PointColorSource.Image ? 1f : 0f };
 
-        private PointCloudConstants BuildConstants(
-            in FrameContext time,
-            GridSize size,
-            Vector3 extent,
-            in Render3DContext render,
-            in Matrix4x4 world)
+        private PointCloudConstants BuildConstants(in FrameContext time, GridSize size, Vector3 extent, in Render3DContext render, in Matrix4x4 world)
         {
             var deform = PointDeform.Create(effect, time, extent);
 
@@ -115,10 +96,7 @@ namespace PixelPoints3D
                 Threshold = Math.Clamp(effect.Threshold.GetFloat(time) / 100f, 0f, 1f),
                 Extent = extent,
 
-                Scatter = new Vector3(
-                    WorldScale.ToWorld(effect.ScatterX.GetFloat(time)),
-                    WorldScale.ToWorld(effect.ScatterY.GetFloat(time)),
-                    WorldScale.ToWorld(effect.ScatterZ.GetFloat(time))),
+                Scatter = GetScatter(time),
                 Seed = effect.Seed.GetFloat(time),
                 ViewRight = GetViewAxis(render, world, Vector3.UnitX),
                 ViewUp = GetViewAxis(render, world, Vector3.UnitY),
@@ -130,19 +108,14 @@ namespace PixelPoints3D
             };
         }
 
-        private static float GetThickness(Animation? pixels, in FrameContext time)
-            => pixels is null ? 0f : WorldScale.ToWorld(pixels.GetFloat(time));
+        private static float GetThickness(Animation? pixels, in FrameContext time) => pixels is null ? 0f : WorldScale.ToWorld(pixels.GetFloat(time));
 
-        private static Vector3 GetViewAxis(
-            in Render3DContext render,
-            in Matrix4x4 world,
-            Vector3 viewAxis)
+        private Vector3 GetScatter(in FrameContext time) => new Vector3(effect.ScatterX.GetFloat(time), effect.ScatterY.GetFloat(time), effect.ScatterZ.GetFloat(time)) * WorldScale.ToWorld(1f);
+
+        private static Vector3 GetViewAxis(in Render3DContext render, in Matrix4x4 world, Vector3 viewAxis)
         {
-            if (!Matrix4x4.Invert(render.View, out var inverseView)
-                || !Matrix4x4.Invert(world, out var inverseWorld))
-            {
+            if (!Matrix4x4.Invert(render.View, out var inverseView) || !Matrix4x4.Invert(world, out var inverseWorld))
                 return viewAxis;
-            }
 
             var worldAxis = Vector3.TransformNormal(viewAxis, inverseView);
             var localAxis = Vector3.TransformNormal(worldAxis, inverseWorld);
@@ -150,29 +123,23 @@ namespace PixelPoints3D
             return localAxis.LengthSquared() > 0f ? Vector3.Normalize(localAxis) : viewAxis;
         }
 
-        private Vector3 GetExtent(in FrameContext time, Vector2 sizePixels) => new(
-            WorldScale.ToWorld(sizePixels.X),
-            WorldScale.ToWorld(sizePixels.Y),
-            WorldScale.ToWorld(effect.Depth.GetFloat(time)));
+        private Vector3 GetExtent(in FrameContext time, Vector2 sizePixels) => new Vector3(sizePixels, effect.Depth.GetFloat(time)) * WorldScale.ToWorld(1f);
 
-        private GridSize GetGridSize(in FrameContext time, Vector2 sizePixels) => GridSize.Create(
-            new Vector3(sizePixels.X, sizePixels.Y, effect.Depth.GetFloat(time)),
-            new Vector3(
-                effect.SpacingX.GetFloat(time),
-                effect.SpacingY.GetFloat(time),
-                effect.SpacingZ.GetFloat(time)),
-            MaxPoints);
+        private GridSize GetGridSize(in FrameContext time, Vector2 sizePixels)
+        {
+            var spacing = new Vector3(effect.SpacingX.GetFloat(time), effect.SpacingY.GetFloat(time), effect.SpacingZ.GetFloat(time));
+
+            return GridSize.Create(new Vector3(sizePixels, effect.Depth.GetFloat(time)), spacing, MaxPoints);
+        }
 
         private Matrix4x4 GetLocalMatrix(in FrameContext time, Vector2 centerPixels)
-            => Matrix4x4.CreateScale(effect.Scale.GetFloat(time) / 100f)
-             * Rotation3D.ForObject(
-                   effect.RotationX.GetFloat(time),
-                   effect.RotationY.GetFloat(time),
-                   effect.RotationZ.GetFloat(time))
-             * Matrix4x4.CreateTranslation(WorldScale.ToWorldPosition(
-                   effect.PositionX.GetFloat(time) + centerPixels.X,
-                   effect.PositionY.GetFloat(time) + centerPixels.Y,
-                   effect.PositionZ.GetFloat(time)));
+        {
+            var scale = Matrix4x4.CreateScale(effect.Scale.GetFloat(time) / 100f);
+            var turn = Rotation3D.ForObject(effect.RotationX.GetFloat(time), effect.RotationY.GetFloat(time), effect.RotationZ.GetFloat(time));
+            var position = WorldScale.ToWorldPosition(effect.PositionX.GetFloat(time) + centerPixels.X, effect.PositionY.GetFloat(time) + centerPixels.Y, effect.PositionZ.GetFloat(time));
+
+            return scale * turn * Matrix4x4.CreateTranslation(position);
+        }
 
         protected override WorldBounds GetLocalBounds(in FrameContext itemTime)
         {
@@ -180,21 +147,11 @@ namespace PixelPoints3D
                 return WorldBounds.Empty;
 
             var extent = GetExtent(itemTime, sizePixels);
-
-            var thickness = MathF.Max(
-                GetThickness(effect.Point?.Size, itemTime),
-                GetThickness(effect.Line?.Width, itemTime));
-
-            var margin = Vector3.Abs(new Vector3(
-                WorldScale.ToWorld(effect.ScatterX.GetFloat(itemTime)),
-                WorldScale.ToWorld(effect.ScatterY.GetFloat(itemTime)),
-                WorldScale.ToWorld(effect.ScatterZ.GetFloat(itemTime))))
-                + new Vector3(thickness / 2f);
-
+            var thickness = MathF.Max(GetThickness(effect.Point?.Size, itemTime), GetThickness(effect.Line?.Width, itemTime));
+            var margin = Vector3.Abs(GetScatter(itemTime)) + new Vector3(thickness / 2f);
             var half = PointDeform.Create(effect, itemTime, extent).Expand(extent / 2f) + margin;
 
-            return new WorldBounds(-half, half)
-                .Transform(GetLocalMatrix(itemTime, offsetPixels + sizePixels / 2f));
+            return new WorldBounds(-half, half).Transform(GetLocalMatrix(itemTime, offsetPixels + sizePixels / 2f));
         }
 
         public override void Dispose()
@@ -207,8 +164,7 @@ namespace PixelPoints3D
         {
             private PointGrid? grid;
 
-            public RenderPipeline<TransformConstants> Pipeline { get; } = new(
-                device, GridVertex.InputElements, new PointCloudMaterial(device));
+            public RenderPipeline<TransformConstants> Pipeline { get; } = new(device, GridVertex.InputElements, new PointCloudMaterial(device));
 
             public PointGrid GetGrid(GridSize size)
             {

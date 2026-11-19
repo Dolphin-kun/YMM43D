@@ -1,70 +1,8 @@
-using System.Text;
+﻿using System.Text;
 using System.Windows.Input;
 
 namespace YMM43D.PreviewTool
 {
-    public enum PreviewAction
-    {
-        ViewFront,
-        ViewBack,
-        ViewRight,
-        ViewLeft,
-        ViewTop,
-        ViewBottom,
-        ToggleOrthographic,
-        ViewCamera,
-        DriveSceneCamera,
-        FocusSelected,
-        ViewAll,
-        LevelRoll,
-        SelectAll,
-        ClearSelection,
-        ToggleWireframe,
-        ToggleGrid,
-        ToggleSnap,
-        ToggleLocalSpace,
-        ModeSelect,
-        ModeLoopCut,
-        ModeInflate,
-        ModeMove,
-        ModeRotate,
-        ModeScale,
-        AddKeyFrame,
-        ToggleAutoKeyFrame,
-        ToggleEditMode,
-        EditVertices,
-        EditEdges,
-        EditFaces,
-        CutLoop,
-        ResetMesh,
-        Extrude,
-        DeleteMesh,
-        MakeFace,
-        MergeMesh,
-        Subdivide,
-        ToggleSlide,
-        SelectLinked,
-        InvertSelection,
-        GrowSelection,
-        ShrinkSelection,
-    }
-
-    public enum PreviewContext
-    {
-        Any,
-
-        Object,
-
-        Edit,
-    }
-
-    public readonly record struct PreviewShortcut(
-        PreviewAction Action,
-        Key Key,
-        ModifierKeys Modifiers,
-        bool IsPrimary = true,
-        PreviewContext Context = PreviewContext.Any);
-
     public static class PreviewShortcuts
     {
         private const ModifierKeys None = ModifierKeys.None;
@@ -105,6 +43,7 @@ namespace YMM43D.PreviewTool
             new(PreviewAction.ClearSelection, Key.Escape, None, false),
 
             new(PreviewAction.ToggleWireframe, Key.Z, Shift),
+            new(PreviewAction.ToggleSidebar, Key.N, None),
             new(PreviewAction.ToggleGrid, Key.Z, Shift | Alt),
             new(PreviewAction.ToggleSnap, Key.Tab, Shift),
             new(PreviewAction.ToggleLocalSpace, Key.OemComma, None),
@@ -126,10 +65,28 @@ namespace YMM43D.PreviewTool
             new(PreviewAction.CutLoop, Key.R, Ctrl, true, PreviewContext.Edit),
 
             new(PreviewAction.Extrude, Key.E, None, true, PreviewContext.Edit),
-            new(PreviewAction.DeleteMesh, Key.X, None, true, PreviewContext.Edit),
-            new(PreviewAction.DeleteMesh, Key.Delete, None, false, PreviewContext.Edit),
-            new(PreviewAction.MakeFace, Key.F, None, true, PreviewContext.Edit),
-            new(PreviewAction.MergeMesh, Key.M, None, true, PreviewContext.Edit),
+            new(PreviewAction.ExtrudeMenu, Key.E, Alt, true, PreviewContext.Edit),
+            new(PreviewAction.Crease, Key.E, Shift, true, PreviewContext.Edit),
+            new(PreviewAction.DeleteMenu, Key.X, None, true, PreviewContext.Edit),
+            new(PreviewAction.DeleteMenu, Key.Delete, None, false, PreviewContext.Edit),
+            new(PreviewAction.MergeMenu, Key.M, None, true, PreviewContext.Edit),
+            new(PreviewAction.VertexMenu, Key.V, Ctrl, true, PreviewContext.Edit),
+            new(PreviewAction.EdgeMenu, Key.E, Ctrl, true, PreviewContext.Edit),
+            new(PreviewAction.FaceMenu, Key.F, Ctrl, true, PreviewContext.Edit),
+            new(PreviewAction.NormalMenu, Key.N, Alt, true, PreviewContext.Edit),
+            new(PreviewAction.UvMenu, Key.U, None, true, PreviewContext.Edit),
+            new(PreviewAction.ToggleUvView, Key.U, Shift, true, PreviewContext.Edit),
+            new(PreviewAction.AddMenu, Key.A, Shift, true, PreviewContext.Edit),
+            new(PreviewAction.Fill, Key.F, None, true, PreviewContext.Edit),
+            new(PreviewAction.Knife, Key.K, None, true, PreviewContext.Edit),
+            new(PreviewAction.Duplicate, Key.D, Shift, true, PreviewContext.Edit),
+            new(PreviewAction.Separate, Key.P, None, true, PreviewContext.Edit),
+            new(PreviewAction.Connect, Key.J, None, true, PreviewContext.Edit),
+            new(PreviewAction.Triangulate, Key.T, Ctrl, true, PreviewContext.Edit),
+            new(PreviewAction.TrianglesToQuads, Key.J, Alt, true, PreviewContext.Edit),
+            new(PreviewAction.NormalsOutside, Key.N, Shift, true, PreviewContext.Edit),
+            new(PreviewAction.NormalsInside, Key.N, Ctrl | Shift, true, PreviewContext.Edit),
+            new(PreviewAction.Join, Key.J, Ctrl, true, PreviewContext.Object),
             new(PreviewAction.ToggleSlide, Key.G, Shift, true, PreviewContext.Edit),
             new(PreviewAction.SelectLinked, Key.L, None, true, PreviewContext.Edit),
             new(PreviewAction.InvertSelection, Key.I, Ctrl, true, PreviewContext.Edit),
@@ -137,10 +94,27 @@ namespace YMM43D.PreviewTool
             new(PreviewAction.GrowSelection, Key.OemPlus, Ctrl, false, PreviewContext.Edit),
             new(PreviewAction.ShrinkSelection, Key.Subtract, Ctrl, true, PreviewContext.Edit),
             new(PreviewAction.ShrinkSelection, Key.OemMinus, Ctrl, false, PreviewContext.Edit),
+
+            new(PreviewAction.TransformMove, Key.G, None, true, PreviewContext.Edit),
+            new(PreviewAction.TransformRotate, Key.R, None, true, PreviewContext.Edit),
+            new(PreviewAction.TransformScale, Key.S, None, true, PreviewContext.Edit),
+            new(PreviewAction.Inset, Key.I, None, true, PreviewContext.Edit),
+            new(PreviewAction.Bevel, Key.B, Ctrl, true, PreviewContext.Edit),
+            new(PreviewAction.BoxSelect, Key.B, None, true, PreviewContext.Edit),
+            new(PreviewAction.CycleSelectShape, Key.W, None, true, PreviewContext.Edit),
+            new(PreviewAction.ToggleXRay, Key.Z, Alt, true, PreviewContext.Edit),
+            new(PreviewAction.HideSelected, Key.H, None, true, PreviewContext.Edit),
+            new(PreviewAction.HideOthers, Key.H, Shift, true, PreviewContext.Edit),
+            new(PreviewAction.RevealHidden, Key.H, Alt, true, PreviewContext.Edit),
+            new(PreviewAction.ToggleProportional, Key.O, None, true, PreviewContext.Edit),
+            new(PreviewAction.ToggleConnected, Key.O, Alt, true, PreviewContext.Edit),
+            new(PreviewAction.CycleFalloff, Key.O, Shift, true, PreviewContext.Edit),
+            new(PreviewAction.CyclePivot, Key.OemPeriod, None, true, PreviewContext.Edit),
+            new(PreviewAction.CursorToSelected, Key.S, Shift, true, PreviewContext.Edit),
+            new(PreviewAction.CursorToOrigin, Key.C, Shift, true, PreviewContext.Edit),
         ];
 
-        public static PreviewAction? Find(Key key, ModifierKeys modifiers)
-            => Find(key, modifiers, false);
+        public static PreviewAction? Find(Key key, ModifierKeys modifiers) => Find(key, modifiers, false);
 
         public static PreviewAction? Find(Key key, ModifierKeys modifiers, bool editing)
         {
@@ -207,13 +181,5 @@ namespace YMM43D.PreviewTool
             Key.D0 or Key.D1 or Key.D2 or Key.D3 or Key.D5 or Key.D7 => ((int)key - (int)Key.D0).ToString(),
             _ => key.ToString(),
         };
-    }
-
-    public sealed class PreviewKeyText
-    {
-        public string this[string action]
-            => Enum.TryParse<PreviewAction>(action, out var parsed)
-                ? PreviewShortcuts.TextOf(parsed)
-                : string.Empty;
     }
 }

@@ -1,6 +1,7 @@
 ﻿using D3DBlend = Vortice.Direct3D11.Blend;
 using Vortice.Direct3D11;
 using YukkuriMovieMaker.Commons;
+using YMM43D.Commons;
 
 namespace YMM43D.Graphics
 {
@@ -13,7 +14,6 @@ namespace YMM43D.Graphics
         private readonly DisposeCollector disposer = new();
 
         private readonly ID3D11BlendState normal;
-        private readonly ID3D11BlendState noColorWrite;
         private readonly ID3D11BlendState add;
         private readonly ID3D11BlendState subtract;
         private readonly ID3D11BlendState multiply;
@@ -35,23 +35,30 @@ namespace YMM43D.Graphics
         public ID3D11RasterizerState LiftedLines { get; }
 
         public const int LineDepthBias = -6000;
-
         public const float LineSlopeBias = -2f;
 
         private readonly ID3D11RasterizerState meshNone;
         private readonly ID3D11RasterizerState meshBack;
         private readonly ID3D11RasterizerState meshFront;
 
-        [ThreadStatic]
-        private static bool meshMode;
+        [field: ThreadStatic]
+        public static bool IsMeshMode { get; set; }
 
-        public static bool IsMeshMode { get => meshMode; set => meshMode = value; }
+        [field: ThreadStatic]
+        public static bool IsMirrored { get; set; }
 
-        public ID3D11RasterizerState Rasterizer(FaceCulling culling) => culling switch
+        public ID3D11RasterizerState Rasterizer(FaceCulling culling) => (IsMirrored ? Flipped(culling) : culling) switch
         {
-            FaceCulling.Back => meshMode ? meshBack : CullBack,
-            FaceCulling.Front => meshMode ? meshFront : CullFront,
-            _ => meshMode ? meshNone : CullNone,
+            FaceCulling.Back => IsMeshMode ? meshBack : CullBack,
+            FaceCulling.Front => IsMeshMode ? meshFront : CullFront,
+            _ => IsMeshMode ? meshNone : CullNone,
+        };
+
+        private static FaceCulling Flipped(FaceCulling culling) => culling switch
+        {
+            FaceCulling.Back => FaceCulling.Front,
+            FaceCulling.Front => FaceCulling.Back,
+            _ => culling,
         };
 
         public ID3D11SamplerState LinearSampler { get; }
@@ -67,36 +74,31 @@ namespace YMM43D.Graphics
             subtract = CreateBlend(device, D3DBlend.SourceAlpha, D3DBlend.One, BlendOperation.ReverseSubtract);
             multiply = CreateBlend(device, D3DBlend.DestinationColor, D3DBlend.InverseSourceAlpha, BlendOperation.Add);
             screen = CreateBlend(device, D3DBlend.One, D3DBlend.InverseSourceColor, BlendOperation.Add);
-            accumulate = CreateBlend(
-                device, D3DBlend.One, D3DBlend.One, BlendOperation.Add, D3DBlend.One, D3DBlend.One);
+            accumulate = CreateBlend(device, D3DBlend.One, D3DBlend.One, BlendOperation.Add, D3DBlend.One, D3DBlend.One);
 
-            noColorWrite = Collect(device.CreateBlendState(new BlendDescription
+            NoColorWrite = disposer.CollectEx(device.CreateBlendState(new BlendDescription
             {
                 RenderTarget =
                 {
-                    [0] = new RenderTargetBlendDescription
-                    {
-                        IsBlendEnabled = false,
-                        RenderTargetWriteMask = ColorWriteEnable.None,
-                    },
+                    [0] = new RenderTargetBlendDescription { IsBlendEnabled = false, RenderTargetWriteMask = ColorWriteEnable.None },
                 },
             }));
 
-            DepthDefault = Collect(device.CreateDepthStencilState(new DepthStencilDescription
+            DepthDefault = disposer.CollectEx(device.CreateDepthStencilState(new DepthStencilDescription
             {
                 DepthEnable = true,
                 DepthWriteMask = DepthWriteMask.All,
                 DepthFunc = ComparisonFunction.LessEqual,
             }));
 
-            DepthDisabled = Collect(device.CreateDepthStencilState(new DepthStencilDescription
+            DepthDisabled = disposer.CollectEx(device.CreateDepthStencilState(new DepthStencilDescription
             {
                 DepthEnable = false,
                 DepthWriteMask = DepthWriteMask.Zero,
                 DepthFunc = ComparisonFunction.Always,
             }));
 
-            DepthTestOnly = Collect(device.CreateDepthStencilState(new DepthStencilDescription
+            DepthTestOnly = disposer.CollectEx(device.CreateDepthStencilState(new DepthStencilDescription
             {
                 DepthEnable = true,
                 DepthWriteMask = DepthWriteMask.Zero,
@@ -117,7 +119,7 @@ namespace YMM43D.Graphics
             LinearWrapSampler = CreateSampler(device, Filter.MinMagMipLinear, TextureAddressMode.Wrap);
         }
 
-        public ID3D11BlendState NoColorWrite => noColorWrite;
+        public ID3D11BlendState NoColorWrite { get; }
 
         public ID3D11BlendState GetBlend(BlendMode mode) => mode switch
         {
@@ -149,7 +151,7 @@ namespace YMM43D.Graphics
                 DestinationBlendAlpha = destinationAlpha,
                 BlendOperationAlpha = BlendOperation.Add,
             };
-            return Collect(device.CreateBlendState(desc));
+            return disposer.CollectEx(device.CreateBlendState(desc));
         }
 
         private ID3D11RasterizerState CreateRasterizer(
@@ -159,7 +161,7 @@ namespace YMM43D.Graphics
             int depthBias = 0,
             float slopeBias = 0f)
         {
-            return Collect(device.CreateRasterizerState(new RasterizerDescription
+            return disposer.CollectEx(device.CreateRasterizerState(new RasterizerDescription
             {
                 FillMode = fillMode,
                 CullMode = cullMode,
@@ -172,10 +174,9 @@ namespace YMM43D.Graphics
             }));
         }
 
-        private ID3D11SamplerState CreateSampler(
-            ID3D11Device device, Filter filter, TextureAddressMode address = TextureAddressMode.Clamp)
+        private ID3D11SamplerState CreateSampler(ID3D11Device device, Filter filter, TextureAddressMode address = TextureAddressMode.Clamp)
         {
-            return Collect(device.CreateSamplerState(new SamplerDescription
+            return disposer.CollectEx(device.CreateSamplerState(new SamplerDescription
             {
                 Filter = filter,
                 AddressU = address,
@@ -185,12 +186,6 @@ namespace YMM43D.Graphics
                 MinLOD = 0,
                 MaxLOD = float.MaxValue,
             }));
-        }
-
-        private T Collect<T>(T resource) where T : IDisposable
-        {
-            disposer.Collect(resource);
-            return resource;
         }
 
         public void Dispose()

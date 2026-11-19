@@ -1,18 +1,15 @@
-using System.Numerics;
+﻿using System.Numerics;
 using YMM43D.Commons;
 using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Project.Items;
 
 namespace YMM43D.PreviewTool
 {
-    internal readonly record struct DragTarget(IVideoItem Item, EditScope Scope, FrameContext Time);
-
     internal sealed class ItemDragController
     {
         private IReadOnlyList<DragTarget> targets = [];
         private ISceneMarkerSource? marker;
         private FrameContext time;
-        private GizmoHandle handle;
         private EditScope scope;
         private GizmoSpace space;
 
@@ -48,7 +45,7 @@ namespace YMM43D.PreviewTool
         private Matrix4x4 turnFrameInverse;
         private Vector3 turnAngles;
 
-        public GizmoHandle Handle => handle;
+        public GizmoHandle Handle { get; private set; }
 
         public bool IsDragging => targets.Count > 0 || marker is not null;
 
@@ -74,7 +71,7 @@ namespace YMM43D.PreviewTool
             targets = [];
             startZooms = [];
             time = itemTime;
-            handle = grabbed;
+            Handle = grabbed;
             scope = edit;
             space = GizmoSpace.World;
             startPosition = source.GetMarker(itemTime).Position;
@@ -97,13 +94,9 @@ namespace YMM43D.PreviewTool
                 return false;
 
             space = gizmoSpace;
-            turning = TransformGizmo.IsTurn(grabbed) && items.Count == 1
-                ? ItemRotation.Find(primary)
-                : null;
+            turning = TransformGizmo.IsTurn(grabbed) && items.Count == 1 ? ItemRotation.Find(primary) : null;
 
-            scaling = TransformGizmo.IsScale(grabbed) && items.Count == 1
-                ? ItemScale3D.Find(primary)
-                : null;
+            scaling = TransformGizmo.IsScale(grabbed) && items.Count == 1 ? ItemScale3D.Find(primary) : null;
 
             if (turning is { } rotation)
                 PrepareTurn(rotation, primary, primaryTime);
@@ -120,7 +113,7 @@ namespace YMM43D.PreviewTool
             targets = items;
             startZooms = [.. items.Select(one => one.Item.Zoom.GetFloat(one.Time))];
             time = primaryTime;
-            handle = grabbed;
+            Handle = grabbed;
             scope = EditScope.Whole;
             startPosition = WorldScale.ToWorldPosition(
                 primary.X.GetFloat(primaryTime), primary.Y.GetFloat(primaryTime), primary.Z.GetFloat(primaryTime));
@@ -138,15 +131,13 @@ namespace YMM43D.PreviewTool
 
             turnStart = rotation.ToOrientation(turnAngles.X, turnAngles.Y, turnAngles.Z);
 
-            var frame = Matrix4x4.CreateRotationZ(
-                -float.DegreesToRadians(item.Rotation.GetFloat(itemTime)));
+            var frame = Matrix4x4.CreateRotationZ(-float.DegreesToRadians(item.Rotation.GetFloat(itemTime)));
 
             if (!Matrix4x4.Invert(frame, out turnFrameInverse))
                 turnFrameInverse = Matrix4x4.Identity;
         }
 
-        private bool Grab(
-            in TransformGizmo gizmo, ref GizmoHandle grabbed, in PickRay ray, in Vector3 viewDirection)
+        private bool Grab(in TransformGizmo gizmo, ref GizmoHandle grabbed, in PickRay ray, in Vector3 viewDirection)
         {
             planePoint = gizmo.Origin;
             rawShift = appliedShift = Vector3.Zero;
@@ -223,13 +214,13 @@ namespace YMM43D.PreviewTool
             if (!IsDragging)
                 return false;
 
-            if (TransformGizmo.IsTurn(handle))
+            if (TransformGizmo.IsTurn(Handle))
                 return Turn(ray, snap);
 
-            if (TransformGizmo.IsScale(handle))
+            if (TransformGizmo.IsScale(Handle))
                 return ResizeAlongAxis(ray, snap);
 
-            if (handle is GizmoHandle.ScaleAll)
+            if (Handle is GizmoHandle.ScaleAll)
                 return Resize(ray, snap);
 
             if (!Follow(ray, out var step))
@@ -265,7 +256,7 @@ namespace YMM43D.PreviewTool
             marker = null;
             turning = null;
             scaling = null;
-            handle = GizmoHandle.None;
+            Handle = GizmoHandle.None;
         }
 
         private bool Resize(in PickRay ray, in SnapGrid snap)
@@ -287,7 +278,7 @@ namespace YMM43D.PreviewTool
 
         private bool ApplyScale(in SnapGrid snap, float ratio)
         {
-            if (targets.Count > 0 && scaling is { } stretch && AxisScale(stretch, handle) is { } animation)
+            if (targets.Count > 0 && scaling is { } stretch && AxisScale(stretch, Handle) is { } animation)
             {
                 var wanted = snap.SnapScale(startAxisScale, ratio);
 
@@ -337,7 +328,7 @@ namespace YMM43D.PreviewTool
         {
             step = Vector3.Zero;
 
-            if (TransformGizmo.IsAxis(handle))
+            if (TransformGizmo.IsAxis(Handle))
             {
                 if (TransformGizmo.ClosestOnAxis(ray, planePoint, axis) is not { } position)
                     return false;
@@ -401,7 +392,7 @@ namespace YMM43D.PreviewTool
             if (turning is not { } rotation)
                 return false;
 
-            var moved = GizmoTurn.Apply(turnStart, turnFrameInverse, axis, handle, degrees, space);
+            var moved = GizmoTurn.Apply(turnStart, turnFrameInverse, axis, Handle, degrees, space);
             var angles = rotation.ToAngles(moved);
 
             var change = new Vector3(

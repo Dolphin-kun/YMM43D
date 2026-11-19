@@ -10,10 +10,8 @@ using YukkuriMovieMaker.Player.Video;
 namespace YMM43D.Plugin
 {
     public abstract class VideoEffect3DProcessorBase(VideoEffect3DBase? owner, IGraphicsDevicesAndContext devices)
-                : IVideoEffectProcessor, I3DVideoEffect, I3DSizeProvider, I3DLocalTransform, I3DBounds, I3DPlacedInstance,
-                  I3DAlive
+        : IVideoEffectProcessor, I3DVideoEffect, I3DSizeProvider, I3DLocalTransform, I3DBounds, I3DPlacedInstance, I3DAlive
     {
-        private readonly VideoEffect3DBase? owner = owner;
         private readonly D2DTextureBridge textureBridge = new();
         private readonly Output3DRenderer renderer = new();
 
@@ -27,8 +25,6 @@ namespace YMM43D.Plugin
         private nint bakedDeviceKey;
         private bool isDisposed;
 
-        private VideoEffect3DProcessorBase? groupMemberProcessor;
-
         protected IGraphicsDevicesAndContext Devices { get; } = devices;
 
         public bool IsAlive => !isDisposed;
@@ -41,9 +37,15 @@ namespace YMM43D.Plugin
 
         protected bool IsGroupEffect { get; private set; }
 
+        protected bool IsChainedEffect { get; private set; }
+
+        protected bool IsOwnSolid { get; private set; }
+
+        protected virtual bool AcceptsOwnSolid(I3DProvider solid, in FrameContext itemTime) => false;
+
         protected I3DProvider? GroupMemberSolid { get; private set; }
 
-        protected VideoEffect3DProcessorBase? GroupMemberProcessor => groupMemberProcessor;
+        protected VideoEffect3DProcessorBase? GroupMemberProcessor { get; private set; }
 
         internal IGraphicsDevicesAndContext SourceDevices => Devices;
 
@@ -51,12 +53,13 @@ namespace YMM43D.Plugin
 
         public EffectDescription? EffectDescription { get; private set; }
 
-        public ID2D1Image Output => output ?? throw new InvalidOperationException(
-            "まだ画像が生成されていません。Update を先に呼んでください。");
+        internal int PlacedFrame { get; private set; } = -1;
+
+        public ID2D1Image Output => output ?? throw new InvalidOperationException("まだ画像が生成されていません。Update を先に呼んでください。");
 
         public virtual bool RequiresMappedTexture => false;
 
-        public virtual bool ScalesToInputSize => true;
+        public virtual bool ScalesToInputSize => GroupMemberSolid is null;
 
         public abstract void Draw(in Render3DContext render, DrawContext3D item);
 
@@ -67,9 +70,7 @@ namespace YMM43D.Plugin
         protected virtual bool UsesGroupMemberBounds => true;
 
         private WorldBounds Bounds(in FrameContext itemTime)
-            => UsesGroupMemberBounds && GroupMemberSolid is I3DBounds bounded
-                ? bounded.GetLocalBounds(itemTime)
-                : GetLocalBounds(itemTime);
+            => UsesGroupMemberBounds && GroupMemberSolid is I3DBounds bounded ? bounded.GetLocalBounds(itemTime) : GetLocalBounds(itemTime);
 
         public DrawDescription Update(EffectDescription effectDescription)
         {
@@ -94,19 +95,15 @@ namespace YMM43D.Plugin
                 world = ScalesToInputSize && TryGetSize(out var size, out var offset)
                     ? WorldScale.CreateSizeMatrix(size, offset + size / 2f)
                     : Matrix4x4.Identity;
-
-                ConsumeCamera(effectDescription.DrawDescription, ref world);
+                world = ItemPlacement.WithCamera(world, effectDescription.DrawDescription.Camera);
 
                 placement = ItemPlacement.GetWorldMatrix(effectDescription.DrawDescription);
             }
 
             localMatrix = world;
+            PlacedFrame = effectDescription.TimelinePosition.Frame;
 
-            output = renderer.Render(
-                Devices, effectDescription, Bounds(itemTime), world, Draw,
-                out var imageReach,
-                self: (I3DProvider?)owner ?? this,
-                placement: placement);
+            output = renderer.Render(Devices, effectDescription, Bounds(itemTime), world, Draw, out var imageReach, self: (I3DProvider?)owner ?? this, placement: placement);
 
             SceneRevision.Advance();
 
@@ -119,47 +116,80 @@ namespace YMM43D.Plugin
 
         protected virtual bool TryInheritTransform(out Matrix4x4 local, out Matrix4x4 world)
         {
-            if (IsGroupEffect
-                && (GroupMemberSolid is not null || ParentsGroupMembers)
-                && EffectDescription is { } description)
-            {
-                var parent = GetGroupParentMatrix(FrameContext.FromItem(description));
+            local = Matrix4x4.Identity;
+            world = Matrix4x4.Identity;
 
-                if (groupMemberProcessor is { } source
-                    && source.TryGetLocalMatrix(out local)
-                    && source.TryGetPlacement(out var sourcePlacement))
+            if (EffectDescription is not { } description)
+                return false;
+
+            if (IsChainedEffect || IsOwnSolid)
+            {
+                var carried = GetGroupParentMatrix(FrameContext.FromItem(description));
+
+                if (GroupMemberProcessor is { } chained
+                    && chained.TryGetLocalMatrix(out local)
+                    && chained.TryGetPlacement(out var chainedPlacement))
                 {
-                    world = sourcePlacement * parent;
+                    world = chainedPlacement * carried;
                     return true;
                 }
 
                 local = Matrix4x4.Identity;
-                world = ItemPlacement.GetWorldMatrix(description.DrawDescription) * parent;
+
+                if (!IsOwnSolid)
+                    return false;
+
+                world = ItemPlacement.GetWorldMatrix(description.DrawDescription) * carried;
+                return true;
+            }
+
+            if (!IsGroupEffect || (GroupMemberSolid is null && !ParentsGroupMembers))
+                return false;
+
+            var parent = GetGroupParentMatrix(FrameContext.FromItem(description));
+
+            if (GroupMemberProcessor is { } source
+                && source.TryGetLocalMatrix(out local)
+                && source.TryGetPlacement(out var sourcePlacement))
+            {
+                world = sourcePlacement * parent;
                 return true;
             }
 
             local = Matrix4x4.Identity;
-            world = Matrix4x4.Identity;
-            return false;
+            world = ItemPlacement.GetWorldMatrix(description.DrawDescription) * parent;
+            return true;
         }
 
         private void FindGroupMemberSolid(EffectDescription description)
         {
             IsGroupEffect = false;
+            IsChainedEffect = false;
+            IsOwnSolid = false;
             GroupMemberSolid = null;
-            groupMemberProcessor = null;
+            GroupMemberProcessor = null;
 
-            if (!KeepsGroupMemberSolid
-                || owner is null
-                || SceneDepthCollector.FindOwner(description) is not { } item
-                || !GroupEffectSource.IsOnGroup(item, owner))
-            {
+            if (!KeepsGroupMemberSolid || owner is null || SceneDepthCollector.FindOwner(description) is not { } item)
                 return;
+
+            if (GroupEffectSource.IsOnGroup(item, owner))
+            {
+                IsGroupEffect = true;
+                GroupMemberSolid = GroupEffectSource.Find(item, description, owner, Devices, this);
+            }
+            else if (GroupEffectSource.FindInChain(item, description, owner, Devices, this) is { } chained)
+            {
+                GroupMemberSolid = chained;
+                IsChainedEffect = true;
+            }
+            else if (GroupEffectSource.FindOwnSolid(item, Devices, this) is { } own
+                && AcceptsOwnSolid(own, FrameContext.FromItem(description)))
+            {
+                GroupMemberSolid = own;
+                IsOwnSolid = true;
             }
 
-            IsGroupEffect = true;
-            GroupMemberSolid = GroupEffectSource.Find(item, description, owner, Devices, this);
-            groupMemberProcessor = GroupMemberSolid as VideoEffect3DProcessorBase;
+            GroupMemberProcessor = GroupMemberSolid as VideoEffect3DProcessorBase;
         }
 
         protected bool TryDrawGroupMemberSolid(in Render3DContext render, in DrawContext3D item)
@@ -187,12 +217,8 @@ namespace YMM43D.Plugin
             Zoom = Vector2.One,
             Rotation = Vector3.Zero,
             Camera = Matrix4x4.Identity,
-            PerspectiveDistance =
-                ScreenPlacement.GetFlatPerspectiveDistance(draw.PerspectiveDistance, imageReach),
+            PerspectiveDistance = ScreenPlacement.GetFlatPerspectiveDistance(draw.PerspectiveDistance, imageReach),
         };
-
-        private static void ConsumeCamera(DrawDescription draw, ref Matrix4x4 world)
-            => world = ItemPlacement.WithCamera(world, draw.Camera);
 
         public void SetInput(ID2D1Image? input)
         {

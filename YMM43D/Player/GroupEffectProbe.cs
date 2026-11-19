@@ -1,5 +1,4 @@
-﻿using System.Collections.Immutable;
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using Vortice.Direct2D1;
@@ -15,39 +14,27 @@ namespace YMM43D.Player
     public static class GroupEffectProbe
     {
         private const long VerdictLifetimeMs = 250;
-
         private const long ProcessorLifetimeMs = 30_000;
-
+        private const long IdleLifetimeMs = 5_000;
         private const float Tolerance = 1e-3f;
 
         private static readonly Lock gate = new();
-
         private static readonly ConditionalWeakTable<GroupItem, Verdict> verdicts = [];
-
         private static readonly Dictionary<(IVideoEffect Effect, nint Device), Entry> processors = [];
-
         private static readonly Dictionary<nint, ID2D1CommandList> blanks = [];
+        private static readonly Timer janitor = new(_ => Sweep(), null, Timeout.Infinite, Timeout.Infinite);
 
-        private static readonly PrivateD2DContext privateContext = new();
+        private static long touchedAt;
+        private static bool armed;
 
         [ThreadStatic]
         private static int evaluating;
 
+        static GroupEffectProbe() => AppDomain.CurrentDomain.ProcessExit += (_, _) => Forget();
+
         public static bool IsEvaluating => evaluating > 0;
 
-        private sealed record Verdict(int Frame, long At, int Signature, bool Moves);
-
-        private sealed class Entry(IVideoEffectProcessor processor)
-        {
-            public IVideoEffectProcessor Processor { get; } = processor;
-
-            public long UsedAt { get; set; } = Environment.TickCount64;
-        }
-
-        public static IReadOnlyList<IVideoEffect> EnabledEffects(GroupItem group)
-            => [.. (group.VideoEffects ?? []).Where(effect => effect.IsEnabled)];
-
-        public static DrawDescription Identity => new(
+        private static DrawDescription Identity => new(
             Draw: Vector3.Zero,
             CenterPoint: Vector2.Zero,
             Zoom: Vector2.One,
@@ -56,9 +43,37 @@ namespace YMM43D.Player
             ZoomInterpolationMode: InterpolationMode.Linear,
             Opacity: 1d,
             Invert: false,
-            Controllers: ImmutableList<VideoEffectController>.Empty);
+            Controllers: []);
 
-        public static bool Moves(in DrawDescription draw)
+        public static IReadOnlyList<IVideoEffect> EnabledEffects(GroupItem group) => [.. (group.VideoEffects ?? []).Where(effect => effect.IsEnabled)];
+
+        public static bool MovesPlacement(GroupItem group, IGraphicsDevicesAndContext devices, TimelineSourceDescription source, int timelineFrame)
+        {
+            var effects = EnabledEffects(group);
+
+            if (effects.Count == 0 || IsEvaluating)
+                return false;
+
+            if (Recall(group, effects, timelineFrame) is { } known)
+                return known;
+
+            return Evaluate(group, effects, devices, source, timelineFrame);
+        }
+
+        private static bool? Recall(GroupItem group, IReadOnlyList<IVideoEffect> effects, int timelineFrame)
+        {
+            if (verdicts.TryGetValue(group, out var known)
+                && known.Frame == timelineFrame
+                && known.Signature == Signature(effects)
+                && Environment.TickCount64 - known.At < VerdictLifetimeMs)
+            {
+                return known.Moves;
+            }
+
+            return null;
+        }
+
+        private static bool Moves(in DrawDescription draw)
             => draw.Draw.Length() > Tolerance
             || draw.CenterPoint.Length() > Tolerance
             || MathF.Abs(draw.Zoom.X - 1f) > Tolerance
@@ -66,71 +81,69 @@ namespace YMM43D.Player
             || draw.Rotation.Length() > Tolerance
             || !IsNearlyIdentity(draw.Camera);
 
-        public static bool MovesPlacement(
-            GroupItem group,
-            IGraphicsDevicesAndContext devices,
-            TimelineSourceDescription source,
-            int timelineFrame)
-        {
-            var effects = EnabledEffects(group);
-
-            if (effects.Count == 0 || IsEvaluating)
-                return false;
-
-            var signature = Signature(effects);
-            var now = Environment.TickCount64;
-
-            if (verdicts.TryGetValue(group, out var known)
-                && known.Frame == timelineFrame
-                && known.Signature == signature
-                && now - known.At < VerdictLifetimeMs)
-            {
-                return known.Moves;
-            }
-
-            return Evaluate(group, effects, devices, source, timelineFrame);
-        }
-
-        public static void Forget()
+        private static void Forget()
         {
             lock (gate)
             {
-                foreach (var entry in processors.Values)
-                    Release(entry.Processor);
-
-                processors.Clear();
-
-                foreach (var blank in blanks.Values)
-                    blank.Dispose();
-
-                blanks.Clear();
+                ReleaseAll();
                 verdicts.Clear();
             }
         }
 
-        private static bool Evaluate(
-            GroupItem group,
-            IReadOnlyList<IVideoEffect> effects,
-            IGraphicsDevicesAndContext devices,
-            TimelineSourceDescription source,
-            int timelineFrame)
+        private static void ReleaseAll()
+        {
+            foreach (var entry in processors.Values)
+                Release(entry.Processor);
+
+            processors.Clear();
+
+            lock (D2DGate.Sync)
+            {
+                foreach (var blank in blanks.Values)
+                    blank.Dispose();
+            }
+
+            blanks.Clear();
+            armed = false;
+            janitor.Change(Timeout.Infinite, Timeout.Infinite);
+        }
+
+        private static void Sweep()
         {
             lock (gate)
             {
-                if (verdicts.TryGetValue(group, out var known)
-                    && known.Frame == timelineFrame
-                    && known.Signature == Signature(effects)
-                    && Environment.TickCount64 - known.At < VerdictLifetimeMs)
-                {
-                    return known.Moves;
-                }
+                if (!armed || Environment.TickCount64 - touchedAt < IdleLifetimeMs)
+                    return;
+
+                ReleaseAll();
+            }
+        }
+
+        private static void Arm()
+        {
+            touchedAt = Environment.TickCount64;
+
+            if (armed)
+                return;
+
+            armed = true;
+            janitor.Change(IdleLifetimeMs, IdleLifetimeMs);
+        }
+
+        private static bool Evaluate(GroupItem group, IReadOnlyList<IVideoEffect> effects, IGraphicsDevicesAndContext devices, TimelineSourceDescription source, int timelineFrame)
+        {
+            lock (gate)
+            {
+                if (Recall(group, effects, timelineFrame) is { } known)
+                    return known;
 
                 evaluating++;
 
+                var used = new List<IVideoEffectProcessor>();
+
                 try
                 {
-                    var description = new TimelineItemSourceDescription(
-                        source, timelineFrame - group.Frame, Math.Max(1, group.Length), group.Layer);
+                    var description = new TimelineItemSourceDescription(source, timelineFrame - group.Frame, Math.Max(1, group.Length), group.Layer);
 
                     ID2D1Image image = Blank(devices);
                     var draw = Identity;
@@ -145,6 +158,7 @@ namespace YMM43D.Player
 
                         var processor = ProcessorFor(effect, devices);
 
+                        used.Add(processor);
                         processor.SetInput(image);
                         draw = processor.Update(new EffectDescription(description, draw, 0, 1, 0, 1));
                         image = processor.Output;
@@ -160,6 +174,11 @@ namespace YMM43D.Player
                 finally
                 {
                     evaluating--;
+
+                    foreach (var processor in used)
+                        Forgo(processor);
+
+                    Arm();
                     Prune();
                 }
             }
@@ -197,15 +216,18 @@ namespace YMM43D.Player
             if (blanks.TryGetValue(key, out var blank))
                 return blank;
 
-            var context = privateContext.For(devices);
+            lock (D2DGate.Sync)
+            {
+                using var context = devices.D2D.Device.CreateDeviceContext(DeviceContextOptions.None);
 
-            blank = context.CreateCommandList();
-            context.Target = blank;
-            context.BeginDraw();
-            context.Clear(null);
-            context.EndDraw();
-            context.Target = null;
-            blank.Close();
+                blank = context.CreateCommandList();
+                context.Target = blank;
+                context.BeginDraw();
+                context.Clear(null);
+                context.EndDraw();
+                context.Target = null;
+                blank.Close();
+            }
 
             return blanks[key] = blank;
         }
@@ -213,11 +235,26 @@ namespace YMM43D.Player
         private static void Prune()
         {
             var now = Environment.TickCount64;
+            var expired = processors
+                .Where(pair => now - pair.Value.UsedAt > ProcessorLifetimeMs)
+                .Select(pair => pair.Key)
+                .ToArray();
 
-            foreach (var key in processors.Where(pair => now - pair.Value.UsedAt > ProcessorLifetimeMs).Select(pair => pair.Key).ToArray())
+            foreach (var key in expired)
             {
                 Release(processors[key].Processor);
                 processors.Remove(key);
+            }
+        }
+
+        private static void Forgo(IVideoEffectProcessor processor)
+        {
+            try
+            {
+                processor.ClearInput();
+            }
+            catch (Exception)
+            {
             }
         }
 
@@ -247,14 +284,25 @@ namespace YMM43D.Player
         {
             var identity = Matrix4x4.Identity;
 
-            return MathF.Abs(matrix.M11 - identity.M11) < Tolerance && MathF.Abs(matrix.M12) < Tolerance
-                && MathF.Abs(matrix.M13) < Tolerance && MathF.Abs(matrix.M14) < Tolerance
-                && MathF.Abs(matrix.M21) < Tolerance && MathF.Abs(matrix.M22 - 1f) < Tolerance
-                && MathF.Abs(matrix.M23) < Tolerance && MathF.Abs(matrix.M24) < Tolerance
-                && MathF.Abs(matrix.M31) < Tolerance && MathF.Abs(matrix.M32) < Tolerance
-                && MathF.Abs(matrix.M33 - 1f) < Tolerance && MathF.Abs(matrix.M34) < Tolerance
-                && MathF.Abs(matrix.M41) < Tolerance && MathF.Abs(matrix.M42) < Tolerance
-                && MathF.Abs(matrix.M43) < Tolerance && MathF.Abs(matrix.M44 - 1f) < Tolerance;
+            for (var row = 0; row < 4; row++)
+            {
+                for (var column = 0; column < 4; column++)
+                {
+                    if (MathF.Abs(matrix[row, column] - identity[row, column]) >= Tolerance)
+                        return false;
+                }
+            }
+
+            return true;
+        }
+
+        private sealed record Verdict(int Frame, long At, int Signature, bool Moves);
+
+        private sealed class Entry(IVideoEffectProcessor processor)
+        {
+            public IVideoEffectProcessor Processor { get; } = processor;
+
+            public long UsedAt { get; set; } = Environment.TickCount64;
         }
     }
 }

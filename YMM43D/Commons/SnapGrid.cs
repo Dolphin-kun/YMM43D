@@ -5,12 +5,8 @@ namespace YMM43D.Commons
     public readonly record struct SnapGrid(bool IsEnabled, float Step, float AngleStep)
     {
         public const float DefaultStep = 50f;
-
         public const float DefaultAngleStep = 15f;
-
         public const float DefaultScaleStep = 10f;
-
-        public static SnapGrid Off => new(false, DefaultStep, DefaultAngleStep);
 
         public SnapGrid Inverted(bool invert) => invert ? this with { IsEnabled = !IsEnabled } : this;
 

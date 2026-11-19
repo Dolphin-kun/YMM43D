@@ -45,7 +45,6 @@ namespace YMM43D.Commons
         public bool IsPrerelease => false;
         public bool CanDownload => false;
 
-        public Task<string> DownloadAsync(string dir, ProgressMessage progress, CancellationToken token)
-            => throw new NotSupportedException();
+        public Task<string> DownloadAsync(string dir, ProgressMessage progress, CancellationToken token) => throw new NotSupportedException();
     }
 }

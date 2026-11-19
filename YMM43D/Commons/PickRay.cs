@@ -4,15 +4,12 @@ namespace YMM43D.Commons
 {
     public readonly record struct PickRay(Vector3 Origin, Vector3 Direction)
     {
-        public static PickRay? FromScreen(
-            Vector2 position, float width, float height, in Matrix4x4 viewProjection)
+        public static PickRay? FromScreen(Vector2 position, float width, float height, in Matrix4x4 viewProjection)
         {
             if (width <= 0f || height <= 0f || !Matrix4x4.Invert(viewProjection, out var inverse))
                 return null;
 
-            var ndc = new Vector2(
-                position.X / width * 2f - 1f,
-                1f - position.Y / height * 2f);
+            var ndc = new Vector2(position.X / width * 2f - 1f, 1f - position.Y / height * 2f);
 
             var near = Unproject(new Vector3(ndc, 0f), inverse);
             var far = Unproject(new Vector3(ndc, 1f), inverse);
@@ -22,13 +19,8 @@ namespace YMM43D.Commons
 
             var direction = end - start;
 
-            return direction.LengthSquared() > 0f
-                ? new PickRay(start, Vector3.Normalize(direction))
-                : null;
+            return direction.LengthSquared() > 0f ? new PickRay(start, Vector3.Normalize(direction)) : null;
         }
-
-        public float? IntersectUnitBox(in Matrix4x4 world, float minThickness = 0.001f)
-            => IntersectBox(WorldBounds.FromCube(1f), world, minThickness);
 
         public float? IntersectBox(in WorldBounds bounds, in Matrix4x4 world, float minThickness = 0.001f)
         {

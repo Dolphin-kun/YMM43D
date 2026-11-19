@@ -1,4 +1,4 @@
-using YMM43D.Commons;
+﻿using YMM43D.Commons;
 using YMM43D.Player;
 using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Player.Video;
@@ -9,25 +9,12 @@ namespace YMM43D.Plugin
 {
     public static class GroupEffectSource
     {
-        public static bool IsOnGroup(IVideoItem owner, IVideoEffect effect)
-        {
-            foreach (var candidate in owner.VideoEffects ?? [])
-            {
-                if (ReferenceEquals(candidate, effect))
-                    return false;
-            }
+        public static bool IsOnGroup(IVideoItem owner, IVideoEffect effect) => !Holds(owner.VideoEffects, effect);
 
-            return true;
-        }
-
-        public static I3DProvider? Find(
-            IVideoItem owner,
-            EffectDescription description,
-            IVideoEffect effect,
-            IGraphicsDevicesAndContext? devices,
-            I3DProvider self)
+        public static I3DProvider? Find(IVideoItem owner, EffectDescription description, IVideoEffect effect, IGraphicsDevicesAndContext? devices, I3DProvider self)
         {
-            if (FindPreceding(description, effect) is { } preceding
+            if (FindGroup(description, effect) is { } group
+                && LastBefore(group.VideoEffects, effect) is { } preceding
                 && InstanceAt(preceding, description, devices, self) is { } chained)
             {
                 return chained;
@@ -36,8 +23,10 @@ namespace YMM43D.Plugin
             return Find(owner, description.InputIndex, devices, self);
         }
 
-        public static I3DProvider? Find(
-            IVideoItem owner, int inputIndex, IGraphicsDevicesAndContext? devices, I3DProvider self)
+        public static I3DProvider? FindInChain(IVideoItem owner, EffectDescription description, IVideoEffect effect, IGraphicsDevicesAndContext? devices, I3DProvider self)
+            => LastBefore(owner.VideoEffects, effect) is { } preceding ? InstanceAt(preceding, description, devices, self) : null;
+
+        public static I3DProvider? Find(IVideoItem owner, int inputIndex, IGraphicsDevicesAndContext? devices, I3DProvider self)
         {
             I3DProvider? found = null;
 
@@ -52,19 +41,17 @@ namespace YMM43D.Plugin
                 }
             }
 
-            return found ?? SceneDepthCollector
-                .FindSources(owner, devices)
-                .FirstOrDefault(source => !ReferenceEquals(source, self));
+            return found ?? FindOwnSolid(owner, devices, self);
         }
 
-        private static VideoEffect3DBase? FindPreceding(EffectDescription description, IVideoEffect effect)
-        {
-            if (FindGroup(description, effect) is not { } group)
-                return null;
+        public static I3DProvider? FindOwnSolid(IVideoItem owner, IGraphicsDevicesAndContext? devices, I3DProvider self)
+            => SceneDepthCollector.FindSources(owner, devices).FirstOrDefault(source => !ReferenceEquals(source, self));
 
+        private static VideoEffect3DBase? LastBefore(IEnumerable<IVideoEffect>? effects, IVideoEffect effect)
+        {
             VideoEffect3DBase? found = null;
 
-            foreach (var candidate in group.VideoEffects ?? [])
+            foreach (var candidate in effects ?? [])
             {
                 if (ReferenceEquals(candidate, effect))
                     return found;
@@ -76,28 +63,29 @@ namespace YMM43D.Plugin
             return null;
         }
 
+        private static bool Holds(IEnumerable<IVideoEffect>? effects, IVideoEffect effect)
+        {
+            foreach (var candidate in effects ?? [])
+            {
+                if (ReferenceEquals(candidate, effect))
+                    return true;
+            }
+
+            return false;
+        }
+
         private static GroupItem? FindGroup(EffectDescription description, IVideoEffect effect)
         {
             foreach (var item in TimelineLookup.Find(description)?.Items ?? [])
             {
-                if (item is not GroupItem group)
-                    continue;
-
-                foreach (var candidate in group.VideoEffects ?? [])
-                {
-                    if (ReferenceEquals(candidate, effect))
-                        return group;
-                }
+                if (item is GroupItem group && Holds(group.VideoEffects, effect))
+                    return group;
             }
 
             return null;
         }
 
-        private static I3DProvider? InstanceAt(
-            VideoEffect3DBase preceding,
-            EffectDescription description,
-            IGraphicsDevicesAndContext? devices,
-            I3DProvider self)
+        private static I3DProvider? InstanceAt(VideoEffect3DBase preceding, EffectDescription description, IGraphicsDevicesAndContext? devices, I3DProvider self)
         {
             var instances = preceding.GetInstancesAt(description.Layer, devices);
 

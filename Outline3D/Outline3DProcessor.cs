@@ -11,19 +11,17 @@ using YMM43D.Plugin;
 using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Player.Video;
 using YukkuriMovieMaker.Plugin.Brush;
+using YukkuriMovieMaker.Project.Items;
 
 namespace Outline3D
 {
-    internal sealed class Outline3DProcessor(Outline3DEffect effect, IGraphicsDevicesAndContext devices)
-        : VideoEffect3DProcessorBase(effect, devices)
+    internal sealed class Outline3DProcessor(Outline3DEffect effect, IGraphicsDevicesAndContext devices) : VideoEffect3DProcessorBase(effect, devices)
     {
         private static readonly WorldBounds UnitPlane = new(new Vector3(-0.5f, -0.5f, 0f), new Vector3(0.5f, 0.5f, 0f));
 
         private readonly Outline3DEffect effect = effect;
         private readonly DeviceResourceCache<OutlinePass> passes = new(device => new OutlinePass(device));
-        private readonly DeviceResourceCache<RenderPipeline<TransformConstants>> planes = new(
-            device => new RenderPipeline<TransformConstants>(device, new PlaneMesh(device), new TextureMaterial(device)));
-
+        private readonly DeviceResourceCache<RenderPipeline<TransformConstants>> planes = new(device => new RenderPipeline<TransformConstants>(device, new PlaneMesh(device), new TextureMaterial(device)));
         private readonly D2DTextureBridge brushBridge = new();
 
         private I3DProvider? solidSource;
@@ -39,14 +37,9 @@ namespace Outline3D
         private Vector2 brushSize;
 
         public override bool ScalesToInputSize
-            => precedingEffect is { } preceding
-                ? preceding.ScalesToInputSize
-                : solidSource is null && !expectsSolid;
+            => precedingEffect is { } preceding ? preceding.ScalesToInputSize : solidSource is null && !expectsSolid;
 
-        public override bool TryGetSize(out Vector2 size, out Vector2 offset)
-            => precedingEffect is { } preceding
-                ? preceding.TryGetSize(out size, out offset)
-                : base.TryGetSize(out size, out offset);
+        public override bool TryGetSize(out Vector2 size, out Vector2 offset) => precedingEffect is { } preceding ? preceding.TryGetSize(out size, out offset) : base.TryGetSize(out size, out offset);
 
         protected override bool KeepsGroupMemberSolid => true;
 
@@ -80,9 +73,7 @@ namespace Outline3D
                 }
                 else
                 {
-                    solidSource = SceneDepthCollector
-                        .FindSources(owner, Devices)
-                        .FirstOrDefault(source => !ReferenceEquals(source, this));
+                    solidSource = SceneDepthCollector.FindSources(owner, Devices).FirstOrDefault(source => !ReferenceEquals(source, this));
                 }
             }
 
@@ -96,7 +87,7 @@ namespace Outline3D
             UpdateBrush(effectDescription);
         }
 
-        private I3DProvider? FindPreceding(YukkuriMovieMaker.Project.Items.IVideoItem owner, int inputIndex)
+        private I3DProvider? FindPreceding(IVideoItem owner, int inputIndex)
         {
             var effects = owner.VideoEffects;
 
@@ -134,7 +125,10 @@ namespace Outline3D
             if (effect.IsOutlineOnly && (render.IsShadowPass || item.DepthOnly))
                 return;
 
-            if (render.IsShadowPass || render.IsCapturingScene || item.DepthOnly || !passes.TryGet(render.Device, out var pass))
+            if (render.IsShadowPass
+                || render.IsCapturingScene
+                || item.DepthOnly
+                || !passes.TryGet(render.Device, out var pass))
             {
                 DrawSource(render, item);
                 return;
@@ -174,10 +168,7 @@ namespace Outline3D
             if (texture is null || !planes.TryGet(render.Device, out var pipeline))
                 return;
 
-            pipeline.Draw(
-                render.Context,
-                render.CreateConstants(item.World, item),
-                item.ToDrawSettings(FaceCulling.None, texture));
+            pipeline.Draw(render.Context, render.CreateConstants(item.World, item), item.ToDrawSettings(FaceCulling.None, texture));
         }
 
         private OutlineLook GetLook(in FrameContext time, ID3D11Device device)
@@ -202,13 +193,12 @@ namespace Outline3D
                 brushSize);
         }
 
-        private WorldBounds GetSourceBounds(in FrameContext time)
-            => solidSource switch
-            {
-                I3DBounds bounds => bounds.GetLocalBounds(time),
-                null => expectsSolid ? WorldBounds.Empty : UnitPlane,
-                _ => WorldBounds.Empty,
-            };
+        private WorldBounds GetSourceBounds(in FrameContext time) => solidSource switch
+        {
+            I3DBounds bounds => bounds.GetLocalBounds(time),
+            null => expectsSolid ? WorldBounds.Empty : UnitPlane,
+            _ => WorldBounds.Empty,
+        };
 
         protected override WorldBounds GetLocalBounds(in FrameContext itemTime)
         {
@@ -220,24 +210,26 @@ namespace Outline3D
             var zoom = MathF.Max(effect.Zoom.GetFloat(itemTime) / 100f, 1f);
             var spread = effect.Rotation.GetFloat(itemTime) % 360f == 0f ? zoom : zoom * MathF.Sqrt(2f);
 
-            var reach = WorldScale.ToWorld(
-                MathF.Max(effect.StrokeThickness.GetFloat(itemTime), 0f)
-                + MathF.Max(effect.Blur.GetFloat(itemTime), 0f) * 2f
-                + MathF.Max(MathF.Abs(effect.X.GetFloat(itemTime)), MathF.Abs(effect.Y.GetFloat(itemTime)))
-                + 2f);
-
-            var scale = TryGetLocalMatrix(out var local)
-                ? new Vector3(
-                    new Vector3(local.M11, local.M12, local.M13).Length(),
-                    new Vector3(local.M21, local.M22, local.M23).Length(),
-                    new Vector3(local.M31, local.M32, local.M33).Length())
-                : Vector3.One;
+            var thickness = MathF.Max(effect.StrokeThickness.GetFloat(itemTime), 0f);
+            var blur = MathF.Max(effect.Blur.GetFloat(itemTime), 0f);
+            var shift = MathF.Max(MathF.Abs(effect.X.GetFloat(itemTime)), MathF.Abs(effect.Y.GetFloat(itemTime)));
+            var reach = WorldScale.ToWorld(thickness + blur * 2f + shift + 2f);
+            var scale = TryGetLocalMatrix(out var local) ? AxisLengths(local) : Vector3.One;
 
             var margin = new Vector3(reach) / Vector3.Max(scale, new Vector3(1e-4f));
             var center = bounds.Center;
             var half = (bounds.Max - bounds.Min) / 2f * spread + margin;
 
             return new WorldBounds(center - half, center + half);
+        }
+
+        private static Vector3 AxisLengths(in Matrix4x4 matrix)
+        {
+            var x = new Vector3(matrix.M11, matrix.M12, matrix.M13).Length();
+            var y = new Vector3(matrix.M21, matrix.M22, matrix.M23).Length();
+            var z = new Vector3(matrix.M31, matrix.M32, matrix.M33).Length();
+
+            return new Vector3(x, y, z);
         }
 
         private void UpdateBrush(EffectDescription description)

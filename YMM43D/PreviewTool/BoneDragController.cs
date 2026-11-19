@@ -9,7 +9,6 @@ namespace YMM43D.PreviewTool
     {
         private ModelBonePose? pose;
         private EditScope scope;
-        private GizmoHandle handle;
 
         private Vector3 origin;
         private Vector3 axis;
@@ -30,14 +29,9 @@ namespace YMM43D.PreviewTool
 
         public bool IsDragging => pose is not null;
 
-        public GizmoHandle Handle => handle;
+        public GizmoHandle Handle { get; private set; }
 
-        public bool Begin(
-            in PreviewBone bone,
-            in TransformGizmo gizmo,
-            GizmoHandle grabbed,
-            in PickRay ray,
-            in EditScope edit)
+        public bool Begin(in PreviewBone bone, in TransformGizmo gizmo, GizmoHandle grabbed, in PickRay ray, in EditScope edit)
         {
             if (grabbed is not (GizmoHandle.RotateX or GizmoHandle.RotateY or GizmoHandle.RotateZ))
                 return false;
@@ -53,7 +47,7 @@ namespace YMM43D.PreviewTool
             if (GetAngle(ray) is not { } angle || !Prepare(bone, edit))
                 return false;
 
-            handle = grabbed;
+            Handle = grabbed;
             lastAngle = angle;
             rawTurn = 0f;
             appliedTurn = 0f;
@@ -74,8 +68,7 @@ namespace YMM43D.PreviewTool
             turnY = found.RotationY;
             turnZ = found.RotationZ;
 
-            startRotation = Rotation3D.ForObject(
-                turnX.GetFloat(bone.Time), turnY.GetFloat(bone.Time), turnZ.GetFloat(bone.Time));
+            startRotation = Rotation3D.ForObject(turnX.GetFloat(bone.Time), turnY.GetFloat(bone.Time), turnZ.GetFloat(bone.Time));
 
             appliedAngles = Rotation3D.ToAngles(startRotation);
 
@@ -163,7 +156,7 @@ namespace YMM43D.PreviewTool
             turnX = null;
             turnY = null;
             turnZ = null;
-            handle = GizmoHandle.None;
+            Handle = GizmoHandle.None;
         }
 
         private float? GetAngle(in PickRay ray)

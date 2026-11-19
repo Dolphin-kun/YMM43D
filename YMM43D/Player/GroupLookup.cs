@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using YMM43D.Commons;
 using YukkuriMovieMaker.Project;
 using YukkuriMovieMaker.Project.Items;
@@ -8,8 +8,6 @@ namespace YMM43D.Player
     public readonly struct GroupLookup
     {
         private readonly Placed[]? groups;
-
-        private readonly record struct Placed(GroupItem Group, Matrix4x4 World);
 
         private GroupLookup(Placed[] groups) => this.groups = groups;
 
@@ -37,46 +35,41 @@ namespace YMM43D.Player
 
         public Matrix4x4 GetTransform(IItem item)
         {
-            if (groups is null || groups.Length == 0)
-                return Matrix4x4.Identity;
-
             var transform = Matrix4x4.Identity;
-            var current = item;
 
-            for (var depth = 0; depth < groups.Length; depth++)
-            {
-                var parent = FindParent(current);
-
-                if (parent < 0)
-                    break;
-
-                transform *= groups[parent].World;
-                current = groups[parent].Group;
-            }
+            foreach (var parent in Parents(item))
+                transform *= groups![parent].World;
 
             return transform;
         }
 
         public IReadOnlyList<GroupItem> GetGroups(IItem item)
         {
-            if (groups is null || groups.Length == 0)
-                return [];
+            var found = new List<GroupItem>();
 
-            List<GroupItem>? found = null;
+            foreach (var parent in Parents(item))
+                found.Add(groups![parent].Group);
+
+            return found;
+        }
+
+        private IEnumerable<int> Parents(IItem item)
+        {
+            if (IsEmpty)
+                yield break;
+
             var current = item;
 
-            for (var depth = 0; depth < groups.Length; depth++)
+            for (var depth = 0; depth < groups!.Length; depth++)
             {
                 var parent = FindParent(current);
 
                 if (parent < 0)
-                    break;
+                    yield break;
 
+                yield return parent;
                 current = groups[parent].Group;
-                (found ??= []).Add(groups[parent].Group);
             }
-
-            return found is null ? [] : found;
         }
 
         private int FindParent(IItem item)
@@ -113,11 +106,7 @@ namespace YMM43D.Player
 
             return FrameContext.IsAlive(group, frame);
         }
-    }
 
-    public static class TimelineGroups
-    {
-        public static Matrix4x4 GetTransform(Timeline? timeline, IItem item, int frame, int fps)
-            => GroupLookup.Build(timeline, frame, fps).GetTransform(item);
+        private readonly record struct Placed(GroupItem Group, Matrix4x4 World);
     }
 }

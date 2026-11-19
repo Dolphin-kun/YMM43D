@@ -1,9 +1,11 @@
-<UserControl x:Class="YMM43D.PreviewTool.Views.Preview3DView"
+﻿<UserControl x:Class="YMM43D.PreviewTool.Views.Preview3DView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:local="clr-namespace:YMM43D.PreviewTool.Views"
+             xmlns:commons="clr-namespace:YMM43D.Commons"
+             xmlns:c="clr-namespace:YukkuriMovieMaker.Controls;assembly=YukkuriMovieMaker.Plugin"
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="600"
              Background="Transparent"
@@ -87,6 +89,40 @@
             </Setter>
         </Style>
 
+        <Style x:Key="MeshEntry" TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
+            <Setter Property="Header" Value="{Binding Header}"/>
+            <Setter Property="Command" Value="{Binding Command}"/>
+            <Setter Property="CommandParameter" Value="{Binding Parameter}"/>
+            <Setter Property="InputGestureText" Value="{Binding Gesture}"/>
+            <Setter Property="ToolTip" Value="{Binding ToolTip}"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsSeparator}" Value="True">
+                    <Setter Property="IsEnabled" Value="False"/>
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="MenuItem">
+                                <Separator/>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="SideHeader" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Margin" Value="6,0,0,4"/>
+        </Style>
+
+        <Style x:Key="SideLabel" TargetType="Label">
+            <Setter Property="Margin" Value="6,0"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <ContextMenu x:Key="MeshPopup" ItemContainerStyle="{StaticResource MeshEntry}"/>
+
         <Style x:Key="PartButton" TargetType="RadioButton" BasedOn="{StaticResource ModeButton}">
             <Setter Property="Width" Value="24"/>
             <Setter Property="Height" Value="24"/>
@@ -102,7 +138,7 @@
         </Grid.RowDefinitions>
 
         <Menu Grid.Row="0"
-              Background="Transparent"
+              Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}"
               Margin="0"
               Padding="0"
               Focusable="False"
@@ -159,11 +195,24 @@
                           InputGestureText="{Binding Keys[ToggleGrid]}"
                           ToolTip="床の格子と、原点を通る2本の座標軸を出すかどうか。動画の出力には関係ありません。"/>
 
+                <MenuItem Header="サイドバー"
+                          IsCheckable="True"
+                          IsChecked="{Binding IsSidebarOpen}"
+                          InputGestureText="{Binding Keys[ToggleSidebar]}"
+                          ToolTip="プレビューの右に、選んだところの位置・3Dカーソル・材質・シェイプキー・直前の操作のやり直しなどを出す欄を開きます。右端の「＜」を押しても開け閉めできます。"/>
+
                 <MenuItem Header="モデルを網で出す"
                           IsCheckable="True"
                           IsChecked="{Binding ShowsMesh}"
                           InputGestureText="{Binding Keys[ToggleWireframe]}"
                           ToolTip="3Dモデルを面で塗らず、線だけ（網）で出します。体の中のボーンが見えるので、ボーンを掴みやすくなります。動画の出力には関係ありません。"/>
+
+                <MenuItem Header="UV エディタ"
+                          IsCheckable="True"
+                          IsChecked="{Binding IsUvView}"
+                          IsEnabled="{Binding IsEditingMesh}"
+                          InputGestureText="{Binding Keys[ToggleUvView]}"
+                          ToolTip="編集モードのあいだ、3D の代わりに UV（面に画像を貼る位置）を平らに広げて出します。選び方は 3D と同じで、G・R・S で UV を動かせます。"/>
             </MenuItem>
 
             <MenuItem Header="編集">
@@ -175,6 +224,17 @@
                 <MenuItem Header="選択を解除"
                           Command="{Binding ClearSelectionCommand}"
                           InputGestureText="{Binding Keys[ClearSelection]}"/>
+
+                <Separator/>
+
+                <MenuItem Header="書き出す">
+                    <MenuItem Header="OBJ（.obj ＋ .mtl）…"
+                              Command="{Binding ExportObjCommand}"
+                              ToolTip="選んでいる 3Dアイテムの形を、モディファイアとシェイプキーを今の時点の値で掛けた形で書き出します。材質の画像は書き出し先へ写します。"/>
+                    <MenuItem Header="glTF バイナリ（.glb）…"
+                              Command="{Binding ExportGlbCommand}"
+                              ToolTip="選んでいる 3Dアイテムの形を、材質と画像ごと 1 つのファイルに書き出します。Blender などで読めます。"/>
+                </MenuItem>
 
                 <Separator/>
 
@@ -193,6 +253,12 @@
                           InputGestureText="{Binding Keys[ToggleEditMode]}"
                           ToolTip="3Dアイテムを1つだけ選んでいるとき、その形そのものを編集します。頂点をドラッグすると形が変わります。"/>
 
+                <MenuItem Header="選んだアイテムをくっつける"
+                          Command="{Binding JoinCommand}"
+                          IsEnabled="{Binding HasSelectedItem}"
+                          InputGestureText="{Binding Keys[Join]}"
+                          ToolTip="選んでいる 3D アイテムの形を、最初に選んだアイテムへまとめて 1 つにします。ほかのアイテムは消えます。面の色は最初のアイテムのものになります。"/>
+
                 <MenuItem Header="選ぶ単位" IsEnabled="{Binding IsEditingMesh}">
                     <MenuItem Header="頂点" IsCheckable="True" IsChecked="{Binding EditsVertices}"
                               InputGestureText="{Binding Keys[EditVertices]}"/>
@@ -206,33 +272,111 @@
                     <MenuItem Header="押し出す"
                               Command="{Binding ExtrudeCommand}"
                               InputGestureText="{Binding Keys[Extrude]}"
-                              ToolTip="選んでいる面をそのまま引き出します。押し出したあと、矢ハンドルで動かしてください。"/>
+                              ToolTip="選んでいる面・辺・頂点を引き出し、そのまま動かします。面は面の向きへ動きます。クリックか Enter で決め、右クリックか Esc で押し出しだけを残して止めます。"/>
 
-                    <MenuItem Header="面を張る"
-                              Command="{Binding MakeFaceCommand}"
-                              InputGestureText="{Binding Keys[MakeFace]}"
-                              ToolTip="選んでいる 3〜8 点をつないで、新しい面を 1 枚作ります。"/>
+                    <MenuItem Header="差し込む"
+                              Command="{Binding InsetCommand}"
+                              InputGestureText="{Binding Keys[Inset]}"
+                              ToolTip="選んでいる面の内側に、一回り小さい面を作ります。マウスを中心から離すほど幅が広がり、数字を打つと px で決まります。"/>
 
-                    <MenuItem Header="くっつける"
-                              Command="{Binding MergeMeshCommand}"
-                              InputGestureText="{Binding Keys[MergeMesh]}"
-                              ToolTip="選んでいる頂点を、まん中の 1 点にまとめます。潰れた面は消えます。"/>
+                    <MenuItem Header="角を削る（ベベル）"
+                              Command="{Binding BevelCommand}"
+                              InputGestureText="{Binding Keys[Bevel]}"
+                              ToolTip="選んでいる面を少し縮めて、辺と角に面を足します。マウスを中心から離すほど大きく削れ、数字を打つと px で決まります。"/>
 
-                    <MenuItem Header="消す"
-                              Command="{Binding DeleteMeshCommand}"
-                              InputGestureText="{Binding Keys[DeleteMesh]}"
-                              ToolTip="選んでいる頂点と、それを使っている面を消します。"/>
+                    <MenuItem Header="厚みを付ける"
+                              Command="{Binding SolidifyCommand}"
+                              ToolTip="ぺらい面の裏に、もう一枚ぶんの面と側面を足して中身のある形にします。厚みはマウスの距離か数字（px、- で内側）で決めます。何も選んでいなければ全体に掛かります。"/>
+
+                    <MenuItem Header="ミラーを足す"
+                              Command="{Binding MirrorCommand}"
+                              ToolTip="X が 0 のところを境にして左右に写すモディファイアを足します。片側だけ作れば、反対側は自動で付いてきます。設定はアイテムの「モディファイア」欄で変えます。"/>
 
                     <Separator/>
 
-                    <MenuItem Header="ループカット"
-                              Command="{Binding CutLoopCommand}"
-                              InputGestureText="{Binding Keys[CutLoop]}"
-                              ToolTip="選んでいる辺の並びに沿って、1周ぶんの切れ目を入れます。切れ目は辺の真ん中に入ります。"/>
+                    <MenuItem Header="押し出しの種類"
+                              ItemsSource="{Binding MeshMenus[Extrude]}"
+                              ItemContainerStyle="{StaticResource MeshEntry}"
+                              InputGestureText="{Binding Keys[ExtrudeMenu]}"/>
 
-                    <MenuItem Header="細かく分ける"
-                              Command="{Binding SubdivideCommand}"
-                              ToolTip="すべての面を、辺の真ん中と面のまん中で割ります。1 回ごとに面の数が角の数だけ増えます。"/>
+                    <MenuItem Header="消す"
+                              ItemsSource="{Binding MeshMenus[Delete]}"
+                              ItemContainerStyle="{StaticResource MeshEntry}"
+                              InputGestureText="{Binding Keys[DeleteMenu]}"/>
+
+                    <MenuItem Header="くっつける"
+                              ItemsSource="{Binding MeshMenus[Merge]}"
+                              ItemContainerStyle="{StaticResource MeshEntry}"
+                              InputGestureText="{Binding Keys[MergeMenu]}"/>
+
+                    <MenuItem Header="頂点"
+                              ItemsSource="{Binding MeshMenus[Vertex]}"
+                              ItemContainerStyle="{StaticResource MeshEntry}"
+                              InputGestureText="{Binding Keys[VertexMenu]}"/>
+
+                    <MenuItem Header="辺"
+                              ItemsSource="{Binding MeshMenus[Edge]}"
+                              ItemContainerStyle="{StaticResource MeshEntry}"
+                              InputGestureText="{Binding Keys[EdgeMenu]}"/>
+
+                    <MenuItem Header="面"
+                              ItemsSource="{Binding MeshMenus[Face]}"
+                              ItemContainerStyle="{StaticResource MeshEntry}"
+                              InputGestureText="{Binding Keys[FaceMenu]}"/>
+
+                    <MenuItem Header="面の向き"
+                              ItemsSource="{Binding MeshMenus[Normal]}"
+                              ItemContainerStyle="{StaticResource MeshEntry}"
+                              InputGestureText="{Binding Keys[NormalMenu]}"/>
+
+                    <MenuItem Header="UV"
+                              ItemsSource="{Binding MeshMenus[Uv]}"
+                              ItemContainerStyle="{StaticResource MeshEntry}"
+                              InputGestureText="{Binding Keys[UvMenu]}"/>
+
+                    <MenuItem Header="形を足す"
+                              ItemsSource="{Binding MeshMenus[Add]}"
+                              ItemContainerStyle="{StaticResource MeshEntry}"
+                              InputGestureText="{Binding Keys[AddMenu]}"/>
+
+                    <Separator/>
+
+                    <MenuItem Header="切る">
+                        <MenuItem Header="ナイフ"
+                                  Command="{Binding MeshCommand}"
+                                  CommandParameter="Knife"
+                                  InputGestureText="{Binding Keys[Knife]}"
+                                  ToolTip="クリックで点を打って線を引き、その線に沿って面を切ります。頂点や辺の近くをクリックするとそこに吸い付きます。Enter で切り、Esc でやめます。"/>
+
+                        <MenuItem Header="二等分"
+                                  Command="{Binding MeshCommand}"
+                                  CommandParameter="Bisect"
+                                  ToolTip="ドラッグで引いた線を画面の奥へ伸ばした平面で、選んだ面（選んでいなければ全体）を切ります。"/>
+
+                        <MenuItem Header="二等分して片側を消す"
+                                  Command="{Binding MeshCommand}"
+                                  CommandParameter="BisectClear"
+                                  ToolTip="二等分したあと、引いた線の左側を消します。右側が残ります。"/>
+
+                        <MenuItem Header="二等分して片側を消し、ふたをする"
+                                  Command="{Binding MeshCommand}"
+                                  CommandParameter="BisectFill"
+                                  ToolTip="二等分して線の左側を消し、切り口に面を張ってふさぎます。"/>
+                    </MenuItem>
+
+                    <MenuItem Header="複製"
+                              Command="{Binding MeshCommand}"
+                              CommandParameter="Duplicate"
+                              InputGestureText="{Binding Keys[Duplicate]}"
+                              ToolTip="選んだところを写し、そのまま動かします。右クリックか Esc で止めると元の場所に重なったまま残ります。"/>
+
+                    <MenuItem Header="別のアイテムに分ける"
+                              Command="{Binding MeshCommand}"
+                              CommandParameter="Separate"
+                              InputGestureText="{Binding Keys[Separate]}"
+                              ToolTip="選んだところを切り取り、同じ設定の新しい 3D アイテムにします。"/>
+
+                    <Separator/>
 
                     <MenuItem Header="スライド"
                               IsCheckable="True"
@@ -257,6 +401,90 @@
                     <MenuItem Header="狭める"
                               Command="{Binding ShrinkSelectionCommand}"
                               InputGestureText="{Binding Keys[ShrinkSelection]}"/>
+
+                    <Separator/>
+
+                    <MenuItem Header="範囲で選ぶ"
+                              Command="{Binding BoxSelectCommand}"
+                              InputGestureText="{Binding Keys[BoxSelect]}"
+                              ToolTip="次のドラッグで囲んだところを選びます。Shift で足し、Ctrl で外します。左の「選択」の道具のときは、いつでもドラッグで選べます。"/>
+
+                    <MenuItem Header="選択の道具で囲む形" InputGestureText="{Binding Keys[CycleSelectShape]}">
+                        <MenuItem Header="四角" IsCheckable="True" IsChecked="{Binding SelectsByBox}"/>
+                        <MenuItem Header="投げ縄" IsCheckable="True" IsChecked="{Binding SelectsByLasso}"/>
+                        <MenuItem Header="円（なぞって塗る）" IsCheckable="True" IsChecked="{Binding SelectsByCircle}"
+                                  ToolTip="なぞったところを足していきます。Ctrl で外します。ドラッグ中のホイールで円の大きさを変えます。"/>
+                    </MenuItem>
+
+                    <MenuItem Header="透かして選ぶ（X線）"
+                              IsCheckable="True"
+                              IsChecked="{Binding IsXRay}"
+                              InputGestureText="{Binding Keys[ToggleXRay]}"
+                              ToolTip="入れると形が半透明になり、裏に隠れた頂点・辺・面もクリックや範囲で選べます。切ると、見えているものだけを選びます。"/>
+
+                    <Separator/>
+
+                    <MenuItem Header="選んだところを隠す"
+                              Command="{Binding HideCommand}"
+                              InputGestureText="{Binding Keys[HideSelected]}"
+                              ToolTip="編集モードの間だけ、選んでいるところを見えなくして選べなくします。動画には影響しません。"/>
+
+                    <MenuItem Header="選んでいないところを隠す"
+                              Command="{Binding HideOthersCommand}"
+                              InputGestureText="{Binding Keys[HideOthers]}"/>
+
+                    <MenuItem Header="隠したところを戻す"
+                              Command="{Binding RevealCommand}"
+                              InputGestureText="{Binding Keys[RevealHidden]}"
+                              ToolTip="隠していたところをすべて戻し、戻したところを選びます。"/>
+                </MenuItem>
+
+                <MenuItem Header="動かし方" IsEnabled="{Binding IsEditingMesh}">
+                    <MenuItem Header="回転・拡大の中心" InputGestureText="{Binding Keys[CyclePivot]}">
+                        <MenuItem Header="選んだところの中心" IsCheckable="True" IsChecked="{Binding PivotsAtMedian}"/>
+                        <MenuItem Header="選んだ範囲の中心" IsCheckable="True" IsChecked="{Binding PivotsAtBounds}"/>
+                        <MenuItem Header="3Dカーソル" IsCheckable="True" IsChecked="{Binding PivotsAtCursor}"/>
+                        <MenuItem Header="それぞれのまとまりの中心" IsCheckable="True" IsChecked="{Binding PivotsIndividually}"
+                                  ToolTip="つながっていない部分ごとに、その中心で回したり大きさを変えたりします。"/>
+                        <MenuItem Header="最後に選んだところ" IsCheckable="True" IsChecked="{Binding PivotsAtActive}"/>
+                    </MenuItem>
+
+                    <MenuItem Header="3Dカーソル"
+                              ToolTip="Shift を押しながら右クリックで、形の表面に置けます。">
+                        <MenuItem Header="カーソルを選んだところへ"
+                                  Command="{Binding CursorToSelectedCommand}"
+                                  InputGestureText="{Binding Keys[CursorToSelected]}"/>
+                        <MenuItem Header="カーソルを原点へ"
+                                  Command="{Binding CursorToOriginCommand}"
+                                  InputGestureText="{Binding Keys[CursorToOrigin]}"/>
+                        <MenuItem Header="選んだところをカーソルへ"
+                                  Command="{Binding SelectionToCursorCommand}"/>
+                    </MenuItem>
+
+                    <Separator/>
+
+                    <MenuItem Header="プロポーショナル編集"
+                              IsCheckable="True"
+                              IsChecked="{Binding IsProportional}"
+                              InputGestureText="{Binding Keys[ToggleProportional]}"
+                              ToolTip="選んだところの周りも、近いほど強く一緒に動きます。動かしている間のホイールか PageUp / PageDown で、効く範囲を変えます。"/>
+
+                    <MenuItem Header="つながっているところだけ"
+                              IsCheckable="True"
+                              IsChecked="{Binding ConnectsProportional}"
+                              InputGestureText="{Binding Keys[ToggleConnected]}"
+                              ToolTip="空間の距離ではなく、辺をたどった距離で効き方を決めます。近くにあっても離れた部分は動きません。"/>
+
+                    <MenuItem Header="効き方の減り方" InputGestureText="{Binding Keys[CycleFalloff]}">
+                        <MenuItem Header="なめらか" IsCheckable="True" IsChecked="{Binding FallsSmooth}"/>
+                        <MenuItem Header="球" IsCheckable="True" IsChecked="{Binding FallsSphere}"/>
+                        <MenuItem Header="ルート" IsCheckable="True" IsChecked="{Binding FallsRoot}"/>
+                        <MenuItem Header="逆二乗" IsCheckable="True" IsChecked="{Binding FallsInverseSquare}"/>
+                        <MenuItem Header="鋭い" IsCheckable="True" IsChecked="{Binding FallsSharp}"/>
+                        <MenuItem Header="直線" IsCheckable="True" IsChecked="{Binding FallsLinear}"/>
+                        <MenuItem Header="一定" IsCheckable="True" IsChecked="{Binding FallsConstant}"/>
+                        <MenuItem Header="ランダム" IsCheckable="True" IsChecked="{Binding FallsRandom}"/>
+                    </MenuItem>
                 </MenuItem>
 
                 <MenuItem Header="メッシュの編集を捨てる"
@@ -270,12 +498,27 @@
                           IsCheckable="True"
                           IsChecked="{Binding SnapsToGrid}"
                           InputGestureText="{Binding Keys[ToggleSnap]}"
-                          ToolTip="入れると、ドラッグで動かした位置が決まった間隔に、回転が 15° ずつに吸い付きます。ドラッグ中に Shift を押している間は、入り切りが逆になります。"/>
+                          ToolTip="入れると、動かした位置が「スナップ先」に吸い付きます。動かしている間に Shift を押している間は、入り切りが逆になります。"/>
 
                 <MenuItem Header="スナップの間隔">
                     <MenuItem Header="10 px" IsCheckable="True" IsChecked="{Binding SnapsEvery10}"/>
                     <MenuItem Header="50 px" IsCheckable="True" IsChecked="{Binding SnapsEvery50}"/>
                     <MenuItem Header="100 px" IsCheckable="True" IsChecked="{Binding SnapsEvery100}"/>
+                </MenuItem>
+
+                <MenuItem Header="スナップ先" IsEnabled="{Binding IsEditingMesh}">
+                    <MenuItem Header="グリッドの間隔" IsCheckable="True" IsChecked="{Binding SnapsToIncrement}"
+                              ToolTip="動かす量を「スナップの間隔」ずつ、回転を 15° ずつ、大きさを 0.1 倍ずつにします。"/>
+                    <MenuItem Header="頂点" IsCheckable="True" IsChecked="{Binding SnapsToVertex}"/>
+                    <MenuItem Header="辺" IsCheckable="True" IsChecked="{Binding SnapsToEdge}"/>
+                    <MenuItem Header="面" IsCheckable="True" IsChecked="{Binding SnapsToFace}"/>
+                </MenuItem>
+
+                <MenuItem Header="スナップの基準" IsEnabled="{Binding IsEditingMesh}"
+                          ToolTip="頂点・辺・面に吸い付けるとき、選んだところのどこを合わせるかです。">
+                    <MenuItem Header="選んだところの中心" IsCheckable="True" IsChecked="{Binding SnapsFromCenter}"/>
+                    <MenuItem Header="いちばん近い頂点" IsCheckable="True" IsChecked="{Binding SnapsFromClosest}"/>
+                    <MenuItem Header="最後に選んだところ" IsCheckable="True" IsChecked="{Binding SnapsFromActive}"/>
                 </MenuItem>
             </MenuItem>
 
@@ -317,7 +560,7 @@
         </Menu>
 
         <Border Grid.Row="1"
-                DataContext="{Binding Update}"
+                DataContext="{x:Static commons:UpdateChecker.Instance}"
                 Visibility="{Binding ShowsNotice, Converter={StaticResource VisibleWhenTrue}}"
                 Background="#33FF9800"
                 BorderBrush="#FF9800"
@@ -338,19 +581,25 @@
                 <TextBlock VerticalAlignment="Center" TextWrapping="Wrap">
                     <Run Text="YMM43D の新しいバージョン"/>
                     <Run Text="{Binding LatestVersion, Mode=OneWay}" FontWeight="SemiBold"/>
-                    <Run Text="が公開されています（今は"/>
-                    <Run Text="{Binding CurrentVersion, Mode=OneWay}"/><Run Text="）"/>
+                    <Run Text="が公開されています（現在"/>
+                    <Run Text="{x:Static commons:UpdateChecker.CurrentVersion}"/><Run Text="）"/>
                 </TextBlock>
             </DockPanel>
         </Border>
 
-        <Grid Grid.Row="2">
+        <Grid Grid.Row="2" Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
-            <Border Grid.Column="0" Background="#FF262626" Padding="6,8">
+            <ScrollViewer Grid.Column="0"
+                          VerticalScrollBarVisibility="Hidden"
+                          HorizontalScrollBarVisibility="Disabled"
+                          Focusable="False"
+                          Background="#FF262626">
+            <Border Padding="6,8">
                 <StackPanel VerticalAlignment="Top">
                 <RadioButton Style="{StaticResource ModeButton}"
                              GroupName="GizmoMode"
@@ -473,32 +722,192 @@
                 </StackPanel>
                 </StackPanel>
             </Border>
+            </ScrollViewer>
 
             <ContentControl Grid.Column="1" Content="{Binding D3DHost}"/>
 
-            <Border Grid.Column="1"
-                    HorizontalAlignment="Left"
-                    VerticalAlignment="Bottom"
-                    Margin="8,8,8,34"
-                    Padding="6,2"
-                    Background="#99000000"
-                    CornerRadius="3"
-                    IsHitTestVisible="False"
-                    Visibility="{Binding HasEditHint, Converter={StaticResource VisibleWhenTrue}}">
-                <TextBlock Text="{Binding EditHint}" Foreground="#FFB74D"/>
-            </Border>
+            <DockPanel Grid.Column="2" Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}">
+                <Thumb DockPanel.Dock="Left" Width="6" Cursor="SizeWE" DragDelta="SidebarEdge_DragDelta" Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}">
+                    <Thumb.Template>
+                        <ControlTemplate TargetType="Thumb">
+                            <Border Background="{TemplateBinding Background}"/>
+                        </ControlTemplate>
+                    </Thumb.Template>
+                </Thumb>
 
-            <Border Grid.Column="1"
-                    HorizontalAlignment="Left"
-                    VerticalAlignment="Bottom"
-                    Margin="8"
-                    Padding="6,2"
-                    Background="#99000000"
-                    CornerRadius="3"
-                    IsHitTestVisible="False"
-                    Visibility="{Binding HasSelectedBone, Converter={StaticResource VisibleWhenTrue}}">
-                <TextBlock Text="{Binding SelectedBoneName}" Foreground="#FFD54F"/>
-            </Border>
+                <Border x:Name="SidebarFrame" ClipToBounds="True" Width="0">
+                <ScrollViewer Width="{Binding SidebarWidth}"
+                              HorizontalAlignment="Left"
+                              VerticalScrollBarVisibility="Hidden"
+                              HorizontalScrollBarVisibility="Disabled"
+                              Focusable="False">
+                    <StackPanel DataContext="{Binding Sidebar}" Margin="4,8,8,8">
+                        <StackPanel Visibility="{Binding IsEditing, Converter={StaticResource VisibleWhenTrue}}">
+                            <StackPanel Visibility="{Binding HasRedo, Converter={StaticResource VisibleWhenTrue}}" Margin="0,0,0,8">
+                            <StackPanel DataContext="{Binding Redo}">
+                                <TextBlock Text="{Binding Title}" Style="{StaticResource SideHeader}" TextWrapping="Wrap"/>
+
+                                <Grid Margin="0,0,0,2" Visibility="{Binding HasAmount, Converter={StaticResource VisibleWhenTrue}}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="80"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Label Content="{Binding AmountLabel}" Style="{StaticResource SideLabel}"/>
+                                    <c:TextBoxSlider Grid.Column="1" Value="{Binding Amount, Mode=TwoWay}" Unit="{Binding AmountUnitText, Mode=OneWay}" StringFormat="{Binding AmountFormat, Mode=OneWay}" Delta="{Binding AmountDelta, Mode=OneWay}" Min="{Binding AmountMin, Mode=OneWay}" Max="{Binding AmountMax, Mode=OneWay}" DefaultMin="{Binding AmountDefaultMin, Mode=OneWay}" DefaultMax="{Binding AmountDefaultMax, Mode=OneWay}" BeginEdit="Sidebar_Edit" EndEdit="Sidebar_Edit"/>
+                                </Grid>
+
+                                <Grid Margin="0,0,0,2" Visibility="{Binding HasCount, Converter={StaticResource VisibleWhenTrue}}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="80"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Label Content="{Binding CountLabel}" Style="{StaticResource SideLabel}"/>
+                                    <c:TextBoxSlider Grid.Column="1" Value="{Binding Count, Mode=TwoWay}" Unit="" IsUnitVisible="False" StringFormat="F0" Delta="1" Min="{Binding CountMin, Mode=OneWay}" Max="200" DefaultMin="{Binding CountMin, Mode=OneWay}" DefaultMax="20" BeginEdit="Sidebar_Edit" EndEdit="Sidebar_Edit"/>
+                                </Grid>
+
+                                <Grid Margin="0,0,0,2" Visibility="{Binding HasShift, Converter={StaticResource VisibleWhenTrue}}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="80"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Label Content="{Binding ShiftLabel}" Style="{StaticResource SideLabel}"/>
+                                    <c:TextBoxSlider Grid.Column="1" Value="{Binding Shift, Mode=TwoWay}" Unit="" IsUnitVisible="False" StringFormat="F0" Delta="1" Min="-200" Max="200" DefaultMin="-20" DefaultMax="20" BeginEdit="Sidebar_Edit" EndEdit="Sidebar_Edit"/>
+                                </Grid>
+                            </StackPanel>
+                            </StackPanel>
+
+                            <TextBlock Text="メッシュ" Style="{StaticResource SideHeader}"/>
+
+                            <StackPanel Visibility="{Binding HasSelection, Converter={StaticResource VisibleWhenTrue}}" Margin="0,0,0,8">
+                        <Grid Margin="0,0,0,2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="80"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Label Content="X" Style="{StaticResource SideLabel}"/>
+                            <c:TextBoxSlider Grid.Column="1" Value="{Binding CenterX, Mode=TwoWay}" Unit="px" StringFormat="F1" Delta="0.1" Min="-100000" Max="100000" DefaultMin="-1000" DefaultMax="1000" BeginEdit="Sidebar_Edit" EndEdit="Sidebar_Edit"/>
+                        </Grid>
+                        <Grid Margin="0,0,0,2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="80"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Label Content="Y" Style="{StaticResource SideLabel}"/>
+                            <c:TextBoxSlider Grid.Column="1" Value="{Binding CenterY, Mode=TwoWay}" Unit="px" StringFormat="F1" Delta="0.1" Min="-100000" Max="100000" DefaultMin="-1000" DefaultMax="1000" BeginEdit="Sidebar_Edit" EndEdit="Sidebar_Edit"/>
+                        </Grid>
+                        <Grid Margin="0,0,0,2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="80"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Label Content="Z" Style="{StaticResource SideLabel}"/>
+                            <c:TextBoxSlider Grid.Column="1" Value="{Binding CenterZ, Mode=TwoWay}" Unit="px" StringFormat="F1" Delta="0.1" Min="-100000" Max="100000" DefaultMin="-1000" DefaultMax="1000" BeginEdit="Sidebar_Edit" EndEdit="Sidebar_Edit"/>
+                        </Grid>
+                            </StackPanel>
+
+                            <StackPanel Visibility="{Binding IsProportional, Converter={StaticResource VisibleWhenTrue}}" Margin="0,0,0,8">
+                                <TextBlock Text="プロポーショナル編集" Style="{StaticResource SideHeader}"/>
+                        <Grid Margin="0,0,0,2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="80"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Label Content="範囲" Style="{StaticResource SideLabel}"/>
+                            <c:TextBoxSlider Grid.Column="1" Value="{Binding Radius, Mode=TwoWay}" Unit="px" StringFormat="F1" Delta="0.1" Min="1" Max="100000" DefaultMin="1" DefaultMax="1000" BeginEdit="Sidebar_Edit" EndEdit="Sidebar_Edit"/>
+                        </Grid>
+                            </StackPanel>
+
+                            <StackPanel Visibility="{Binding HasHidden, Converter={StaticResource VisibleWhenTrue}}" Margin="0,0,0,8">
+                                <TextBlock Text="隠しているもの" Style="{StaticResource SideHeader}"/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{Binding HiddenText}" VerticalAlignment="Center" Margin="6,0,0,0"/>
+                                    <Button Grid.Column="1" Content="すべて表示" Command="{Binding DataContext.RevealCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                                </Grid>
+                            </StackPanel>
+
+                            <StackPanel Visibility="{Binding IsUv, Converter={StaticResource VisibleWhenTrue}}" Margin="0,0,0,8">
+                                <TextBlock Text="UV" Style="{StaticResource SideHeader}"/>
+                                <StackPanel Visibility="{Binding HasUvSelection, Converter={StaticResource VisibleWhenTrue}}">
+                                    <Grid Margin="0,0,0,2">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="80"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Label Content="U" Style="{StaticResource SideLabel}"/>
+                                        <c:TextBoxSlider Grid.Column="1" Value="{Binding UvU, Mode=TwoWay}" Unit="" IsUnitVisible="False" StringFormat="F3" Delta="0.001" Min="-100" Max="100" DefaultMin="0" DefaultMax="1" BeginEdit="Sidebar_Edit" EndEdit="Sidebar_Edit"/>
+                                    </Grid>
+                                    <Grid Margin="0,0,0,2">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="80"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Label Content="V" Style="{StaticResource SideLabel}"/>
+                                        <c:TextBoxSlider Grid.Column="1" Value="{Binding UvV, Mode=TwoWay}" Unit="" IsUnitVisible="False" StringFormat="F3" Delta="0.001" Min="-100" Max="100" DefaultMin="0" DefaultMax="1" BeginEdit="Sidebar_Edit" EndEdit="Sidebar_Edit"/>
+                                    </Grid>
+                                </StackPanel>
+                                <UniformGrid Columns="2">
+                                    <Button Content="展開" Command="{Binding DataContext.MeshCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="Unwrap"/>
+                                    <Button Content="スマート UV 投影" Command="{Binding DataContext.MeshCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="SmartProject"/>
+                                    <Button Content="立方体で投影" Command="{Binding DataContext.MeshCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="CubeProject"/>
+                                    <Button Content="円柱で投影" Command="{Binding DataContext.MeshCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="CylinderProject"/>
+                                    <Button Content="球で投影" Command="{Binding DataContext.MeshCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="SphereProject"/>
+                                    <Button Content="ビューから投影" Command="{Binding DataContext.MeshCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="ViewProject"/>
+                                    <Button Content="リセット" Command="{Binding DataContext.MeshCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="ResetUvs"/>
+                                    <Button Content="島を並べる" Command="{Binding DataContext.MeshCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="PackIslands"/>
+                                </UniformGrid>
+                            </StackPanel>
+
+                            <StackPanel Visibility="{Binding HasShapeKeys, Converter={StaticResource VisibleWhenTrue}}" Margin="0,0,0,8">
+                                <TextBlock Text="シェイプキー" Style="{StaticResource SideHeader}"/>
+                                <ComboBox ItemsSource="{Binding ShapeKeys}" SelectedIndex="{Binding ShapeKeyIndex}" ToolTip="編集する形。「基準」以外を選ぶと、動かした量がそのキーの形として覚えられます"/>
+                            </StackPanel>
+
+                            <StackPanel Visibility="{Binding HasMaterials, Converter={StaticResource VisibleWhenTrue}}" Margin="0,0,0,8">
+                                <TextBlock Text="材質" Style="{StaticResource SideHeader}"/>
+                                <ComboBox Margin="0,0,0,2" ItemsSource="{Binding Materials}" SelectedIndex="{Binding MaterialIndex}"/>
+                                <UniformGrid Columns="3">
+                                    <Button Content="割り当て" ToolTip="選んだ面をこの材質で塗ります" Command="{Binding AssignMaterialCommand}"/>
+                                    <Button Content="選ぶ" ToolTip="この材質の面を選びます" Command="{Binding SelectMaterialCommand}"/>
+                                    <Button Content="外す" ToolTip="この材質の面を選びから外します" Command="{Binding DeselectMaterialCommand}"/>
+                                </UniformGrid>
+                            </StackPanel>
+
+                        <TextBlock Text="3Dカーソル" Style="{StaticResource SideHeader}"/>
+                        <Grid Margin="0,0,0,2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="80"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Label Content="X" Style="{StaticResource SideLabel}"/>
+                            <c:TextBoxSlider Grid.Column="1" Value="{Binding CursorX, Mode=TwoWay}" Unit="px" StringFormat="F1" Delta="0.1" Min="-100000" Max="100000" DefaultMin="-1000" DefaultMax="1000" BeginEdit="Sidebar_Edit" EndEdit="Sidebar_Edit"/>
+                        </Grid>
+                        <Grid Margin="0,0,0,2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="80"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Label Content="Y" Style="{StaticResource SideLabel}"/>
+                            <c:TextBoxSlider Grid.Column="1" Value="{Binding CursorY, Mode=TwoWay}" Unit="px" StringFormat="F1" Delta="0.1" Min="-100000" Max="100000" DefaultMin="-1000" DefaultMax="1000" BeginEdit="Sidebar_Edit" EndEdit="Sidebar_Edit"/>
+                        </Grid>
+                        <Grid Margin="0,0,0,2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="80"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Label Content="Z" Style="{StaticResource SideLabel}"/>
+                            <c:TextBoxSlider Grid.Column="1" Value="{Binding CursorZ, Mode=TwoWay}" Unit="px" StringFormat="F1" Delta="0.1" Min="-100000" Max="100000" DefaultMin="-1000" DefaultMax="1000" BeginEdit="Sidebar_Edit" EndEdit="Sidebar_Edit"/>
+                        </Grid>
+                        </StackPanel>
+
+                        <TextBlock Visibility="{Binding IsIdle, Converter={StaticResource VisibleWhenTrue}}" Text="編集モードに入るとパラメーターが表示されます" TextWrapping="Wrap" Foreground="#FFB0B0B0" Margin="6,0,0,0"/>
+                    </StackPanel>
+                </ScrollViewer>
+                </Border>
+            </DockPanel>
         </Grid>
     </Grid>
 </UserControl>

@@ -10,11 +10,7 @@ namespace Extrusion3D
     internal sealed class Extrusion3DProcessor(Extrusion3DEffect effect, IGraphicsDevicesAndContext devices) : VideoEffect3DProcessorBase(effect, devices)
     {
         private readonly Extrusion3DEffect effect = effect;
-        private readonly DeviceResourceCache<RenderPipeline<TransformConstants>> pipelines = new(
-                device => new RenderPipeline<TransformConstants>(
-                    device,
-                    BoxMesh.CreateExtrusionBox(device),
-                    new ExtrusionMaterial(device)));
+        private readonly DeviceResourceCache<RenderPipeline<TransformConstants>> pipelines = new(device => new RenderPipeline<TransformConstants>(device, BoxMesh.CreateExtrusionBox(device), new ExtrusionMaterial(device)));
 
         protected override bool KeepsGroupMemberSolid => true;
 
@@ -24,49 +20,37 @@ namespace Extrusion3D
                 return;
 
             var texture = item.Texture ?? GetTexture(render.Device);
+
             if (texture is null)
                 return;
 
-            var time = EffectDescription is { } description
-                ? FrameContext.FromItem(description)
-                : item.Time;
-
+            var time = EffectDescription is { } description ? FrameContext.FromItem(description) : item.Time;
             var thickness = GetThickness(time);
+
             if (thickness <= 0)
+                return;
+
+            if (!pipelines.TryGet(render.Device, out var pipeline))
                 return;
 
             var world = Matrix4x4.CreateScale(1f, 1f, thickness) * item.World;
 
             Matrix4x4.Invert(world, out var inverseWorld);
-            var cameraLocalPos = Vector3.Transform(render.GetCameraPosition(), inverseWorld);
 
             var scene = render.CreateConstants(world, item, effect.IsUnlit, effect.GetGloss(time));
-            var constants = new ExtrusionConstants
-            {
-                SideColor = effect.SideColor.ToVector4(),
-                CameraLocalPos = cameraLocalPos,
-                ExtrusionType = (int)effect.ExtrusionType,
-            };
-
-            if (!pipelines.TryGet(render.Device, out var pipeline))
-                return;
-
+            var constants = new ExtrusionConstants { SideColor = effect.SideColor.ToVector4(), CameraLocalPos = Vector3.Transform(render.GetCameraPosition(), inverseWorld), ExtrusionType = (int)effect.ExtrusionType };
             var settings = item.ToDrawSettings(FaceCulling.Front, texture) with { Blend = BlendMode.Normal };
+
             pipeline.Draw(render.Context, scene, constants, settings);
         }
 
-        private float GetThickness(in FrameContext time)
-            => WorldScale.ToWorld(effect.Thickness.GetFloat(time));
+        private float GetThickness(in FrameContext time) => WorldScale.ToWorld(effect.Thickness.GetFloat(time));
 
         protected override WorldBounds GetLocalBounds(in FrameContext itemTime)
         {
             var thickness = GetThickness(itemTime);
-            if (thickness <= 0)
-                return WorldBounds.Empty;
 
-            return new WorldBounds(
-                new Vector3(-0.5f, -0.5f, 0f),
-                new Vector3(0.5f, 0.5f, thickness));
+            return thickness <= 0 ? WorldBounds.Empty : new WorldBounds(new Vector3(-0.5f, -0.5f, 0f), new Vector3(0.5f, 0.5f, thickness));
         }
 
         public override void Dispose()

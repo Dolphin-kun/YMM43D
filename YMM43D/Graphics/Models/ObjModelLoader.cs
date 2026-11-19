@@ -192,9 +192,7 @@ namespace YMM43D.Graphics.Models
 
             for (var i = 1; i + 1 < corners.Count; i++)
             {
-                sum += Vector3.Cross(
-                    positions[corners[i].Position] - origin,
-                    positions[corners[i + 1].Position] - origin);
+                sum += Vector3.Cross(positions[corners[i].Position] - origin, positions[corners[i + 1].Position] - origin);
             }
 
             return sum.LengthSquared() > 1e-20f ? Vector3.Normalize(sum) : Vector3.UnitZ;
@@ -212,8 +210,11 @@ namespace YMM43D.Graphics.Models
 
         private static int? Resolve(string text, int count)
         {
-            if (text.Length == 0 || !int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var number))
+            if (text.Length == 0
+                || !int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var number))
+            {
                 return null;
+            }
 
             var index = number < 0 ? count + number : number - 1;
 
@@ -356,8 +357,7 @@ namespace YMM43D.Graphics.Models
             return reference.Length > 0 ? reference : null;
         }
 
-        private static ModelSurface SurfaceOf(
-            Material material, string modelDirectory, Dictionary<string, int> images, ModelBuilder builder)
+        private static ModelSurface SurfaceOf(Material material, string modelDirectory, Dictionary<string, int> images, ModelBuilder builder)
         {
             var bump = ImageOf(material, material.Bump, modelDirectory, images, builder);
             var glow = ImageOf(material, material.Glow, modelDirectory, images, builder);
@@ -372,12 +372,7 @@ namespace YMM43D.Graphics.Models
             return ModelSurface.Default with { BumpImage = bump, GlowImage = glow, Glow = color };
         }
 
-        private static int ImageOf(
-            Material material,
-            string? wanted,
-            string modelDirectory,
-            Dictionary<string, int> images,
-            ModelBuilder builder)
+        private static int ImageOf(Material material, string? wanted, string modelDirectory, Dictionary<string, int> images, ModelBuilder builder)
         {
             if (wanted is not { } texture)
                 return -1;
@@ -479,8 +474,7 @@ namespace YMM43D.Graphics.Models
             return space < 0 ? string.Empty : line[space..].Trim();
         }
 
-        private static bool IsNumber(string text)
-            => float.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out _);
+        private static bool IsNumber(string text) => float.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out _);
 
         private static float Number(string[] parts, int index)
             => index < parts.Length && float.TryParse(parts[index], NumberStyles.Float, CultureInfo.InvariantCulture, out var value)

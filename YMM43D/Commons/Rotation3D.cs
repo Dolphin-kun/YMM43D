@@ -24,8 +24,7 @@ namespace YMM43D.Commons
                 ? (MathF.Atan2(-rotation.M32, rotation.M22), 0f)
                 : (MathF.Atan2(rotation.M23, rotation.M33), MathF.Atan2(rotation.M12, rotation.M11));
 
-            return new Vector3(
-                float.RadiansToDegrees(x), float.RadiansToDegrees(y), float.RadiansToDegrees(z));
+            return new Vector3(float.RadiansToDegrees(x), float.RadiansToDegrees(y), float.RadiansToDegrees(z));
         }
     }
 }

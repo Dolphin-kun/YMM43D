@@ -1,5 +1,4 @@
 using System.Numerics;
-using System.Runtime.InteropServices;
 using Vortice.Direct3D11;
 using YMM43D.Commons;
 using YMM43D.Graphics;
@@ -9,17 +8,7 @@ using YukkuriMovieMaker.Commons;
 
 namespace BeamLight3D
 {
-    [StructLayout(LayoutKind.Sequential)]
-    internal struct BeamConstants
-    {
-        public Vector4 Color;
-
-        public Vector4 Shape;
-    }
-
-    internal sealed class BeamLight3DSource(
-        IGraphicsDevicesAndContext devices, BeamLight3DParameter parameter)
-        : Shape3DSourceBase(devices)
+    internal sealed class BeamLight3DSource(IGraphicsDevicesAndContext devices, BeamLight3DParameter parameter) : Shape3DSourceBase(devices)
     {
         private const int BoundsRimPoints = 12;
 
@@ -33,16 +22,17 @@ namespace BeamLight3D
 
             var world = parameter.GetLocalMatrix(item.Time) * item.World;
             var scene = render.CreateConstants(world, item.Opacity, unlit: true);
-
             var mesh = shared.GetMesh(BeamShape.Create(parameter.Detail, parameter.EdgeBlur));
 
-            shared.Pipeline.Draw(render.Context, scene, Constants(item.Time), new DrawSettings
+            var settings = new DrawSettings
             {
                 Blend = BlendMode.Accumulate,
                 Culling = FaceCulling.None,
                 IgnoreDepth = item.IsAlwaysOnTop,
                 SkipDepthWrite = true,
-            }, mesh);
+            };
+
+            shared.Pipeline.Draw(render.Context, scene, Constants(item.Time), settings, mesh);
         }
 
         private BeamConstants Constants(in FrameContext itemTime) => new()
@@ -51,8 +41,7 @@ namespace BeamLight3D
             Shape = new Vector4(ToExponent(parameter.Decay.GetFloat(itemTime)), 0f, 0f, 0f),
         };
 
-        private static float ToExponent(float percent)
-            => MathF.Pow(2f, (Math.Clamp(percent, 0f, 100f) - 50f) / 25f);
+        private static float ToExponent(float percent) => MathF.Pow(2f, (Math.Clamp(percent, 0f, 100f) - 50f) / 25f);
 
         protected override WorldBounds GetWorldBounds(in FrameContext itemTime)
         {
@@ -80,10 +69,7 @@ namespace BeamLight3D
         {
             private BeamMesh? mesh;
 
-            public RenderPipeline<TransformConstants> Pipeline { get; } = new(
-                device,
-                BeamVertex.InputElements,
-                new ShaderMaterial(device, typeof(BeamResources).Assembly, "Beam.hlsl"));
+            public RenderPipeline<TransformConstants> Pipeline { get; } = new(device, BeamVertex.InputElements, new ShaderMaterial(device, typeof(BeamResources).Assembly, "Beam.hlsl"));
 
             public BeamMesh GetMesh(in BeamShape shape)
             {

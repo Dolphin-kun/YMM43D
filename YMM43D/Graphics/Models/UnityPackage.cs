@@ -9,7 +9,6 @@ namespace YMM43D.Graphics.Models
     internal sealed partial class UnityPackage
     {
         private const long SmallAsset = 1 << 20;
-
         private const long KeepAtMost = 32L << 20;
 
         private static readonly string[] MainTextureNames =
@@ -132,8 +131,7 @@ namespace YMM43D.Graphics.Models
             }
         }
 
-        private static string? TextureOf(
-            Dictionary<string, string> paths, Dictionary<string, byte[]> kept, string material)
+        private static string? TextureOf(Dictionary<string, string> paths, Dictionary<string, byte[]> kept, string material)
         {
             foreach (var (guid, path) in paths)
             {
@@ -167,8 +165,7 @@ namespace YMM43D.Graphics.Models
             return best.Guid;
         }
 
-        private static bool Is(string path, string name)
-            => string.Equals(Path.GetFileName(path), name, StringComparison.OrdinalIgnoreCase);
+        private static bool Is(string path, string name) => string.Equals(Path.GetFileName(path), name, StringComparison.OrdinalIgnoreCase);
 
         private static string? MainTexture(string material)
         {

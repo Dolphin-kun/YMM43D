@@ -7,6 +7,24 @@
 Texture2D    txDiffuse : register(t0);
 SamplerState samLinear : register(s0);
 
+#ifdef DEFORM_SOLID
+struct VS_IN
+{
+    float3 Position : POSITION;
+    float4 Color    : COLOR;
+    float3 Normal   : NORMAL;
+    float3 Piece    : PIECE;
+};
+
+struct PS_IN
+{
+    float4 Position : SV_POSITION;
+    float4 Color    : COLOR;
+    float3 Nrm      : NORMAL;
+    float3 World    : TEXCOORD1;
+    float  Fade     : TEXCOORD2;
+};
+#else
 struct VS_IN
 {
     float3 Position : POSITION;
@@ -23,6 +41,7 @@ struct PS_IN
     float3 World    : TEXCOORD1;
     float  Fade     : TEXCOORD2;
 };
+#endif
 
 #ifdef DEFORM_SUPPLIED
 float3 Deform(float3 local, float3 piece);
@@ -34,6 +53,38 @@ float  DeformFade(float3 local, float3 piece) { return 1.0; }
 
 static const float NormalStep = 1.0 / 512.0;
 
+#ifdef DEFORM_SOLID
+PS_IN VSMain(VS_IN input)
+{
+    float3 here = Deform(input.Position, input.Piece);
+    float3 tip  = Deform(input.Position + input.Normal * NormalStep, input.Piece);
+
+    float3 turned = tip - here;
+
+    PS_IN output;
+    output.Position = mul(float4(here, 1.0), WorldViewProjection);
+    output.Color    = input.Color;
+    output.Nrm      = mul(
+        float4(dot(turned, turned) > 1e-16 ? normalize(turned) : input.Normal, 0.0), WorldInverse).xyz;
+    output.World    = mul(float4(here, 1.0), World).xyz;
+    output.Fade     = DeformFade(input.Position, input.Piece);
+    return output;
+}
+
+float4 PSMain(PS_IN input) : SV_TARGET
+{
+    float4 color = input.Color;
+
+    color.a *= input.Fade;
+
+    clip(color.a - AlphaCutoff);
+
+    color.rgb = ApplyLight(color.rgb, input.Nrm, input.World);
+    color.rgb = ApplyFog(color.rgb, input.World);
+    color.a *= Opacity;
+    return color;
+}
+#else
 PS_IN VSMain(VS_IN input)
 {
     float3 here   = Deform(input.Position, input.Piece);
@@ -62,6 +113,7 @@ float4 PSMain(PS_IN input) : SV_TARGET
     color.a *= Opacity;
     return color;
 }
+#endif
 
 float3 PieceNoise(float3 piece, float seed)
 {

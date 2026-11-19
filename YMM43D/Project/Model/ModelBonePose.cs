@@ -23,23 +23,21 @@ namespace YMM43D.Project.Model
         }
         private string name = string.Empty;
 
-        [Display(GroupName = Group, Name = "回転X", Description = "ボーンそのものを軸にして回します")]
+        [Display(GroupName = Group, Name = "回転X", Description = "ボーン自身の X 軸まわりの回転")]
         [AnimationSlider("F1", "°", -180, 180)]
         public Animation RotationX { get; } = new(0, -100000, 100000);
 
-        [Display(GroupName = Group, Name = "回転Y")]
+        [Display(GroupName = Group, Name = "回転Y", Description = "ボーン自身の Y 軸まわりの回転")]
         [AnimationSlider("F1", "°", -180, 180)]
         public Animation RotationY { get; } = new(0, -100000, 100000);
 
-        [Display(GroupName = Group, Name = "回転Z")]
+        [Display(GroupName = Group, Name = "回転Z", Description = "ボーン自身の Z 軸まわりの回転")]
         [AnimationSlider("F1", "°", -180, 180)]
         public Animation RotationZ { get; } = new(0, -100000, 100000);
 
-        [Display(GroupName = Group, Name = "揺らす",
-            Description = "このボーンから下を揺らします")]
+        [Display(GroupName = Group, Name = "揺らす", Description = "このボーンから下を揺らします")]
         [ToggleSlider]
-        public bool Swings { get => swings; set => Set(ref swings, value); }
-        private bool swings;
+        public bool Swings { get; set => Set(ref field, value); }
 
         public ModelBonePose()
         {
@@ -47,20 +45,14 @@ namespace YMM43D.Project.Model
 
         public ModelBonePose(string name) => this.name = name;
 
-        internal Matrix4x4 GetRotation(in FrameContext time)
-            => Rotation3D.ForObject(
-                RotationX.GetFloat(time), RotationY.GetFloat(time), RotationZ.GetFloat(time));
+        internal Matrix4x4 GetRotation(in FrameContext time) => Rotation3D.ForObject(RotationX.GetFloat(time), RotationY.GetFloat(time), RotationZ.GetFloat(time));
 
-        internal bool IsUntouched
-            => !Swings && Untouched(RotationX) && Untouched(RotationY) && Untouched(RotationZ);
+        internal bool IsUntouched => !Swings && Untouched(RotationX) && Untouched(RotationY) && Untouched(RotationZ);
 
-        private static bool Untouched(Animation animation)
-            => animation.Values.Count == 1 && animation.Values[0].Value == 0;
+        private static bool Untouched(Animation animation) => animation.Values.Count == 1 && animation.Values[0].Value == 0;
 
         internal bool IsStill(in FrameContext time)
-            => RotationX.GetFloat(time) == 0f
-            && RotationY.GetFloat(time) == 0f
-            && RotationZ.GetFloat(time) == 0f;
+            => RotationX.GetFloat(time) == 0f && RotationY.GetFloat(time) == 0f && RotationZ.GetFloat(time) == 0f;
 
         protected override IEnumerable<IAnimatable> GetAnimatables() => [RotationX, RotationY, RotationZ];
     }

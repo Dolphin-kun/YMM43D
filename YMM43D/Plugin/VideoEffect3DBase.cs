@@ -1,4 +1,4 @@
-using System.ComponentModel;
+using System.Numerics;
 using Vortice.Direct3D11;
 using YMM43D.Commons;
 using YukkuriMovieMaker.Commons;
@@ -6,8 +6,7 @@ using YukkuriMovieMaker.Plugin.Effects;
 
 namespace YMM43D.Plugin
 {
-    public abstract class VideoEffect3DBase
-        : VideoEffectBase, I3DVideoEffect, ICameraSync, I3DSizeProvider, I3DLocalTransform, I3DBounds, I3DInstances
+    public abstract class VideoEffect3DBase : VideoEffectBase, I3DVideoEffect, ICameraSync, I3DSizeProvider, I3DLocalTransform, I3DBounds, I3DInstances
     {
         private static readonly object UnknownDevices = new();
 
@@ -17,20 +16,11 @@ namespace YMM43D.Plugin
         private readonly Dictionary<object, Channel> channels = new(ReferenceEqualityComparer.Instance);
         private readonly Dictionary<I3DProvider, (int Layer, int Input)> placedAt = new(ReferenceEqualityComparer.Instance);
 
-        private sealed class Channel
-        {
-            public I3DProvider? Latest { get; set; }
-
-            public I3DProvider?[] Inputs { get; set; } = [];
-        }
-
         protected VideoEffect3DBase()
         {
             cameraSync.Changed += () => OnPropertyChanged(nameof(CameraSyncAnimation));
         }
 
-        [Browsable(false)]
-        [EditorBrowsable(EditorBrowsableState.Never)]
         public Animation CameraSyncAnimation => cameraSync.Value;
 
         protected I3DProvider? Processor { get; private set; }
@@ -178,8 +168,7 @@ namespace YMM43D.Plugin
             return channel;
         }
 
-        public virtual void Draw(in Render3DContext render, DrawContext3D item)
-            => ProcessorFor(render.SourceDevices)?.Draw(render, item);
+        public virtual void Draw(in Render3DContext render, DrawContext3D item) => ProcessorFor(render.SourceDevices)?.Draw(render, item);
 
         public virtual WorldBounds GetLocalBounds(in FrameContext itemTime)
             => Processor is I3DBounds provider ? provider.GetLocalBounds(itemTime) : WorldBounds.Empty;
@@ -187,16 +176,16 @@ namespace YMM43D.Plugin
         public virtual ID3D11ShaderResourceView? GetTexture(ID3D11Device device)
             => Processor is I3DTextureProvider provider ? provider.GetTexture(device) : null;
 
-        public virtual bool TryGetLocalMatrix(out System.Numerics.Matrix4x4 matrix)
+        public virtual bool TryGetLocalMatrix(out Matrix4x4 matrix)
         {
             if (Processor is I3DLocalTransform provider)
                 return provider.TryGetLocalMatrix(out matrix);
 
-            matrix = System.Numerics.Matrix4x4.Identity;
+            matrix = Matrix4x4.Identity;
             return false;
         }
 
-        public virtual bool TryGetSize(out System.Numerics.Vector2 size, out System.Numerics.Vector2 offset)
+        public virtual bool TryGetSize(out Vector2 size, out Vector2 offset)
         {
             if (Processor is I3DSizeProvider provider)
                 return provider.TryGetSize(out size, out offset);
@@ -206,7 +195,13 @@ namespace YMM43D.Plugin
             return false;
         }
 
-        public virtual bool ScalesToInputSize
-            => Processor is not I3DSizeProvider provider || provider.ScalesToInputSize;
+        public virtual bool ScalesToInputSize => Processor is not I3DSizeProvider provider || provider.ScalesToInputSize;
+
+        private sealed class Channel
+        {
+            public I3DProvider? Latest { get; set; }
+
+            public I3DProvider?[] Inputs { get; set; } = [];
+        }
     }
 }

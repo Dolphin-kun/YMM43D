@@ -1,5 +1,6 @@
-using System.Reflection;
+﻿using System.Reflection;
 using Vortice.Direct3D11;
+using YMM43D.Commons;
 using YukkuriMovieMaker.Commons;
 
 namespace YMM43D.Graphics.Materials
@@ -7,7 +8,6 @@ namespace YMM43D.Graphics.Materials
     public class ShaderMaterial : IMaterial
     {
         private const string VertexProfile = "vs_5_0";
-
         private const string PixelProfile = "ps_5_0";
 
         private readonly DisposeCollector disposer = new();
@@ -23,23 +23,30 @@ namespace YMM43D.Graphics.Materials
         {
         }
 
+        public ShaderMaterial(ID3D11Device device, Assembly assembly, string shader, string? prelude)
+            : this(device, assembly, shader, "VSMain", shader, "PSMain", prelude)
+        {
+        }
+
         public ShaderMaterial(
             ID3D11Device device,
             Assembly assembly,
             string vertexShader,
             string vertexEntryPoint,
             string pixelShader,
-            string pixelEntryPoint)
+            string pixelEntryPoint,
+            string? prelude = null)
         {
-            VertexShaderBytecode = ShaderLibrary.Compile(assembly, vertexShader, vertexEntryPoint, VertexProfile);
-            VertexShader = device.CreateVertexShader(VertexShaderBytecode);
-            disposer.Collect(VertexShader);
+            VertexShaderBytecode = ShaderLibrary.Compile(assembly, vertexShader, vertexEntryPoint, VertexProfile, prelude);
+            VertexShader = disposer.CollectEx(device.CreateVertexShader(VertexShaderBytecode));
 
-            PixelShader = device.CreatePixelShader(
-                ShaderLibrary.Compile(assembly, pixelShader, pixelEntryPoint, PixelProfile));
-            disposer.Collect(PixelShader);
+            PixelShader = disposer.CollectEx(device.CreatePixelShader(ShaderLibrary.Compile(assembly, pixelShader, pixelEntryPoint, PixelProfile, prelude)));
         }
 
-        public void Dispose() => disposer.Dispose();
+        public void Dispose()
+        {
+            disposer.Dispose();
+            GC.SuppressFinalize(this);
+        }
     }
 }

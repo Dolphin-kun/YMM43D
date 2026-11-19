@@ -1,14 +1,7 @@
-using System.Numerics;
+﻿using System.Numerics;
 
 namespace YMM43D.Graphics.Meshes
 {
-    public readonly record struct MeshEdge(int A, int B)
-    {
-        public int Other(int vertex) => vertex == A ? B : A;
-
-        public bool Holds(int vertex) => vertex == A || vertex == B;
-    }
-
     public sealed class MeshTopology
     {
         private const float Weld = 1e-4f;
@@ -31,7 +24,15 @@ namespace YMM43D.Graphics.Meshes
 
         public int[][] FaceEdges { get; }
 
-        public MeshTopology(Vector3[] points, int[][] faces, int[] groups, bool[] smooth, int groupCount)
+        public MeshEdge[] LooseEdges { get; }
+
+        public IReadOnlyDictionary<MeshEdge, EdgeMark> Marks { get; }
+
+        public Vector2[][]? Uvs { get; }
+
+        public Vector3[][]? Keys { get; }
+
+        public MeshTopology(Vector3[] points, int[][] faces, int[] groups, bool[] smooth, int groupCount, IEnumerable<MeshEdge>? looseEdges = null, IReadOnlyDictionary<MeshEdge, EdgeMark>? marks = null, Vector2[][]? uvs = null, Vector3[][]? keys = null)
         {
             Points = points;
             Faces = faces;
@@ -79,11 +80,59 @@ namespace YMM43D.Graphics.Meshes
                 faceEdges[f] = found;
             }
 
+            var loose = new List<MeshEdge>();
+
+            foreach (var edge in looseEdges ?? [])
+            {
+                if (edge.A == edge.B || edge.A < 0 || edge.B < 0 || edge.A >= points.Length || edge.B >= points.Length)
+                    continue;
+
+                var key = edge.A < edge.B ? (edge.A, edge.B) : (edge.B, edge.A);
+
+                if (numbers.ContainsKey(key))
+                    continue;
+
+                numbers[key] = edges.Count;
+                edges.Add(new MeshEdge(key.Item1, key.Item2));
+                edgeFaces.Add([]);
+                vertexEdges[key.Item1].Add(numbers[key]);
+                vertexEdges[key.Item2].Add(numbers[key]);
+                loose.Add(new MeshEdge(key.Item1, key.Item2));
+            }
+
+            LooseEdges = [.. loose];
             Edges = [.. edges];
+            Marks = (marks ?? new Dictionary<MeshEdge, EdgeMark>())
+                .Select(pair => (Key: Key(pair.Key.A, pair.Key.B), pair.Value))
+                .Where(pair => !pair.Value.IsEmpty && numbers.ContainsKey((pair.Key.A, pair.Key.B)))
+                .GroupBy(pair => pair.Key)
+                .ToDictionary(group => group.Key, group => group.Last().Value);
+            Uvs = uvs is not null && uvs.Length == faces.Length && uvs.Select((one, face) => one.Length == faces[face].Length).All(fits => fits) ? uvs : null;
+            Keys = keys is { Length: > 0 } && keys.All(key => key.Length == points.Length) ? keys : null;
             FaceEdges = faceEdges;
             EdgeFaces = [.. edgeFaces.Select(one => one.ToArray())];
             VertexEdges = [.. vertexEdges.Select(one => one.ToArray())];
         }
+
+        public MeshTopology With(Vector3[] points, IEnumerable<int[]> faces, IEnumerable<int> groups, IEnumerable<bool> smooth)
+            => new(points, [.. faces], [.. groups], [.. smooth], GroupCount, LooseEdges, Marks);
+
+        public MeshTopology WithMarks(IReadOnlyDictionary<MeshEdge, EdgeMark> marks)
+            => new(Points, Faces, Groups, Smooth, GroupCount, LooseEdges, marks, Uvs, Keys);
+
+        public MeshTopology WithUvs(Vector2[][]? uvs)
+            => new(Points, Faces, Groups, Smooth, GroupCount, LooseEdges, Marks, uvs, Keys);
+
+        public MeshTopology WithKeys(Vector3[][]? keys)
+            => new(Points, Faces, Groups, Smooth, GroupCount, LooseEdges, Marks, Uvs, keys);
+
+        public static MeshEdge Key(int a, int b) => a < b ? new MeshEdge(a, b) : new MeshEdge(b, a);
+
+        public EdgeMark MarkOf(int edge) => edge >= 0 && edge < Edges.Length && Marks.TryGetValue(Edges[edge], out var mark) ? mark : default;
+
+        public bool IsLoose(int edge) => EdgeFaces[edge].Length == 0;
+
+        public bool IsBoundary(int edge) => EdgeFaces[edge].Length == 1;
 
         public static MeshTopology FromGeometry(SurfaceGeometry geometry)
         {
@@ -139,43 +188,7 @@ namespace YMM43D.Graphics.Meshes
 
         private static long Quantize(float value) => (long)MathF.Round(value / Weld);
 
-        public SurfaceGeometry ToGeometry()
-        {
-            var faceNormals = new Vector3[Faces.Length];
-
-            for (var f = 0; f < Faces.Length; f++)
-                faceNormals[f] = NormalOf(f);
-
-            var normals = new Vector3[Points.Length];
-            var smoothed = new Vector3[Points.Length];
-
-            for (var f = 0; f < Faces.Length; f++)
-            {
-                foreach (var corner in Faces[f])
-                {
-                    normals[corner] += faceNormals[f];
-
-                    if (Smooth[f])
-                        smoothed[corner] += faceNormals[f];
-                }
-            }
-
-            for (var i = 0; i < normals.Length; i++)
-            {
-                var chosen = smoothed[i].LengthSquared() > 1e-12f ? smoothed[i] : normals[i];
-
-                normals[i] = chosen.LengthSquared() > 1e-12f ? Vector3.Normalize(chosen) : Vector3.UnitY;
-            }
-
-            var faces = new SurfaceFace[Faces.Length];
-
-            for (var f = 0; f < Faces.Length; f++)
-                faces[f] = new SurfaceFace([.. Faces[f]], Groups[f], Smooth[f]);
-
-            return new SurfaceGeometry([.. Points], normals, faces, GroupCount);
-        }
-
-        private Vector3 NormalOf(int face)
+        public Vector3 NormalOf(int face)
         {
             var corners = Faces[face];
             var sum = Vector3.Zero;
@@ -221,6 +234,9 @@ namespace YMM43D.Graphics.Meshes
             if (edge < 0 || edge >= Edges.Length)
                 return [];
 
+            if (IsBoundary(edge) && WalkAlongBorder(edge) is { Length: > 1 } rim)
+                return rim;
+
             var found = WalkAcrossVertices(edge);
 
             if (found.Length > 1)
@@ -262,6 +278,31 @@ namespace YMM43D.Graphics.Meshes
                     loop.Add(next);
                     at = Edges[next].Other(at);
                     current = next;
+                }
+            }
+
+            return [.. loop];
+        }
+
+        private int[] WalkAlongBorder(int start)
+        {
+            var loop = new List<int> { start };
+            var taken = new HashSet<int> { start };
+
+            foreach (var end in new[] { Edges[start].A, Edges[start].B })
+            {
+                var at = end;
+
+                while (true)
+                {
+                    var next = VertexEdges[at].Where(one => IsBoundary(one) && !taken.Contains(one)).ToArray();
+
+                    if (next.Length != 1)
+                        break;
+
+                    taken.Add(next[0]);
+                    loop.Add(next[0]);
+                    at = Edges[next[0]].Other(at);
                 }
             }
 
@@ -400,9 +441,7 @@ namespace YMM43D.Graphics.Meshes
             if (split == 0)
                 return null;
 
-            return (
-                new MeshTopology([.. points], [.. faces], [.. groups], [.. smooth], GroupCount),
-                [.. added]);
+            return (With([.. points], faces, groups, smooth), [.. added]);
         }
 
         private int CutCorner(int face, HashSet<int> onRing)
@@ -433,9 +472,7 @@ namespace YMM43D.Graphics.Meshes
 
             for (var i = 0; i < normals.Length; i++)
             {
-                normals[i] = normals[i].LengthSquared() > 1e-12f
-                    ? Vector3.Normalize(normals[i])
-                    : Vector3.Zero;
+                normals[i] = normals[i].LengthSquared() > 1e-12f ? Vector3.Normalize(normals[i]) : Vector3.Zero;
             }
 
             return normals;
@@ -483,10 +520,13 @@ namespace YMM43D.Graphics.Meshes
             EdgeFaces = from.EdgeFaces;
             VertexEdges = from.VertexEdges;
             FaceEdges = from.FaceEdges;
+            LooseEdges = from.LooseEdges;
+            Marks = from.Marks;
+            Uvs = from.Uvs;
+            Keys = from.Keys;
         }
 
-        public MeshTopology WithPoints(Vector3[] points)
-            => points.Length != Points.Length ? this : new MeshTopology(this, points);
+        public MeshTopology WithPoints(Vector3[] points) => points.Length != Points.Length ? this : new MeshTopology(this, points);
 
         public Vector3 Middle(IReadOnlyCollection<int> vertices)
         {

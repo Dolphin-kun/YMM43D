@@ -6,26 +6,23 @@ namespace YMM43D.Commons
     {
         private const float MaxTangent = 64f;
 
-        public float Reach
-        {
-            get
-            {
-                var far = Origin + new Vector2(Width, Height);
-
-                var reach = MathF.Max(
-                    MathF.Max(MathF.Abs(Origin.X), MathF.Abs(far.X)),
-                    MathF.Max(MathF.Abs(Origin.Y), MathF.Abs(far.Y)));
-
-                return float.IsFinite(reach) ? reach : 0f;
-            }
-        }
-
         private static readonly (int From, int To)[] Edges =
         [
             (0, 1), (2, 3), (4, 5), (6, 7),
             (0, 2), (1, 3), (4, 6), (5, 7),
             (0, 4), (1, 5), (2, 6), (3, 7),
         ];
+
+        public float Reach
+        {
+            get
+            {
+                var far = Origin + new Vector2(Width, Height);
+                var reach = MathF.Max(MathF.Max(MathF.Abs(Origin.X), MathF.Abs(far.X)), MathF.Max(MathF.Abs(Origin.Y), MathF.Abs(far.Y)));
+
+                return float.IsFinite(reach) ? reach : 0f;
+            }
+        }
 
         public static RenderArea? Measure(
             in WorldBounds bounds,
@@ -47,7 +44,7 @@ namespace YMM43D.Commons
             for (var i = 0; i < corners.Length; i++)
                 corners[i] = Vector3.Transform(corners[i], worldView);
 
-            Span<Vector3> visiblePoints = stackalloc Vector3[WorldBounds.CornerCount + 12];
+            Span<Vector3> visiblePoints = stackalloc Vector3[WorldBounds.CornerCount + Edges.Length];
             var visibleCount = 0;
 
             foreach (var corner in corners)
@@ -128,48 +125,6 @@ namespace YMM43D.Commons
                 return null;
 
             return Vector3.Lerp(from, to, start / (start - end));
-        }
-    }
-
-    public readonly record struct ImageArea(Vector2 Min, Vector2 Max)
-    {
-        public static ImageArea Unbounded
-            => new(new Vector2(float.NegativeInfinity), new Vector2(float.PositiveInfinity));
-
-        public static ImageArea ForScreen(Vector2 screenSize, in ScreenPlacement placement, float margin)
-        {
-            if (!float.IsFinite(screenSize.X) || !float.IsFinite(screenSize.Y)
-                || screenSize.X <= 0f || screenSize.Y <= 0f)
-            {
-                return Unbounded;
-            }
-
-            var half = screenSize / 2f * (1f + margin);
-            var toImage = placement.ToImageSpace();
-
-            var min = new Vector2(float.MaxValue);
-            var max = new Vector2(float.MinValue);
-
-            Span<Vector2> corners =
-            [
-                new(-half.X, -half.Y),
-                new(half.X, -half.Y),
-                new(half.X, half.Y),
-                new(-half.X, half.Y),
-            ];
-
-            foreach (var corner in corners)
-            {
-                var image = Vector2.Transform(corner, toImage);
-
-                if (!float.IsFinite(image.X) || !float.IsFinite(image.Y))
-                    return Unbounded;
-
-                min = Vector2.Min(min, image);
-                max = Vector2.Max(max, image);
-            }
-
-            return new ImageArea(min, max);
         }
     }
 }

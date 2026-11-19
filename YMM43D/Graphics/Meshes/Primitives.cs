@@ -5,7 +5,6 @@ namespace YMM43D.Graphics.Meshes
     public static class Primitives
     {
         public const int MinSegments = 3;
-
         public const int MaxSegments = 128;
 
         public static SurfaceGeometry Plane() => new SurfaceGeometry(
@@ -253,9 +252,7 @@ namespace YMM43D.Graphics.Meshes
             return new SurfaceGeometry([.. vertices], [.. normals], [.. faces], 1).FacingOutward();
         }
 
-        private static void AddCap(
-            List<Vector3> vertices, List<Vector3> normals, List<SurfaceFace> faces,
-            int around, float height, int group)
+        private static void AddCap(List<Vector3> vertices, List<Vector3> normals, List<SurfaceFace> faces, int around, float height, int group)
         {
             var normal = new Vector3(0f, MathF.Sign(height), 0f);
             var first = vertices.Count;
@@ -277,9 +274,7 @@ namespace YMM43D.Graphics.Meshes
 
             for (var i = 0; i < vertices.Length; i++)
             {
-                normals[i] = vertices[i].LengthSquared() > 1e-12f
-                    ? Vector3.Normalize(vertices[i])
-                    : Vector3.UnitY;
+                normals[i] = vertices[i].LengthSquared() > 1e-12f ? Vector3.Normalize(vertices[i]) : Vector3.UnitY;
             }
 
             return new SurfaceGeometry(vertices, normals, faces, groups).FacingOutward();

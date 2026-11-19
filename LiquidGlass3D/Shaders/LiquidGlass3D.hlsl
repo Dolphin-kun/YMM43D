@@ -13,7 +13,7 @@ cbuffer GlassConstants : register(b1)
 };
 
 #define CornerRadius    GlassSize.w
-#define IsSphere        GlassCamera.w
+#define ShapeKind       GlassCamera.w
 #define RefractiveIndex GlassOptics.x
 #define BehindDistance  GlassOptics.y
 #define FrostAmount     GlassOptics.z
@@ -21,6 +21,14 @@ cbuffer GlassConstants : register(b1)
 #define ReflectionRate  GlassSurface.x
 #define SceneMipLevels  GlassSurface.y
 #define HasScene        GlassSurface.z
+
+#ifdef GLASS_FIELD
+Texture3D<float> ShapeField : register(t10);
+Texture3D<float4> NormalField : register(t11);
+#define NormalStep GlassSurface.w
+#else
+#define NormalStep 0.5
+#endif
 
 static const int MaxSteps = 64;
 static const int InsideSteps = 24;
@@ -70,14 +78,62 @@ float SphereDistance(float3 p)
     return length(p) - GlassSize.x * 0.5;
 }
 
+float CylinderDistance(float3 p)
+{
+    float2 d = abs(float2(length(p.xz), p.y)) - float2(GlassSize.x * 0.5, GlassSize.y * 0.5);
+
+    return min(max(d.x, d.y), 0.0) + length(max(d, 0.0));
+}
+
+float TorusDistance(float3 p)
+{
+    float tube = GlassSize.y * 0.5;
+    float ring = max(GlassSize.x * 0.5 - tube, 0.0);
+    float2 q = float2(length(p.xz) - ring, p.y);
+
+    return length(q) - tube;
+}
+
+float OctahedronDistance(float3 p)
+{
+    float3 q = abs(p);
+
+    return (q.x + q.y + q.z - GlassSize.x * 0.5) * 0.57735027;
+}
+
 float ShapeDistance(float3 p)
 {
-    return IsSphere > 0.5 ? SphereDistance(p) : RoundedBoxDistance(p);
+#ifdef GLASS_FIELD
+    return ShapeField.SampleLevel(SceneSampler, p / GlassSize.xyz + 0.5, 0.0);
+#else
+    int kind = (int)(ShapeKind + 0.5);
+
+    if (kind == 1)
+        return SphereDistance(p);
+
+    if (kind == 2)
+        return CylinderDistance(p);
+
+    if (kind == 3)
+        return TorusDistance(p);
+
+    if (kind == 4)
+        return OctahedronDistance(p);
+
+    return RoundedBoxDistance(p);
+#endif
 }
 
 float3 ShapeNormal(float3 p)
 {
-    const float e = 0.5;
+#ifdef GLASS_FIELD
+    float3 smooth = NormalField.SampleLevel(SceneSampler, p / GlassSize.xyz + 0.5, 0.0).xyz;
+
+    if (dot(smooth, smooth) > 1e-6)
+        return normalize(smooth);
+#endif
+
+    const float e = NormalStep;
     const float2 k = float2(1.0, -1.0);
 
     float3 n = k.xyy * ShapeDistance(p + k.xyy * e)

@@ -14,15 +14,11 @@ using YukkuriMovieMaker.Plugin.Voice;
 
 namespace YMM43D.Project.Tachie
 {
-    internal sealed class Model3DTachieSource(IGraphicsDevicesAndContext devices)
-        : ITachieSource2, I3DProvider, I3DBounds, I3DAlive
+    internal sealed class Model3DTachieSource(IGraphicsDevicesAndContext devices) : ITachieSource2, I3DProvider, I3DBounds, I3DAlive
     {
         private const float Margin = 1.4f;
-
         private const float Distance = 100f;
-
         private const int MaxSide = 4096;
-
         private const int NominalFps = 60;
 
         private readonly Renderer3DTo2D renderer = new();
@@ -36,9 +32,7 @@ namespace YMM43D.Project.Tachie
         private ID2D1Image? shown;
         private TachieLook? look;
         private object? registered;
-        private bool isDisposed;
-
-        public bool IsAlive => !isDisposed;
+        public bool IsAlive { get; private set; } = true;
 
         public bool RequiresMappedTexture => false;
 
@@ -114,13 +108,11 @@ namespace YMM43D.Project.Tachie
                 return;
             }
 
-            mouth.Advance(
-                shape, voice, character.MouthOpen / 100.0, character.MouthSmooth / 1000.0, frame, fps);
+            mouth.Advance(shape, voice, character.MouthOpen / 100.0, character.MouthSmooth / 1000.0, frame, fps);
 
             look = new TachieLook(model, character, faces, item, swing, tachieTime, mouth.Weights);
 
-            if (item is not null)
-                item.ModelFile = character.File;
+            item?.ModelFile = character.File;
 
             Remember(character);
 
@@ -129,15 +121,8 @@ namespace YMM43D.Project.Tachie
 
         private ID2D1Image InScene(TachieSourceDescription description)
         {
-            var image = placed.Render(
-                devices,
-                description,
-                Bounds(FrameContext.FromItem(description)),
-                Matrix4x4.Identity,
-                Draw,
-                out _,
-                self: this,
-                hostAppliesPlacement: true);
+            var bounds = Bounds(FrameContext.FromItem(description));
+            var image = placed.Render(devices, description, bounds, Matrix4x4.Identity, Draw, out _, self: this, hostAppliesPlacement: true);
 
             SceneRevision.Advance();
 
@@ -152,12 +137,7 @@ namespace YMM43D.Project.Tachie
             var view = Matrix4x4.CreateLookAt(new Vector3(0f, 0f, Distance), Vector3.Zero, Vector3.UnitY);
             var projection = Matrix4x4.CreateOrthographic(half * 2f, half * 2f, 0.01f, Distance * 2f);
 
-            var item = new DrawContext3D
-            {
-                World = Matrix4x4.Identity,
-                Opacity = 1f,
-                Time = new FrameContext(0, 1, 60),
-            };
+            var item = new DrawContext3D { World = Matrix4x4.Identity, Opacity = 1f, Time = new FrameContext(0, 1, NominalFps) };
 
             try
             {
@@ -219,7 +199,7 @@ namespace YMM43D.Project.Tachie
 
         public void Dispose()
         {
-            isDisposed = true;
+            IsAlive = false;
 
             if (registered is not null)
             {

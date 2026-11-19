@@ -2,6 +2,7 @@ using System.Numerics;
 using Vortice.Direct3D;
 using Vortice.Direct3D11;
 using Vortice.Mathematics;
+using YMM43D.Commons;
 using YukkuriMovieMaker.Commons;
 
 namespace YMM43D.Graphics.Meshes
@@ -28,25 +29,25 @@ namespace YMM43D.Graphics.Meshes
 
                 for (var i = 1; i + 1 < indices.Length; i++)
                 {
-                    ReadOnlySpan<int> corners = [indices[0], indices[i], indices[i + 1]];
+                    ReadOnlySpan<int> slots = [0, i, i + 1];
 
-                    var flat = -Vertex.GetNormal(
-                        geometry.Vertices[corners[0]], geometry.Vertices[corners[1]], geometry.Vertices[corners[2]]);
+                    var flat = -Vertex.GetNormal(geometry.Vertices[indices[0]], geometry.Vertices[indices[i]], geometry.Vertices[indices[i + 1]]);
 
-                    foreach (var corner in corners)
+                    foreach (var slot in slots)
                     {
+                        var corner = indices[slot];
+
                         vertices.Add(new Vertex(
                             geometry.Vertices[corner],
                             color,
-                            ToTexCoord(geometry.Vertices[corner]),
+                            face.Uvs is { } uvs ? uvs[slot] : ToTexCoord(geometry.Vertices[corner]),
                             face.IsSmooth ? geometry.Normals[corner] : flat));
                     }
                 }
             }
 
             DrawCount = vertices.Count;
-            VertexBuffer = D3D11Buffers.Create(device, [.. vertices], BindFlags.VertexBuffer);
-            disposer.Collect(VertexBuffer);
+            VertexBuffer = disposer.CollectEx(D3D11Buffers.Create(device, [.. vertices], BindFlags.VertexBuffer));
         }
 
         private static Vector2 ToTexCoord(in Vector3 position) => new(position.X + 0.5f, 0.5f - position.Y);

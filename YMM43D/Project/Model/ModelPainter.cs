@@ -3,7 +3,6 @@ using Vortice.Direct3D11;
 using YMM43D.Commons;
 using YMM43D.Graphics;
 using YMM43D.Graphics.Materials;
-using YMM43D.Graphics.Meshes;
 using YMM43D.Graphics.Models;
 
 namespace YMM43D.Project.Model
@@ -61,9 +60,7 @@ namespace YMM43D.Project.Model
             var scene = render.Lighting?.Mirror ?? SceneMirror.None;
             var wanted = scene.HasImage && (paint.Mirror > 0f || scene.Ambient > 0f);
 
-            var mirror = wanted
-                ? shared.GetMirror(render.Context, scene.Path)
-                : (View: (ID3D11ShaderResourceView?)null, Levels: 0f);
+            var (mirrorView, mirrorLevels) = wanted ? shared.GetMirror(render.Context, scene.Path) : (null, 0f);
 
             foreach (var (shape, textures, part) in Ordered(mesh.Parts, blends, world, render.GetCameraPosition()))
             {
@@ -85,8 +82,8 @@ namespace YMM43D.Project.Model
                         textures.Glow is not null,
                         textures.Feel is not null,
                         textures.Shade is not null,
-                        mirror.View is not null),
-                    mirror.Levels,
+                        mirrorView is not null),
+                    mirrorLevels,
                     scene.Ambient);
 
                 var settings = item.ToDrawSettings(
@@ -99,7 +96,7 @@ namespace YMM43D.Project.Model
                     Glow = textures.Glow,
                     Feel = textures.Feel,
                     Shade = textures.Shade,
-                    Mirror = mirror.View,
+                    Mirror = mirrorView,
 
                     SkipDepthWrite = blend == ModelBlend.Blend,
                 };
@@ -130,34 +127,18 @@ namespace YMM43D.Project.Model
 
         public void Dispose() => resources.Dispose();
 
-        private sealed class ModelResources : IDisposable
+        private sealed class ModelResources(ID3D11Device device) : IDisposable
         {
-            private readonly ID3D11Device device;
-
             private ModelMesh? mesh;
-            private ID3D11Texture2D? whiteTexture;
-            private ID3D11ShaderResourceView? white;
             private RenderPipeline<TransformConstants>? skinnedPipeline;
             private ModelBoneBuffer? boneBuffer;
             private ModelMorphBuffer? morphBuffer;
 
-            private string mirrorPath = string.Empty;
-            private ID3D11Texture2D? mirrorTexture;
-            private ID3D11ShaderResourceView? mirror;
-            private float mirrorLevels;
+            private readonly ImageTextures images = new(device);
 
-            public RenderPipeline<TransformConstants> Pipeline { get; }
+            public RenderPipeline<TransformConstants> Pipeline { get; } = new(device, Vertex.InputElements, new ModelMaterial(device));
 
-            public RenderPipeline<TransformConstants> SkinnedPipeline
-                => skinnedPipeline ??= new RenderPipeline<TransformConstants>(
-                    device, SkinnedVertex.InputElements, new SkinnedModelMaterial(device));
-
-            public ModelResources(ID3D11Device device)
-            {
-                this.device = device;
-                Pipeline = new RenderPipeline<TransformConstants>(
-                    device, Vertex.InputElements, new ModelMaterial(device));
-            }
+            public RenderPipeline<TransformConstants> SkinnedPipeline => skinnedPipeline ??= new(device, SkinnedVertex.InputElements, new SkinnedModelMaterial(device));
 
             public ModelMesh GetMesh(
                 ID3D11DeviceContext context, ModelData model, Vector4 tint, IReadOnlyList<ModelImage?> replacements)
@@ -175,28 +156,7 @@ namespace YMM43D.Project.Model
                 return mesh = new ModelMesh(device, context, model, tint, replacements);
             }
 
-            public (ID3D11ShaderResourceView? View, float Levels) GetMirror(
-                ID3D11DeviceContext context, string path)
-            {
-                if (mirrorPath == path)
-                    return (mirror, mirrorLevels);
-
-                DropMirror();
-                mirrorPath = path;
-
-                if (path.Length == 0
-                    || ModelLibrary.FindImage(path) is not { } image
-                    || ModelTexture.Create(device, context, image) is not { } made)
-                {
-                    return (null, 0f);
-                }
-
-                mirrorTexture = made.Texture;
-                mirror = made.View;
-                mirrorLevels = made.Levels;
-
-                return (mirror, mirrorLevels);
-            }
+            public (ID3D11ShaderResourceView? View, float Levels) GetMirror(ID3D11DeviceContext context, string path) => images.Get(context, path);
 
             public ID3D11ShaderResourceView? WriteBones(
                 ID3D11DeviceContext context, ModelData model, IReadOnlyList<Matrix4x4>? pose)
@@ -218,47 +178,13 @@ namespace YMM43D.Project.Model
                 return morphBuffer.Write(context, model, weights);
             }
 
-            public ID3D11ShaderResourceView GetWhite(ID3D11DeviceContext context)
-            {
-                if (white is not null)
-                    return white;
-
-                whiteTexture = device.CreateTexture2D(new Texture2DDescription
-                {
-                    Width = 1,
-                    Height = 1,
-                    MipLevels = 1,
-                    ArraySize = 1,
-                    Format = Vortice.DXGI.Format.B8G8R8A8_UNorm,
-                    SampleDescription = new Vortice.DXGI.SampleDescription(1, 0),
-                    Usage = ResourceUsage.Default,
-                    BindFlags = BindFlags.ShaderResource,
-                });
-
-                context.UpdateSubresource(new byte[] { 0xFF, 0xFF, 0xFF, 0xFF }, whiteTexture, 0, 4);
-
-                return white = device.CreateShaderResourceView(whiteTexture);
-            }
-
-            private void DropMirror()
-            {
-                mirror?.Dispose();
-                mirror = null;
-                mirrorTexture?.Dispose();
-                mirrorTexture = null;
-                mirrorLevels = 0f;
-                mirrorPath = string.Empty;
-            }
+            public ID3D11ShaderResourceView GetWhite(ID3D11DeviceContext context) => images.White(context);
 
             public void Dispose()
             {
                 mesh?.Dispose();
                 mesh = null;
-                white?.Dispose();
-                white = null;
-                whiteTexture?.Dispose();
-                whiteTexture = null;
-                DropMirror();
+                images.Dispose();
                 skinnedPipeline?.Dispose();
                 skinnedPipeline = null;
                 boneBuffer?.Dispose();

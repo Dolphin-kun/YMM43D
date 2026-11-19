@@ -25,11 +25,7 @@ namespace YMM43D.Graphics
             disposer.Collect(mesh);
         }
 
-        public RenderPipeline(
-            ID3D11Device device,
-            InputElementDescription[] inputElements,
-            IMaterial material,
-            RenderStates? states = null)
+        public RenderPipeline(ID3D11Device device, InputElementDescription[] inputElements, IMaterial material, RenderStates? states = null)
         {
             Material = material;
             disposer.Collect(material);
@@ -42,12 +38,7 @@ namespace YMM43D.Graphics
             disposer.Collect(constantBuffer);
         }
 
-        public void Draw<TExtra>(
-            ID3D11DeviceContext context,
-            in TConstants constants,
-            in TExtra extra,
-            in DrawSettings settings,
-            IMesh? mesh = null)
+        public void Draw<TExtra>(ID3D11DeviceContext context, in TConstants constants, in TExtra extra, in DrawSettings settings, IMesh? mesh = null)
             where TExtra : unmanaged
         {
             if (extraBuffer is null || extraType != typeof(TExtra))
@@ -66,24 +57,17 @@ namespace YMM43D.Graphics
             Draw(context, constants, settings, mesh);
         }
 
-        public void Draw(
-            ID3D11DeviceContext context,
-            in TConstants constants,
-            in DrawSettings settings,
-            IMesh? mesh = null)
+        public void Draw(ID3D11DeviceContext context, in TConstants constants, in DrawSettings settings, IMesh? mesh = null)
         {
-            mesh ??= Mesh ?? throw new InvalidOperationException(
-                "形状を持たないパイプラインです。描画する形状を渡してください。");
+            mesh ??= Mesh ?? throw new InvalidOperationException("形状を持たないパイプラインです。描画する形状を渡してください。");
 
             context.UpdateSubresource(in constants, constantBuffer);
 
-            context.OMSetBlendState(
-                settings.DepthOnly ? states.NoColorWrite : states.GetBlend(settings.Blend));
+            context.OMSetBlendState(settings.DepthOnly ? states.NoColorWrite : states.GetBlend(settings.Blend));
 
             context.OMSetDepthStencilState(DepthStateFor(settings));
 
-            context.RSSetState(
-                settings.LiftsLines ? states.LiftedLines : states.Rasterizer(settings.Culling));
+            context.RSSetState(settings.LiftsLines ? states.LiftedLines : states.Rasterizer(settings.Culling));
 
             context.VSSetShader(Material.VertexShader);
             context.PSSetShader(Material.PixelShader);

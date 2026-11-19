@@ -9,8 +9,7 @@ namespace YMM43D.Graphics.Models
         public static Matrix4x4[] Skin(ModelData model, IReadOnlyList<Matrix4x4>? localRotations = null)
             => Skin(model.Bones, model.Root, localRotations);
 
-        public static Matrix4x4[] Skin(
-            ModelBone[] bones, in Matrix4x4 root, IReadOnlyList<Matrix4x4>? localRotations = null)
+        public static Matrix4x4[] Skin(ModelBone[] bones, in Matrix4x4 root, IReadOnlyList<Matrix4x4>? localRotations = null)
         {
             var pose = Compute(bones, localRotations);
             var skin = new Matrix4x4[bones.Length];

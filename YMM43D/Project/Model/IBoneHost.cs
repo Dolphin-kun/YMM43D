@@ -9,6 +9,11 @@ namespace YMM43D.Project.Model
         ModelData? Model { get; }
     }
 
+    internal interface IMotionHost : IModelHost
+    {
+        string MotionFile { get; }
+    }
+
     internal interface IBoneHost : IModelHost
     {
         ModelBonePose BoneFor(string name);
@@ -18,19 +23,8 @@ namespace YMM43D.Project.Model
 
     internal static class ModelMotion
     {
-        public static ModelAnimation? Find(ModelData model, string name)
-        {
-            if (name.Length == 0)
-                return null;
-
-            foreach (var one in model.Animations)
-            {
-                if (one.Name == name)
-                    return one;
-            }
-
-            return null;
-        }
+        public static ModelAnimation? Find(ModelData model, string file, string name)
+            => ModelMotions.Find(model, file, name);
 
         public static float SecondsOf(
             ModelAnimation motion, in FrameContext time, float speed, float start, bool loops)

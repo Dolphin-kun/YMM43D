@@ -9,11 +9,11 @@ namespace RandomScatter3D
             if (fade <= 0f)
                 return 1f;
 
-            return MathF.Min(
-                AxisAlpha(position.X, velocity.X, range.X, fade),
-                MathF.Min(
-                    AxisAlpha(position.Y, velocity.Y, range.Y, fade),
-                    AxisAlpha(position.Z, velocity.Z, range.Z, fade)));
+            var x = AxisAlpha(position.X, velocity.X, range.X, fade);
+            var y = AxisAlpha(position.Y, velocity.Y, range.Y, fade);
+            var z = AxisAlpha(position.Z, velocity.Z, range.Z, fade);
+
+            return MathF.Min(x, MathF.Min(y, z));
         }
 
         private static float AxisAlpha(float position, float velocity, float span, float fade)

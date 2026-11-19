@@ -1,15 +1,11 @@
-using YukkuriMovieMaker.Commons;
+﻿using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Player.Video;
 using YukkuriMovieMaker.Plugin.Effects;
 using YukkuriMovieMaker.Project.Items;
 
 namespace YMM43D.Player
 {
-    public sealed class GroupFlattening(
-        GroupLookup groups,
-        IGraphicsDevicesAndContext? devices,
-        TimelineSourceDescription? source,
-        int timelineFrame)
+    public sealed class GroupFlattening(GroupLookup groups, IGraphicsDevicesAndContext? devices, TimelineSourceDescription? source, int timelineFrame)
     {
         private readonly Dictionary<GroupItem, bool> verdicts = new(ReferenceEqualityComparer.Instance);
 
@@ -32,7 +28,6 @@ namespace YMM43D.Player
             return false;
         }
 
-        public IReadOnlyList<IVideoEffect> EffectsFor(IItem item)
-            => [.. Groups.GetGroups(item).SelectMany(GroupEffectProbe.EnabledEffects)];
+        public IReadOnlyList<IVideoEffect> EffectsFor(IItem item) => [.. Groups.GetGroups(item).SelectMany(GroupEffectProbe.EnabledEffects)];
     }
 }

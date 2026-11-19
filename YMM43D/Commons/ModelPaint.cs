@@ -4,9 +4,9 @@ namespace YMM43D.Commons
 {
     public sealed record ModelPaint
     {
-        public static ModelPaint Default { get; } = new();
-
         public const float DefaultFeather = 0.04f;
+
+        public static ModelPaint Default { get; } = new();
 
         public float ToonSteps { get; init; }
 

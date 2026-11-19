@@ -4,6 +4,8 @@ namespace YMM43D.Commons
 {
     public readonly record struct WorldBounds(Vector3 Min, Vector3 Max)
     {
+        public const int CornerCount = 8;
+
         public static WorldBounds Empty => new(Vector3.Zero, Vector3.Zero);
 
         public static WorldBounds FromCube(float edgeLength)
@@ -33,17 +35,6 @@ namespace YMM43D.Commons
         public bool IsEmpty => Max.X <= Min.X || Max.Y <= Min.Y;
 
         public Vector3 Center => (Min + Max) / 2f;
-
-        public const int CornerCount = 8;
-
-        public Vector3[] GetCorners()
-        {
-            var corners = new Vector3[CornerCount];
-
-            WriteCorners(corners);
-
-            return corners;
-        }
 
         public void WriteCorners(Span<Vector3> into)
         {

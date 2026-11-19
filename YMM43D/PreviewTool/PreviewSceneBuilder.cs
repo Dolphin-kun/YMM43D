@@ -50,8 +50,7 @@ namespace YMM43D.PreviewTool
             var fps = Math.Max(1, timeline.VideoInfo.FPS);
             var updated = new List<PreviewItem>();
 
-            var flattening = new GroupFlattening(
-                GroupLookup.Build(timeline, frame, fps), devices, SourceDescription, frame);
+            var flattening = new GroupFlattening(GroupLookup.Build(timeline, frame, fps), devices, SourceDescription, frame);
 
             var alive = items
                 .OfType<IVideoItem>()
@@ -64,7 +63,7 @@ namespace YMM43D.PreviewTool
                 .ToArray();
 
             var visible = alive
-                .Where(item => IsDrawn(item))
+                .Where(IsDrawn)
                 .Where(item => !placedComposites.Any(composite => SceneDepthCollector.Composes(composite, item)))
                 .OrderBy(item => item.Layer);
 
@@ -87,8 +86,7 @@ namespace YMM43D.PreviewTool
             _ => true,
         };
 
-        private IEnumerable<Placed> FindProviders(
-            IVideoItem item, GroupFlattening flattening, IGraphicsDevicesAndContext? devices)
+        private IEnumerable<Placed> FindProviders(IVideoItem item, GroupFlattening flattening, IGraphicsDevicesAndContext? devices)
         {
             var effects = item.VideoEffects ?? [];
 
@@ -131,8 +129,7 @@ namespace YMM43D.PreviewTool
             return solids.Count > 0 ? solids : [new Placed(fallbackProvider, flatWithGroups)];
         }
 
-        private static ImmutableList<IVideoEffect> Preceding(
-            IEnumerable<IVideoEffect> effects, IVideoEffect solid)
+        private static ImmutableList<IVideoEffect> Preceding(IEnumerable<IVideoEffect> effects, IVideoEffect solid)
         {
             var taken = new List<IVideoEffect>();
 
@@ -148,7 +145,6 @@ namespace YMM43D.PreviewTool
             return [.. taken];
         }
 
-        private static ImmutableList<IVideoEffect> Flattened(IEnumerable<IVideoEffect> effects)
-            => [.. effects.Where(effect => effect.IsEnabled)];
+        private static ImmutableList<IVideoEffect> Flattened(IEnumerable<IVideoEffect> effects) => [.. effects.Where(effect => effect.IsEnabled)];
     }
 }

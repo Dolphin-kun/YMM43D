@@ -7,16 +7,14 @@ namespace YMM43D.Graphics.Models
     public sealed class ModelBoneBuffer(ID3D11Device device) : IDisposable
     {
         public const int Slot = 3;
-
         private const int MinimumCapacity = 16;
 
         private readonly ID3D11Device device = device;
 
         private ID3D11Buffer? buffer;
-        private ID3D11ShaderResourceView? view;
         private Matrix4x4[] staging = [];
 
-        public ID3D11ShaderResourceView? View => view;
+        public ID3D11ShaderResourceView? View { get; private set; }
 
         public void Write(ID3D11DeviceContext context, IReadOnlyList<Matrix4x4> matrices)
         {
@@ -58,13 +56,13 @@ namespace YMM43D.Graphics.Models
                 ByteWidth = stride * capacity,
             });
 
-            view = device.CreateShaderResourceView(buffer);
+            View = device.CreateShaderResourceView(buffer);
         }
 
         private void Release()
         {
-            view?.Dispose();
-            view = null;
+            View?.Dispose();
+            View = null;
             buffer?.Dispose();
             buffer = null;
         }

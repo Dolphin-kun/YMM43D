@@ -5,10 +5,7 @@ using YukkuriMovieMaker.Project.Items;
 
 namespace YMM43D.PreviewTool
 {
-    internal sealed class PreviewItem(
-        I3DProvider provider,
-        ImmutableList<IVideoEffect> effects,
-        IVideoItem item)
+    internal sealed class PreviewItem(I3DProvider provider, ImmutableList<IVideoEffect> effects, IVideoItem item)
     {
         public I3DProvider Provider { get; } = provider;
 
@@ -16,7 +13,6 @@ namespace YMM43D.PreviewTool
 
         public IVideoItem Item { get; } = item;
 
-        public FrameContext GetItemTime(in FrameContext timelineTime)
-            => FrameContext.ForItem(Item, timelineTime.Frame, timelineTime.Fps);
+        public FrameContext GetItemTime(in FrameContext timelineTime) => FrameContext.ForItem(Item, timelineTime.Frame, timelineTime.Fps);
     }
 }

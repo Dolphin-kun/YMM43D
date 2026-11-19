@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using Vortice.Direct3D11;
 using Vortice.Mathematics;
 using YMM43D.Commons;
@@ -10,10 +10,8 @@ namespace YMM43D.Player
     public static class SceneShadows
     {
         private const float MinRadius = 0.5f;
-
         private const float ConeMargin = 1.1f;
-
-        public const float PointFaceScale = 1.05f;
+        private const float PointFaceScale = 1.05f;
 
         private static readonly (Vector3 Forward, Vector3 Up)[] PointFaces =
         [
@@ -68,10 +66,10 @@ namespace YMM43D.Player
                 {
                     var light = placed[i];
 
-                    if (!light.Shadow.IsWanted || !light.CanCastShadow)
+                    if (!light.Shadow.IsWanted)
                         continue;
 
-                    var needed = light.Shadow.SliceCount(light.Kind);
+                    var needed = light.ShadowSlices;
 
                     if (slice + needed > maps.SliceCount)
                         break;
@@ -83,15 +81,14 @@ namespace YMM43D.Player
                         if (!TryLookAround(light, out var near))
                             continue;
 
+                        var faceProjection = Matrix4x4.CreatePerspectiveFieldOfView(2f * MathF.Atan(PointFaceScale), 1f, near, light.Reach);
+
                         for (var face = 0; face < PointFaces.Length; face++)
                         {
                             var (forward, up) = PointFaces[face];
+                            var faceView = Matrix4x4.CreateLookAt(light.Vector, light.Vector + forward, up);
 
-                            Draw(
-                                device, context, maps, slice + face, casters, sourceDevices,
-                                Matrix4x4.CreateLookAt(light.Vector, light.Vector + forward, up),
-                                Matrix4x4.CreatePerspectiveFieldOfView(
-                                    2f * MathF.Atan(PointFaceScale), 1f, near, light.Reach));
+                            Draw(device, context, maps, slice + face, casters, sourceDevices, faceView, faceProjection);
                         }
 
                         placed[i] = light.PlacedAt(slice, radius, Matrix4x4.Identity);
@@ -121,24 +118,18 @@ namespace YMM43D.Player
 
             maps.Bind(context);
 
-            var built = new SceneLighting(
-                placed,
-                lighting.Ambient,
-                lighting.Fog,
-                lighting.ShadowResolution,
-                lighting.Ground,
-                lighting.Mirror);
+            var built = new SceneLighting(placed, lighting.Ambient, lighting.Fog, lighting.ShadowResolution, lighting.Ground, lighting.Mirror);
 
             cache.Remember(lighting, casters, maps, built, requester);
 
             return built;
         }
 
-        public static float PointNear(float reach) => MathF.Max(reach * 0.01f, 0.01f);
+        private static float NearFor(float reach) => MathF.Max(reach * 0.01f, 0.01f);
 
         private static bool TryLookAround(in SceneLight light, out float near)
         {
-            near = PointNear(light.Reach);
+            near = NearFor(light.Reach);
 
             return IsFinite(light.Vector) && float.IsFinite(light.Reach) && light.Reach > near * 1.01f;
         }
@@ -149,8 +140,8 @@ namespace YMM43D.Player
 
             foreach (var light in lights)
             {
-                if (light.Shadow.IsWanted && light.CanCastShadow)
-                    count += light.Shadow.SliceCount(light.Kind);
+                if (light.Shadow.IsWanted)
+                    count += light.ShadowSlices;
             }
 
             return Math.Min(count, ShadowMapArray.MaxSlices);
@@ -160,80 +151,11 @@ namespace YMM43D.Player
         {
             foreach (var light in lights)
             {
-                if (light.Shadow.IsWanted && light.CanCastShadow)
+                if (light.Shadow.IsWanted)
                     return true;
             }
 
             return false;
-        }
-
-        private sealed class ShadowCache : IDisposable
-        {
-            private readonly HashSet<object> served = new(ReferenceEqualityComparer.Instance);
-
-            private SceneLighting? source;
-            private SceneDepthCollector.Occluder[] casters = [];
-            private ShadowMapArray? drawnInto;
-            private SceneLighting? result;
-
-            public SceneLighting? TryReuse(
-                SceneLighting lighting,
-                IReadOnlyList<SceneDepthCollector.Occluder> current,
-                ShadowMapArray maps,
-                object requester)
-            {
-                if (result is null
-                    || !ReferenceEquals(drawnInto, maps)
-                    || !Matches(lighting, current)
-                    || !served.Add(requester))
-                {
-                    return null;
-                }
-
-                return result;
-            }
-
-            private bool Matches(SceneLighting lighting, IReadOnlyList<SceneDepthCollector.Occluder> current)
-            {
-                if (source is null || !source.NearlyEquals(lighting) || casters.Length != current.Count)
-                    return false;
-
-                for (var i = 0; i < casters.Length; i++)
-                {
-                    if (!ReferenceEquals(casters[i].Provider, current[i].Provider)
-                        || casters[i].World != current[i].World
-                        || casters[i].Time.Frame != current[i].Time.Frame)
-                    {
-                        return false;
-                    }
-                }
-
-                return true;
-            }
-
-            public void Remember(
-                SceneLighting lighting,
-                IReadOnlyList<SceneDepthCollector.Occluder> current,
-                ShadowMapArray maps,
-                SceneLighting built,
-                object requester)
-            {
-                source = lighting;
-                casters = [.. current];
-                drawnInto = maps;
-                result = built;
-                served.Clear();
-                served.Add(requester);
-            }
-
-            public void Dispose()
-            {
-                source = null;
-                casters = [];
-                drawnInto = null;
-                result = null;
-                served.Clear();
-            }
         }
 
         private static void Draw(
@@ -255,26 +177,10 @@ namespace YMM43D.Player
             var render = new Render3DContext(device, context, view, projection) { SourceDevices = sourceDevices };
 
             foreach (var caster in casters)
-            {
-                var item = new DrawContext3D
-                {
-                    World = caster.World,
-                    Opacity = 1f,
-                    Time = caster.Time,
-                    DepthOnly = true,
-                };
-
-                try
-                {
-                    caster.Provider.Draw(render, item);
-                }
-                catch
-                {
-                }
-            }
+                caster.DrawDepth(render);
         }
 
-        public static WorldBounds Cover(IReadOnlyList<SceneDepthCollector.Occluder> casters)
+        private static WorldBounds Cover(IReadOnlyList<SceneDepthCollector.Occluder> casters)
         {
             var min = new Vector3(float.MaxValue);
             var max = new Vector3(float.MinValue);
@@ -295,8 +201,7 @@ namespace YMM43D.Player
             return found ? new WorldBounds(min, max) : WorldBounds.Empty;
         }
 
-        public static bool TryLookFrom(
-            in SceneLight light, in WorldBounds cover, out Matrix4x4 view, out Matrix4x4 projection)
+        private static bool TryLookFrom(in SceneLight light, in WorldBounds cover, out Matrix4x4 view, out Matrix4x4 projection)
         {
             view = Matrix4x4.Identity;
             projection = Matrix4x4.Identity;
@@ -309,8 +214,7 @@ namespace YMM43D.Player
             };
         }
 
-        private static bool TryLookAlong(
-            in SceneLight light, in WorldBounds cover, out Matrix4x4 view, out Matrix4x4 projection)
+        private static bool TryLookAlong(in SceneLight light, in WorldBounds cover, out Matrix4x4 view, out Matrix4x4 projection)
         {
             view = Matrix4x4.Identity;
             projection = Matrix4x4.Identity;
@@ -329,16 +233,15 @@ namespace YMM43D.Player
                 return false;
 
             var eye = center + toLight * (radius * 2f);
+            var span = radius * 2f * ConeMargin;
 
             view = Matrix4x4.CreateLookAt(eye, center, Upward(toLight));
-            projection = Matrix4x4.CreateOrthographic(
-                radius * 2f * ConeMargin, radius * 2f * ConeMargin, radius * 0.5f, radius * 4f);
+            projection = Matrix4x4.CreateOrthographic(span, span, radius * 0.5f, radius * 4f);
 
             return true;
         }
 
-        private static bool TryLookThroughCone(
-            in SceneLight light, out Matrix4x4 view, out Matrix4x4 projection)
+        private static bool TryLookThroughCone(in SceneLight light, out Matrix4x4 view, out Matrix4x4 projection)
         {
             view = Matrix4x4.Identity;
             projection = Matrix4x4.Identity;
@@ -351,21 +254,76 @@ namespace YMM43D.Player
             axis = Vector3.Normalize(axis);
 
             var reach = MathF.Max(light.Reach, 0.05f);
-            var near = MathF.Max(reach * 0.01f, 0.01f);
-
-            var angle = Math.Clamp(
-                float.DegreesToRadians(light.OuterAngle * 2f) * ConeMargin, 0.05f, 3f);
+            var angle = Math.Clamp(float.DegreesToRadians(light.OuterAngle * 2f) * ConeMargin, 0.05f, 3f);
 
             view = Matrix4x4.CreateLookAt(light.Vector, light.Vector + axis * reach, Upward(axis));
-            projection = Matrix4x4.CreatePerspectiveFieldOfView(angle, 1f, near, reach);
+            projection = Matrix4x4.CreatePerspectiveFieldOfView(angle, 1f, NearFor(reach), reach);
 
             return true;
         }
 
-        private static Vector3 Upward(in Vector3 forward)
-            => MathF.Abs(forward.Y) > 0.99f ? Vector3.UnitZ : Vector3.UnitY;
+        private static Vector3 Upward(in Vector3 forward) => MathF.Abs(forward.Y) > 0.99f ? Vector3.UnitZ : Vector3.UnitY;
 
-        private static bool IsFinite(in Vector3 value)
-            => float.IsFinite(value.X) && float.IsFinite(value.Y) && float.IsFinite(value.Z);
+        private static bool IsFinite(in Vector3 value) => float.IsFinite(value.X) && float.IsFinite(value.Y) && float.IsFinite(value.Z);
+
+        private sealed class ShadowCache : IDisposable
+        {
+            private readonly HashSet<object> served = new(ReferenceEqualityComparer.Instance);
+
+            private SceneLighting? source;
+            private SceneDepthCollector.Occluder[] casters = [];
+            private ShadowMapArray? drawnInto;
+            private SceneLighting? result;
+
+            public SceneLighting? TryReuse(SceneLighting lighting, IReadOnlyList<SceneDepthCollector.Occluder> current, ShadowMapArray maps, object requester)
+            {
+                if (result is null
+                    || !ReferenceEquals(drawnInto, maps)
+                    || !Matches(lighting, current)
+                    || !served.Add(requester))
+                {
+                    return null;
+                }
+
+                return result;
+            }
+
+            public void Remember(SceneLighting lighting, IReadOnlyList<SceneDepthCollector.Occluder> current, ShadowMapArray maps, SceneLighting built, object requester)
+            {
+                source = lighting;
+                casters = [.. current];
+                drawnInto = maps;
+                result = built;
+                served.Clear();
+                served.Add(requester);
+            }
+
+            public void Dispose()
+            {
+                source = null;
+                casters = [];
+                drawnInto = null;
+                result = null;
+                served.Clear();
+            }
+
+            private bool Matches(SceneLighting lighting, IReadOnlyList<SceneDepthCollector.Occluder> current)
+            {
+                if (source is null || !source.NearlyEquals(lighting) || casters.Length != current.Count)
+                    return false;
+
+                for (var i = 0; i < casters.Length; i++)
+                {
+                    if (!ReferenceEquals(casters[i].Provider, current[i].Provider)
+                        || casters[i].World != current[i].World
+                        || casters[i].Time.Frame != current[i].Time.Frame)
+                    {
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+        }
     }
 }

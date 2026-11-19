@@ -1,28 +1,34 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Media;
 using System.Windows.Input;
 using System.Windows.Interop;
 using SharpGen.Runtime;
-using Vortice.DXGI;
+using Vortice.Direct3D;
 using Vortice.Direct3D11;
+using Vortice.DXGI;
+using YMM43D.Commons;
 using YMM43D.Graphics;
 using YMM43D.Player;
+using YMM43D.PreviewTool.Rendering;
 using YukkuriMovieMaker.Commons;
+using Color4 = Vortice.Mathematics.Color4;
 
 namespace YMM43D.PreviewTool.Views
 {
     public partial class D3D11Host : HwndHost
     {
         private const string WindowClassName = "YMM43D_PreviewHost_Independent";
-
         private const int ClassStyleDoubleClicks = 0x0008;
         private const int WindowStyleChild = 0x40000000;
         private const int WindowStyleVisible = 0x10000000;
         private const int StandardArrowCursor = 32512;
         private const int BlackBrush = 4;
-
-        private const int WmKeyDown = 0x0100;
-        private const int WmSysKeyDown = 0x0104;
+        private const int WmNonClientLeftDown = 0x00A1;
+        private const int WmNonClientRightDown = 0x00A4;
+        private const int WmNonClientMiddleDown = 0x00A7;
         private const int WmMouseMove = 0x0200;
         private const int WmLeftButtonDown = 0x0201;
         private const int WmLeftButtonUp = 0x0202;
@@ -40,11 +46,40 @@ namespace YMM43D.PreviewTool.Views
         private ID3D11Device? device;
         private ID3D11DeviceContext? deviceContext;
         private IDXGISwapChain? swapChain;
+        private PreviewLabelRenderer? labels;
+        private bool listensKeys;
+        private bool engaged;
 
         public ID3D11RenderTargetView? RenderTargetView { get; private set; }
         public ID3D11DepthStencilView? DepthStencilView { get; private set; }
+        public ID3D11ShaderResourceView? DepthView { get; private set; }
 
         public event Action<ID3D11Device>? Preparing;
+
+        public IReadOnlyList<PreviewLabel> Labels { get; set; } = [];
+
+        internal UvSheet? UvSheet { get; set; }
+
+        public bool SidebarOpen { get; set; }
+
+        private Point? polled;
+
+        public void PollMouse()
+        {
+            if (Handle == 0 || !GetCursorPos(out var screen) || !ScreenToClient(Handle, ref screen))
+                return;
+
+            var dpi = VisualTreeHelper.GetDpi(this);
+            var at = InDips(new Point(screen.X, screen.Y), dpi.DpiScaleX, dpi.DpiScaleY);
+
+            if (polled == at)
+                return;
+
+            polled = at;
+            MouseAction?.Invoke(at, MouseEventKind.Move, 0);
+        }
+
+        public float PixelScale { get; private set; } = 1f;
         public event Action<ID3D11Device, ID3D11DeviceContext, int, int>? Render;
         public event Action<Point, MouseEventKind, int>? MouseAction;
 
@@ -87,6 +122,7 @@ namespace YMM43D.PreviewTool.Views
                 try
                 {
                     Render?.Invoke(device, deviceContext, (int)ActualWidth, (int)ActualHeight);
+                    labels?.Draw(UvSheet, Labels, SidebarOpen, ThemeColor(SystemColors.ControlBrushKey), ThemeColor(SystemColors.ControlTextBrushKey));
                     swapChain.Present(0, PresentFlags.None);
                 }
                 catch (SharpGenException) when (DeviceHealth.IsLost(device, "3Dプレビュー", out _))
@@ -137,6 +173,9 @@ namespace YMM43D.PreviewTool.Views
                     0, classPtr, windowPtr, WindowStyleChild | WindowStyleVisible,
                     0, 0, width, height, hwndParent.Handle, nint.Zero, nint.Zero, nint.Zero);
 
+                ImmAssociateContext(hwnd, nint.Zero);
+                ListenKeys(true);
+
                 return new HandleRef(this, hwnd);
             }
             finally
@@ -148,6 +187,7 @@ namespace YMM43D.PreviewTool.Views
 
         protected override void DestroyWindowCore(HandleRef hwnd)
         {
+            ListenKeys(false);
             DestroyWindow(hwnd.Handle);
             DisposeAll();
         }
@@ -155,7 +195,10 @@ namespace YMM43D.PreviewTool.Views
         protected override void Dispose(bool disposing)
         {
             if (disposing)
+            {
+                ListenKeys(false);
                 DisposeAll();
+            }
 
             base.Dispose(disposing);
         }
@@ -184,8 +227,10 @@ namespace YMM43D.PreviewTool.Views
 
             CleanupSwapChain();
 
-            var width = (int)ActualWidth;
-            var height = (int)ActualHeight;
+            PixelScale = (float)VisualTreeHelper.GetDpi(this).DpiScaleX;
+
+            var width = Math.Max(1, (int)Math.Round(ActualWidth * PixelScale));
+            var height = Math.Max(1, (int)Math.Round(ActualHeight * PixelScale));
 
             try
             {
@@ -193,7 +238,7 @@ namespace YMM43D.PreviewTool.Views
 
                 using var factory = DXGI.CreateDXGIFactory1<IDXGIFactory1>();
 
-                swapChain = factory.CreateSwapChain(device, new SwapChainDescription
+                swapChain = swapChainDisposer.CollectEx(factory.CreateSwapChain(device, new SwapChainDescription
                 {
                     BufferCount = 1,
                     BufferDescription = new ModeDescription(width, height, new Rational(60, 1), Format.R8G8B8A8_UNorm),
@@ -202,28 +247,29 @@ namespace YMM43D.PreviewTool.Views
                     SampleDescription = new SampleDescription(1, 0),
                     Windowed = true,
                     SwapEffect = SwapEffect.Discard,
-                });
-                swapChainDisposer.Collect(swapChain);
+                }));
 
                 using var backBuffer = swapChain.GetBuffer<ID3D11Texture2D>(0);
-                RenderTargetView = device.CreateRenderTargetView(backBuffer);
-                swapChainDisposer.Collect(RenderTargetView);
+                RenderTargetView = swapChainDisposer.CollectEx(device.CreateRenderTargetView(backBuffer));
+                labels = swapChainDisposer.CollectEx(new PreviewLabelRenderer(device, backBuffer, (float)ActualWidth, (float)ActualHeight, PixelScale));
 
-                var depthBuffer = device.CreateTexture2D(new Texture2DDescription
+                var depthBuffer = swapChainDisposer.CollectEx(device.CreateTexture2D(new Texture2DDescription
                 {
                     Width = width,
                     Height = height,
                     MipLevels = 1,
                     ArraySize = 1,
-                    Format = Format.D24_UNorm_S8_UInt,
+                    Format = Format.R24G8_Typeless,
                     SampleDescription = new SampleDescription(1, 0),
                     Usage = ResourceUsage.Default,
-                    BindFlags = BindFlags.DepthStencil,
-                });
-                swapChainDisposer.Collect(depthBuffer);
+                    BindFlags = BindFlags.DepthStencil | BindFlags.ShaderResource,
+                }));
 
-                DepthStencilView = device.CreateDepthStencilView(depthBuffer);
-                swapChainDisposer.Collect(DepthStencilView);
+                var stencilDesc = new DepthStencilViewDescription(depthBuffer, DepthStencilViewDimension.Texture2D, Format.D24_UNorm_S8_UInt);
+                var viewDesc = new ShaderResourceViewDescription(depthBuffer, ShaderResourceViewDimension.Texture2D, Format.R24_UNorm_X8_Typeless);
+
+                DepthStencilView = swapChainDisposer.CollectEx(device.CreateDepthStencilView(depthBuffer, stencilDesc));
+                DepthView = swapChainDisposer.CollectEx(device.CreateShaderResourceView(depthBuffer, viewDesc));
             }
             catch
             {
@@ -237,12 +283,43 @@ namespace YMM43D.PreviewTool.Views
             swapChainDisposer = null;
 
             swapChain = null;
+            labels = null;
             RenderTargetView = null;
             DepthStencilView = null;
+            DepthView = null;
         }
 
-        private static Point GetPoint(nint lParam)
-            => new((short)((int)lParam & 0xFFFF), (short)((int)lParam >> 16));
+        public static Point InDips(Point device, double scaleX, double scaleY)
+            => new(device.X / (scaleX > 0.01 ? scaleX : 1.0), device.Y / (scaleY > 0.01 ? scaleY : 1.0));
+
+        private Point GetPoint(nint lParam)
+        {
+            var device = new Point((short)((int)lParam & 0xFFFF), (short)((int)lParam >> 16));
+
+            try
+            {
+                var dpi = VisualTreeHelper.GetDpi(this);
+
+                return InDips(device, dpi.DpiScaleX, dpi.DpiScaleY);
+            }
+            catch (Exception)
+            {
+                return device;
+            }
+        }
+
+        private Color4 ThemeColor(object key)
+        {
+            return TryFindResource(key) is SolidColorBrush { Color: var color }
+                ? new Color4(color.R / 255f, color.G / 255f, color.B / 255f, 1f)
+                : new Color4(0.5f, 0.5f, 0.5f, 1f);
+        }
+
+        protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
+        {
+            base.OnDpiChanged(oldDpi, newDpi);
+            CreateSwapChain();
+        }
 
         protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
         {
@@ -288,22 +365,119 @@ namespace YMM43D.PreviewTool.Views
                     handled = true;
                     break;
 
-                case WmKeyDown:
-                case WmSysKeyDown:
-                    if (KeyHandler?.Invoke(KeyInterop.KeyFromVirtualKey((int)wParam), Keyboard.Modifiers) == true)
-                    {
-                        handled = true;
-                        return nint.Zero;
-                    }
-
-                    break;
             }
 
             return base.WndProc(hwnd, msg, wParam, lParam, ref handled);
         }
 
+        private void ListenKeys(bool wanted)
+        {
+            if (listensKeys == wanted)
+                return;
+
+            listensKeys = wanted;
+
+            if (wanted)
+            {
+                InputManager.Current.PreProcessInput += OnPreProcessInput;
+                ComponentDispatcher.ThreadPreprocessMessage += OnPreprocessMessage;
+            }
+            else
+            {
+                InputManager.Current.PreProcessInput -= OnPreProcessInput;
+                ComponentDispatcher.ThreadPreprocessMessage -= OnPreprocessMessage;
+            }
+        }
+
+        private void OnPreprocessMessage(ref MSG msg, ref bool handled)
+        {
+            if (!handled
+                && msg.message is WmLeftButtonDown or WmRightButtonDown or WmMiddleButtonDown or WmNonClientLeftDown or WmNonClientRightDown or WmNonClientMiddleDown)
+            {
+                engaged = msg.hwnd == Handle || IsInScope(msg.pt_x, msg.pt_y);
+            }
+        }
+
+        private void OnPreProcessInput(object sender, PreProcessInputEventArgs e)
+        {
+            if (!engaged || !IsVisible)
+                return;
+
+            switch (e.StagingItem.Input)
+            {
+                case KeyEventArgs pressed when pressed.RoutedEvent == Keyboard.PreviewKeyDownEvent && Keyboard.FocusedElement is not (MenuItem or MenuBase or TextBox):
+                    if (Consume(RealKey(pressed), Keyboard.Modifiers))
+                        pressed.Handled = true;
+
+                    break;
+
+                case TextCompositionEventArgs typed when typed.RoutedEvent == TextCompositionManager.PreviewTextInputEvent && Keyboard.FocusedElement is not TextBox:
+                    e.Cancel();
+                    break;
+            }
+        }
+
+        private static Key RealKey(KeyEventArgs pressed) => pressed.Key switch
+        {
+            Key.ImeProcessed => pressed.ImeProcessedKey,
+            Key.System => pressed.SystemKey,
+            _ => pressed.Key,
+        };
+
+        private bool Consume(Key key, ModifierKeys modifiers)
+            => KeyHandler?.Invoke(key, modifiers) == true || IsTyping(key, modifiers) || key is Key.Enter || IsForeignShortcut(key, modifiers);
+
+        private static bool IsForeignShortcut(Key key, ModifierKeys modifiers)
+            => (modifiers & (ModifierKeys.Control | ModifierKeys.Alt)) != 0
+            && key is (>= Key.A and <= Key.Z) or (>= Key.D0 and <= Key.D9)
+            && !((modifiers & ModifierKeys.Alt) == 0 && key is Key.Z or Key.Y or Key.S);
+
+        private bool IsInScope(int x, int y)
+        {
+            if (Scope() is not { IsVisible: true } scope)
+                return false;
+
+            try
+            {
+                var from = scope.PointToScreen(new Point(0, 0));
+                var to = scope.PointToScreen(new Point(scope.ActualWidth, scope.ActualHeight));
+
+                return x >= Math.Min(from.X, to.X)
+                    && x <= Math.Max(from.X, to.X)
+                    && y >= Math.Min(from.Y, to.Y)
+                    && y <= Math.Max(from.Y, to.Y);
+            }
+            catch (InvalidOperationException)
+            {
+                return false;
+            }
+        }
+
+        private FrameworkElement? Scope()
+        {
+            DependencyObject? current = this;
+
+            while (current is not null)
+            {
+                if (current is Preview3DView view)
+                    return view;
+
+                current = VisualTreeHelper.GetParent(current) ?? LogicalTreeHelper.GetParent(current);
+            }
+
+            return this;
+        }
+
+        private static bool IsTyping(Key key, ModifierKeys modifiers)
+            => (modifiers & (ModifierKeys.Control | ModifierKeys.Alt)) == 0
+            && key is (>= Key.A and <= Key.Z)
+                or (>= Key.D0 and <= Key.D9)
+                or (>= Key.NumPad0 and <= Key.Divide)
+                or (>= Key.Oem1 and <= Key.OemBackslash);
+
         private bool Press(nint hwnd, nint lParam, MouseEventKind kind)
         {
+            engaged = true;
             SetFocus(hwnd);
             Focus();
             SetCapture(hwnd);
@@ -340,11 +514,38 @@ namespace YMM43D.PreviewTool.Views
         [LibraryImport("user32.dll", EntryPoint = "RegisterClassExW", SetLastError = true)]
         private static partial short RegisterClassEx(ref WNDCLASSEX lpwcx);
 
+        [LibraryImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static partial bool GetCursorPos(out CursorPoint point);
+
+        [LibraryImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static partial bool ScreenToClient(nint hWnd, ref CursorPoint point);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct CursorPoint
+        {
+            public int X;
+            public int Y;
+        }
+
         [LibraryImport("user32.dll", EntryPoint = "DefWindowProcW")]
         private static partial nint DefWindowProc(nint hWnd, int msg, nint wParam, nint lParam);
 
         [LibraryImport("user32.dll", EntryPoint = "CreateWindowExW", SetLastError = true)]
-        private static partial nint CreateWindowEx(int dwExStyle, nint lpClassName, nint lpWindowName, int dwStyle, int x, int y, int nWidth, int nHeight, nint hWndParent, nint hMenu, nint hInstance, nint lpParam);
+        private static partial nint CreateWindowEx(
+            int dwExStyle,
+            nint lpClassName,
+            nint lpWindowName,
+            int dwStyle,
+            int x,
+            int y,
+            int nWidth,
+            int nHeight,
+            nint hWndParent,
+            nint hMenu,
+            nint hInstance,
+            nint lpParam);
 
         [LibraryImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
@@ -365,5 +566,8 @@ namespace YMM43D.PreviewTool.Views
 
         [LibraryImport("user32.dll", SetLastError = true)]
         private static partial nint SetFocus(nint hWnd);
+
+        [LibraryImport("imm32.dll")]
+        private static partial nint ImmAssociateContext(nint hWnd, nint hImc);
     }
 }

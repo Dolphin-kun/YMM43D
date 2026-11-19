@@ -1,0 +1,128 @@
+<UserControl x:Class="YMM43D.Controls.ControlPointsEditor"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:local="clr-namespace:YMM43D.Controls"
+             xmlns:commons="clr-namespace:YMM43D.Commons"
+             xmlns:c="clr-namespace:YukkuriMovieMaker.Controls;assembly=YukkuriMovieMaker.Plugin"
+             xmlns:icons="clr-namespace:YukkuriMovieMaker.Resources.Icons;assembly=YukkuriMovieMaker.Plugin"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance local:ControlPointsEditorViewModel}"
+             d:DesignWidth="300">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="VisibleWhenTrue"/>
+
+        <Style x:Key="Icon" TargetType="Path">
+            <Setter Property="Stretch" Value="Uniform"/>
+            <Setter Property="Width" Value="10"/>
+            <Setter Property="Height" Value="10"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Fill" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+        </Style>
+
+        <Style x:Key="PointButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Width" Value="24"/>
+            <Setter Property="Height" Value="24"/>
+            <Setter Property="Margin" Value="0"/>
+        </Style>
+
+        <Style x:Key="AxisLabel" TargetType="Label">
+            <Setter Property="Margin" Value="6,0"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <Style x:Key="Axis" TargetType="c:AnimationSlider">
+            <Setter Property="Grid.Column" Value="1"/>
+            <Setter Property="StringFormat" Value="F1"/>
+            <Setter Property="Unit" Value="px"/>
+            <Setter Property="DefaultMin" Value="-1000"/>
+            <Setter Property="DefaultMax" Value="1000"/>
+        </Style>
+    </UserControl.Resources>
+
+    <StackPanel>
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <ListBox x:Name="PointList"
+                     Height="96"
+                     SelectionMode="Single"
+                     PreviewMouseWheel="PointList_PreviewMouseWheel"
+                     ItemsSource="{Binding Points}"
+                     SelectedIndex="{Binding SelectedIndex}">
+                <ListBox.ItemTemplate>
+                    <DataTemplate DataType="{x:Type commons:ControlPoint3D}">
+                        <TextBlock>
+                            <TextBlock.Text>
+                                <MultiBinding StringFormat="{}{0:F1}, {1:F1}, {2:F1}">
+                                    <Binding Path="X.Values[0].Value"/>
+                                    <Binding Path="Y.Values[0].Value"/>
+                                    <Binding Path="Z.Values[0].Value"/>
+                                </MultiBinding>
+                            </TextBlock.Text>
+                        </TextBlock>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+
+            <StackPanel Grid.Column="1">
+                <Button Style="{StaticResource PointButton}" ToolTip="選んだ点の後ろに足す" Command="{Binding AddCommand}">
+                    <Path Style="{StaticResource Icon}" Data="{DynamicResource {x:Static icons:GeometryKeys.Plus}}"/>
+                </Button>
+                <Button Style="{StaticResource PointButton}" ToolTip="選んだ点を消す" Command="{Binding RemoveCommand}">
+                    <Path Style="{StaticResource Icon}" Data="{DynamicResource {x:Static icons:GeometryKeys.Minus}}"/>
+                </Button>
+                <Button Style="{StaticResource PointButton}" ToolTip="上へ" Command="{Binding MoveUpCommand}">
+                    <Path Style="{StaticResource Icon}" Data="{DynamicResource {x:Static icons:GeometryKeys.MenuUp}}"/>
+                </Button>
+                <Button Style="{StaticResource PointButton}" ToolTip="下へ" Command="{Binding MoveDownCommand}">
+                    <Path Style="{StaticResource Icon}" Data="{DynamicResource {x:Static icons:GeometryKeys.MenuDown}}"/>
+                </Button>
+            </StackPanel>
+
+            <Thumb Grid.Row="1" Grid.ColumnSpan="2" Height="4" Cursor="SizeNS" DragDelta="Grip_DragDelta"/>
+        </Grid>
+
+        <StackPanel Visibility="{Binding HasSelection, Converter={StaticResource VisibleWhenTrue}}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="80"/>
+                    <ColumnDefinition/>
+                </Grid.ColumnDefinitions>
+                <Label Style="{StaticResource AxisLabel}" Content="X"/>
+                <c:AnimationSlider Style="{StaticResource Axis}" Animations="{Binding SelectedX}"
+                                   BeginEdit="Slider_BeginEdit" EndEdit="Slider_EndEdit"/>
+            </Grid>
+
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="80"/>
+                    <ColumnDefinition/>
+                </Grid.ColumnDefinitions>
+                <Label Style="{StaticResource AxisLabel}" Content="Y"/>
+                <c:AnimationSlider Style="{StaticResource Axis}" Animations="{Binding SelectedY}"
+                                   BeginEdit="Slider_BeginEdit" EndEdit="Slider_EndEdit"/>
+            </Grid>
+
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="80"/>
+                    <ColumnDefinition/>
+                </Grid.ColumnDefinitions>
+                <Label Style="{StaticResource AxisLabel}" Content="Z"/>
+                <c:AnimationSlider Style="{StaticResource Axis}" Animations="{Binding SelectedZ}"
+                                   BeginEdit="Slider_BeginEdit" EndEdit="Slider_EndEdit"/>
+            </Grid>
+        </StackPanel>
+    </StackPanel>
+</UserControl>

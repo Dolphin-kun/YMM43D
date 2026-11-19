@@ -50,8 +50,7 @@ namespace YMM43D.PreviewTool.Rendering
 
         private sealed class GizmoResources(ID3D11Device device) : IDisposable
         {
-            private readonly RenderPipeline<TransformConstants> pipeline = new(
-                device, Vertex.InputElements, new VertexColorMaterial(device));
+            private readonly RenderPipeline<TransformConstants> pipeline = new(device, Vertex.InputElements, new VertexColorMaterial(device));
 
             private LineMesh? mesh;
             private Vector2 builtTangent;

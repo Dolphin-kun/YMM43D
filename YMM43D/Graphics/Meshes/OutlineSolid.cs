@@ -2,23 +2,13 @@ using System.Numerics;
 
 namespace YMM43D.Graphics.Meshes
 {
-    public enum OutlineForm
-    {
-        Extrude,
-
-        Lathe,
-    }
-
     public static class OutlineSolid
     {
         public const int MinPoints = 3;
-
         public const int MaxPoints = 64;
-
         private const float Same = 1e-5f;
 
-        public static SurfaceGeometry Build(
-            IReadOnlyList<Vector2> outline, OutlineForm form, float depth, int segments)
+        public static SurfaceGeometry Build(IReadOnlyList<Vector2> outline, OutlineForm form, float depth, int segments)
         {
             var points = Clean(outline);
 
@@ -295,9 +285,7 @@ namespace YMM43D.Graphics.Meshes
         {
             var edge = to - from;
 
-            return edge.LengthSquared() > 1e-12f
-                ? Vector2.Normalize(new Vector2(edge.Y, -edge.X))
-                : Vector2.UnitX;
+            return edge.LengthSquared() > 1e-12f ? Vector2.Normalize(new Vector2(edge.Y, -edge.X)) : Vector2.UnitX;
         }
 
         private static Vector2 Blend(in Vector2 first, in Vector2 second)

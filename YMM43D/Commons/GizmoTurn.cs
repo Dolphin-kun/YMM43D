@@ -4,20 +4,12 @@ namespace YMM43D.Commons
 {
     public static class GizmoTurn
     {
-        public static Matrix4x4 Apply(
-            in Matrix4x4 start,
-            in Matrix4x4 frameInverse,
-            in Vector3 worldAxis,
-            GizmoHandle handle,
-            float degrees,
-            GizmoSpace space)
+        public static Matrix4x4 Apply(in Matrix4x4 start, in Matrix4x4 frameInverse, in Vector3 worldAxis, GizmoHandle handle, float degrees, GizmoSpace space)
         {
             var radians = float.DegreesToRadians(degrees);
 
             if (space is GizmoSpace.Local)
-            {
                 return Matrix4x4.CreateFromAxisAngle(TransformGizmo.TurnDirection(handle), radians) * start;
-            }
 
             var turned = Vector3.TransformNormal(worldAxis, frameInverse);
             var axis = turned.LengthSquared() > 1e-12f ? Vector3.Normalize(turned) : worldAxis;

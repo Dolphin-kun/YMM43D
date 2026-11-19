@@ -3,12 +3,9 @@ namespace YMM43D.Commons
     public readonly record struct SurfaceGloss(float Strength, float Power)
     {
         public const float MinPower = 2f;
-
         public const float MaxPower = 1024f;
 
         public static SurfaceGloss None => default;
-
-        public bool IsVisible => Strength > 0f;
 
         public static SurfaceGloss FromPercent(float strength, float sharpness)
         {

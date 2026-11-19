@@ -1,6 +1,5 @@
+﻿using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Plugin;
-using YukkuriMovieMaker.Commons;
-using YukkuriMovieMaker.Exo;
 using YukkuriMovieMaker.Plugin.Tachie;
 
 namespace YMM43D.Project.Tachie
@@ -11,14 +10,15 @@ namespace YMM43D.Project.Tachie
 
         public bool HasScriptFile => false;
 
+        public PluginDetailsAttribute Details => new() { AuthorName = "いるかぁぁ", ContentId = "nc504835" };
+
         public ITachieCharacterParameter CreateCharacterParameter() => new Model3DCharacterParameter();
 
         public ITachieItemParameter CreateItemParameter() => new Model3DItemParameter();
 
         public ITachieFaceParameter CreateFaceParameter() => new Model3DFaceParameter();
 
-        public ITachieSource CreateTachieSource(IGraphicsDevicesAndContext devices)
-            => new Model3DTachieSource(devices);
+        public ITachieSource CreateTachieSource(IGraphicsDevicesAndContext devices) => new Model3DTachieSource(devices);
 
         public IEnumerable<ExoItem> CreateExoItems(
             int FPS,
@@ -29,8 +29,5 @@ namespace YMM43D.Project.Tachie
         public void CreateScriptFile(string scriptDirectoryPath)
         {
         }
-
-        public PluginDetailsAttribute Details
-            => new() { AuthorName = "いるかぁぁ", ContentId = "nc504835" };
     }
 }

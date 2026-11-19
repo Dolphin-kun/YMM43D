@@ -12,10 +12,8 @@ namespace Noise3D
 
         public bool IsExoMaskSupported => false;
 
-        public IShapeParameter CreateShapeParameter(SharedDataStore? sharedData)
-            => new Noise3DParameter(sharedData);
+        public IShapeParameter CreateShapeParameter(SharedDataStore? sharedData) => new Noise3DParameter(sharedData);
 
-        public PluginDetailsAttribute Details
-            => new() { AuthorName = "いるかぁぁ", ContentId = "nc504835" };
+        public PluginDetailsAttribute Details => new() { AuthorName = "いるかぁぁ", ContentId = "nc504835" };
     }
 }

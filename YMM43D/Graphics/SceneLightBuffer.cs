@@ -8,7 +8,6 @@ namespace YMM43D.Graphics
     public sealed class SceneLightBuffer : IDisposable
     {
         public const int Slot = 1;
-
         private const int MinimumCapacity = 4;
 
         private static readonly DeviceResourceCache<SceneLightBuffer> shared =
@@ -25,8 +24,7 @@ namespace YMM43D.Graphics
             this.device = device;
         }
 
-        public static void Bind(
-            ID3D11Device device, ID3D11DeviceContext context, IReadOnlyList<LightConstants> lights)
+        public static void Bind(ID3D11Device device, ID3D11DeviceContext context, IReadOnlyList<LightConstants> lights)
             => shared.Get(device).Write(context, lights);
 
         private void Write(ID3D11DeviceContext context, IReadOnlyList<LightConstants> lights)

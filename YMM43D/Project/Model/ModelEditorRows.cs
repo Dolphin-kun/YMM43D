@@ -1,5 +1,4 @@
 using System.ComponentModel.DataAnnotations;
-using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using YukkuriMovieMaker.Commons;

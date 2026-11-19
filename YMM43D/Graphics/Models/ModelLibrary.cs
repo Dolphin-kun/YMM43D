@@ -14,7 +14,8 @@ namespace YMM43D.Graphics.Models
         private static readonly List<(string Key, ModelImage? Image)> imageCache = [];
 
         public static bool IsSupported(string? path)
-            => Path.GetExtension(path ?? string.Empty).ToLowerInvariant() is ".obj" or ".gltf" or ".glb" or ".vrm" or ".fbx";
+            => Path.GetExtension(path ?? string.Empty).ToLowerInvariant()
+                is ".obj" or ".gltf" or ".glb" or ".vrm" or ".fbx" or ".vrma" or ".pmx" or ".vmd";
 
         public static IReadOnlyList<ModelData> Loaded
         {
@@ -24,9 +25,9 @@ namespace YMM43D.Graphics.Models
                 {
                     var found = new List<ModelData>(cache.Count);
 
-                    foreach (var entry in cache)
+                    foreach (var (_, model) in cache)
                     {
-                        if (entry.Model is { } model)
+                        if (model is not null)
                             found.Add(model);
                     }
 
@@ -113,9 +114,11 @@ namespace YMM43D.Graphics.Models
         public static ModelData Load(string path) => Path.GetExtension(path).ToLowerInvariant() switch
         {
             ".obj" => ObjModelLoader.Load(path),
-            ".gltf" or ".glb" or ".vrm" => GltfModelLoader.Load(path),
+            ".gltf" or ".glb" or ".vrm" or ".vrma" => GltfModelLoader.Load(path),
             ".fbx" => FbxModelLoader.Load(path),
-            var other => throw new NotSupportedException($"{other} は読み込めません。obj / gltf / glb / vrm / fbx を選んでください。"),
+            ".pmx" => PmxModelLoader.Load(path),
+            ".vmd" => VmdMotionLoader.Load(path),
+            var other => throw new NotSupportedException($"{other} は読み込めません。obj / gltf / glb / vrm / vrma / fbx / pmx / vmd を選んでください。"),
         };
 
         private static ModelData? TryLoad(string path)

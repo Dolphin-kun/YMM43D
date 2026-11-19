@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
+using YMM43D.Graphics.Models;
 using YukkuriMovieMaker.Commons;
 
 namespace YMM43D.Project.Model
@@ -92,7 +93,7 @@ namespace YMM43D.Project.Model
 
         private void OnOwnerPropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
-            if (e.PropertyName == property?.Name || e.PropertyName is "File" or "ModelFile")
+            if (e.PropertyName == property?.Name || e.PropertyName is "File" or "ModelFile" or "MotionFile")
                 Fill();
         }
 
@@ -100,7 +101,10 @@ namespace YMM43D.Project.Model
         {
             filling = true;
 
-            var names = (target as IModelHost)?.Model?.Animations.Select(one => one.Name) ?? [];
+            var names = target is IMotionHost { Model: { } model } host
+                ? ModelMotions.Names(model, host.MotionFile)
+                : (target as IModelHost)?.Model?.Animations.Select(one => one.Name).ToArray() ?? [];
+
             var chosen = property?.GetValue(target) as string ?? string.Empty;
 
             list.ItemsSource = new[] { None }.Concat(names).ToArray();

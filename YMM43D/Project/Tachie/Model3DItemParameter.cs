@@ -1,7 +1,6 @@
-using System.Numerics;
-using System.Collections.Immutable;
-using System.ComponentModel;
+﻿using System.Collections.Immutable;
 using System.ComponentModel.DataAnnotations;
+using System.Numerics;
 using YMM43D.Commons;
 using YMM43D.Graphics.Models;
 using YMM43D.Project.Model;
@@ -9,20 +8,25 @@ using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Controls;
 using YukkuriMovieMaker.ItemEditor.CustomVisibilityAttributes;
 using YukkuriMovieMaker.Plugin.Tachie;
+using YukkuriMovieMaker.Settings;
 
 namespace YMM43D.Project.Tachie
 {
-    public class Model3DItemParameter : TachieItemParameterBase, IBoneHost
+    public class Model3DItemParameter : TachieItemParameterBase, IBoneHost, IMotionHost
     {
         private const string Move = "動き";
         private const string Rotation = "向き";
         private const string Parts = "ボーン";
 
+        [Display(GroupName = Move, Name = "動きのファイル", Description = "モデルとは別のファイルに入っている動きを使います")]
+        [FileSelector(FileGroupType.None, CustomFilterName = "動き", CustomFilterValue = "*.fbx;*.gltf;*.glb;*.vrm;*.vrma;*.vmd;*.pmx")]
+        [ShowPropertyEditorWhen(nameof(HasBones), true)]
+        public string MotionFile { get; set => Set(ref field, value ?? string.Empty, nameof(MotionFile), nameof(HasMotion)); } = string.Empty;
+
         [Display(GroupName = Move, Name = "動き", Description = "ファイルに入っている動きから選びます")]
         [MotionSelector]
         [ShowPropertyEditorWhen(nameof(HasMotion), true)]
-        public string Motion { get => motion; set => Set(ref motion, value ?? string.Empty); }
-        private string motion = string.Empty;
+        public string Motion { get; set => Set(ref field, value ?? string.Empty); } = string.Empty;
 
         [Display(GroupName = Move, Name = "速さ", Description = "100% でファイルのとおり")]
         [AnimationSlider("F1", "%", 0, 400)]
@@ -37,8 +41,7 @@ namespace YMM43D.Project.Tachie
         [Display(GroupName = Move, Name = "くり返す", Description = "終わりまで行ったら、はじめに戻ります")]
         [ToggleSlider]
         [ShowPropertyEditorWhen(nameof(HasMotion), true)]
-        public bool MotionLoops { get => motionLoops; set => Set(ref motionLoops, value); }
-        private bool motionLoops = true;
+        public bool MotionLoops { get; set => Set(ref field, value); } = true;
 
         [Display(GroupName = Rotation, Name = "X", Description = "キャラクター設定の向きに足します")]
         [AnimationSlider("F1", "°", -180, 180)]
@@ -55,49 +58,33 @@ namespace YMM43D.Project.Tachie
         [Display(GroupName = Parts, Name = "")]
         [BonePoseList]
         [ShowPropertyEditorWhen(nameof(HasBones), true)]
-        public ImmutableList<ModelBonePose> Bones { get => bones; set => Set(ref bones, value); }
-        private ImmutableList<ModelBonePose> bones = [];
+        public ImmutableList<ModelBonePose> Bones { get; set => Set(ref field, value); } = [];
 
-        public Model3DItemParameter() => SubscribeChildUndoRedoable(Bones);
-
-        [Browsable(false)]
-        [EditorBrowsable(EditorBrowsableState.Never)]
         internal string ModelFile
         {
-            get => modelFile;
+            get;
             set
             {
-                if (modelFile == value)
+                if (field == value)
                     return;
 
-                modelFile = value ?? string.Empty;
+                field = value ?? string.Empty;
                 OnPropertyChanged(nameof(ModelFile));
                 OnPropertyChanged(nameof(HasMotion));
                 OnPropertyChanged(nameof(HasBones));
             }
-        }
-        private string modelFile = string.Empty;
+        } = string.Empty;
 
         internal ModelData? Model => ModelLibrary.Find(ModelFile);
 
-        [Browsable(false)]
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        public bool HasMotion => Model is { Animations.Length: > 0 };
+        ModelData? IModelHost.Model => Model;
 
-        [Browsable(false)]
-        [EditorBrowsable(EditorBrowsableState.Never)]
+        public bool HasMotion => Model is { } model && (model.Animations.Length > 0 || ModelMotions.For(model, MotionFile).Count > 0);
+
         public bool HasBones => Model is { HasBones: true };
 
         internal Matrix4x4[]? Sample(ModelData model, in FrameContext time)
-            => ModelMotion.Sample(
-                model,
-                ModelMotion.Find(model, Motion),
-                time,
-                MotionSpeed.GetFloat(time),
-                MotionStart.GetFloat(time),
-                MotionLoops);
-
-        ModelData? IModelHost.Model => Model;
+            => ModelMotion.Sample(model, ModelMotion.Find(model, MotionFile, Motion), time, MotionSpeed.GetFloat(time), MotionStart.GetFloat(time), MotionLoops);
 
         public ModelBonePose BoneFor(string name)
         {
@@ -110,7 +97,6 @@ namespace YMM43D.Project.Tachie
             var made = new ModelBonePose(name);
 
             Bones = Bones.Add(made);
-            SubscribeChildUndoRedoable(Bones);
 
             return made;
         }
@@ -127,23 +113,6 @@ namespace YMM43D.Project.Tachie
             }
         }
 
-        protected override IEnumerable<IAnimatable> GetAnimatables()
-            => [RotationX, RotationY, RotationZ, MotionSpeed, MotionStart, .. Bones];
-    }
-
-    internal readonly record struct TachiePose(float RotationX, float RotationY, float RotationZ)
-    {
-        public static TachiePose None => new(0f, 0f, 0f);
-
-        public static TachiePose Of(ITachieItemParameter? parameter, in FrameContext time)
-        {
-            if (parameter is not Model3DItemParameter item)
-                return None;
-
-            return new TachiePose(
-                item.RotationX.GetFloat(time),
-                item.RotationY.GetFloat(time),
-                item.RotationZ.GetFloat(time));
-        }
+        protected override IEnumerable<IAnimatable> GetAnimatables() => [RotationX, RotationY, RotationZ, MotionSpeed, MotionStart, .. Bones];
     }
 }

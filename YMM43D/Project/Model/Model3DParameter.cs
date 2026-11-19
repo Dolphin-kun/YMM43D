@@ -1,5 +1,4 @@
 ﻿using System.Collections.Immutable;
-using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Numerics;
 using System.Windows.Media;
@@ -16,7 +15,7 @@ using YukkuriMovieMaker.Settings;
 
 namespace YMM43D.Project.Model
 {
-    internal sealed class Model3DParameter : ShapeParameter3DBase, IModelLook, ISceneRotation3D, ISceneScale3D, IBoneHost
+    internal sealed class Model3DParameter(SharedDataStore? sharedData) : ShapeParameter3DBase(sharedData), IModelLook, ISceneRotation3D, ISceneScale3D, IBoneHost, IMotionHost
     {
         private const string Body = "";
         private const string Rotation = "3D回転";
@@ -28,25 +27,27 @@ namespace YMM43D.Project.Model
         private const string Pattern = "模様";
         private const string Parts = "材質・ボーン・表情";
 
-        [Display(GroupName = Body, Name = "ファイル", Description = "obj / gltf / glb / vrm / fbx のファイル")]
-        [FileSelector(FileGroupType.None, CustomFilterName = "3Dモデル", CustomFilterValue = "*.obj;*.gltf;*.glb;*.vrm;*.fbx")]
+        private const float FeatherSpan = 400f;
+        private const float DefaultFeather = ModelPaint.DefaultFeather * FeatherSpan;
+
+        private readonly ModelSwing springs = new();
+        private string syncedFile = string.Empty;
+
+        [Display(GroupName = Body, Name = "ファイル", Description = "obj / gltf / glb / vrm / fbx / pmx のファイル")]
+        [FileSelector(FileGroupType.None, CustomFilterName = "3Dモデル", CustomFilterValue = "*.obj;*.gltf;*.glb;*.vrm;*.fbx;*.pmx")]
         public string File
         {
-            get => file;
+            get;
             set
             {
-                Set(ref file, value ?? string.Empty);
-
+                Set(ref field, value ?? string.Empty);
                 TouchModel();
             }
-        }
-        private string file = string.Empty;
+        } = string.Empty;
 
-        [Display(GroupName = Body, Name = "モデルのまま",
-            Description = "作られたときの大きさのまま出します（1 m が 100 px）")]
+        [Display(GroupName = Body, Name = "モデルのまま", Description = "作られたときの大きさのまま出します（1 m が 100 px）")]
         [ToggleSlider]
-        public bool IsActualSize { get => isActualSize; set => Set(ref isActualSize, value); }
-        private bool isActualSize = true;
+        public bool IsActualSize { get; set => Set(ref field, value); } = true;
 
         [Display(GroupName = Body, Name = "サイズ", Description = "いちばん長い差し渡し")]
         [AnimationSlider("F1", "px", 0, 1000)]
@@ -70,57 +71,39 @@ namespace YMM43D.Project.Model
         [AnimationSlider("F1", "°", -360, 360)]
         public Animation RotationZ { get; } = new(0, -100000, 100000);
 
-        [Display(GroupName = Stretch, Name = "X", Description = "横に引き伸ばします。100% でそのまま")]
+        [Display(GroupName = Stretch, Name = "X", Description = "横に引き伸ばす割合")]
         [AnimationSlider("F1", "%", 0, 400)]
         public Animation ScaleX { get; } = new(100, 0, 100000);
 
-        [Display(GroupName = Stretch, Name = "Y", Description = "縦に引き伸ばします。100% でそのまま")]
+        [Display(GroupName = Stretch, Name = "Y", Description = "縦に引き伸ばす割合")]
         [AnimationSlider("F1", "%", 0, 400)]
         public Animation ScaleY { get; } = new(100, 0, 100000);
 
-        [Display(GroupName = Stretch, Name = "Z", Description = "奥行きに引き伸ばします。100% でそのまま")]
+        [Display(GroupName = Stretch, Name = "Z", Description = "奥行きに引き伸ばす割合")]
         [AnimationSlider("F1", "%", 0, 400)]
         public Animation ScaleZ { get; } = new(100, 0, 100000);
 
-        [Browsable(false)]
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        public bool HasMotion => Model is { Animations.Length: > 0 };
+        public bool HasMotion => Model is { } model && (model.Animations.Length > 0 || ModelMotions.For(model, MotionFile).Count > 0);
 
-        [Browsable(false)]
-        [EditorBrowsable(EditorBrowsableState.Never)]
         public bool HasBones => Model is { HasBones: true };
 
-        [Browsable(false)]
-        [EditorBrowsable(EditorBrowsableState.Never)]
         public bool HasFaces => Model is { HasMorphs: true };
 
-        [Browsable(false)]
-        [EditorBrowsable(EditorBrowsableState.Never)]
         public bool HasParts => HasBones || HasFaces;
 
-        [Browsable(false)]
-        [EditorBrowsable(EditorBrowsableState.Never)]
         public bool ShowsSwing => HasBones && Swings;
 
-        private void TouchModel()
-        {
-            OnPropertyChanged(nameof(HasMotion));
-            OnPropertyChanged(nameof(HasBones));
-            OnPropertyChanged(nameof(HasFaces));
-            OnPropertyChanged(nameof(HasParts));
-            OnPropertyChanged(nameof(ShowsSwing));
-            OnPropertyChanged(nameof(ShowsMaterials));
-            OnPropertyChanged(nameof(ShowsBones));
-            OnPropertyChanged(nameof(ShowsFaces));
-        }
+        [Display(GroupName = Move, Name = "動きのファイル", Description = "モデルとは別のファイルに入っている動きを使います")]
+        [FileSelector(FileGroupType.None, CustomFilterName = "動き", CustomFilterValue = "*.fbx;*.gltf;*.glb;*.vrm;*.vrma;*.vmd;*.pmx")]
+        [ShowPropertyEditorWhen(nameof(HasBones), true)]
+        public string MotionFile { get; set => Set(ref field, value ?? string.Empty, nameof(MotionFile), nameof(HasMotion)); } = string.Empty;
 
         [Display(GroupName = Move, Name = "動き", Description = "ファイルに入っている動きから選びます")]
         [MotionSelector]
         [ShowPropertyEditorWhen(nameof(HasMotion), true)]
-        public string Motion { get => motion; set => Set(ref motion, value ?? string.Empty); }
-        private string motion = string.Empty;
+        public string Motion { get; set => Set(ref field, value ?? string.Empty); } = string.Empty;
 
-        [Display(GroupName = Move, Name = "速さ", Description = "100% でファイルのとおり")]
+        [Display(GroupName = Move, Name = "速さ", Description = "動きを再生する速さ")]
         [AnimationSlider("F1", "%", 0, 400)]
         [ShowPropertyEditorWhen(nameof(HasMotion), true)]
         public Animation MotionSpeed { get; } = new(100, -100000, 100000);
@@ -133,109 +116,59 @@ namespace YMM43D.Project.Model
         [Display(GroupName = Move, Name = "くり返す", Description = "終わりまで行ったら、はじめに戻ります")]
         [ToggleSlider]
         [ShowPropertyEditorWhen(nameof(HasMotion), true)]
-        public bool MotionLoops { get => motionLoops; set => Set(ref motionLoops, value); }
-        private bool motionLoops = true;
+        public bool MotionLoops { get; set => Set(ref field, value); } = true;
 
-        [Display(GroupName = Move, Name = "揺らす",
-            Description = "モデルに書かれている揺れもの（髪やスカートなど）を揺らします")]
+        [Display(GroupName = Move, Name = "揺らす", Description = "モデルに書かれている揺れもの（髪やスカートなど）を揺らします")]
         [ToggleSlider]
         [ShowPropertyEditorWhen(nameof(HasBones), true)]
         public bool Swings
         {
-            get => swings;
+            get;
             set
             {
-                Set(ref swings, value);
+                Set(ref field, value, nameof(Swings), nameof(ShowsSwing));
                 springs.Forget();
-
-                OnPropertyChanged(nameof(ShowsSwing));
             }
-        }
-        private bool swings = true;
+        } = true;
 
-        [Display(GroupName = Move, Name = "やわらかさ",
-            Description = "大きいほど大きく揺れます。100% でモデルに書かれたとおり")]
+        [Display(GroupName = Move, Name = "やわらかさ", Description = "揺れものの揺れやすさ")]
         [AnimationSlider("F0", "%", 0, 300)]
         [ShowPropertyEditorWhen(nameof(ShowsSwing), true)]
         public Animation Softness { get; } = new(100, 0, 100000);
 
-        [Display(GroupName = Move, Name = "揺れの長さ",
-            Description = "大きいほど、揺れが長く続きます。100% でモデルに書かれたとおり")]
+        [Display(GroupName = Move, Name = "揺れの長さ", Description = "揺れが続く長さ")]
         [AnimationSlider("F0", "%", 0, 300)]
         [ShowPropertyEditorWhen(nameof(ShowsSwing), true)]
         public Animation Sway { get; } = new(200, 0, 100000);
 
-        private readonly ModelSwing springs = new();
-
-        [Display(GroupName = Paint, Name = "色", Description = "モデルの色に掛け合わせます。白ならそのまま")]
+        [Display(GroupName = Paint, Name = "色", Description = "モデルの色に掛け合わせる色")]
         [ColorPicker]
         public Color Tint { get => tint; set => Set(ref tint, value); }
         private Color tint = Colors.White;
 
-        [Display(GroupName = Paint, Name = "陰影",
-            Description = "光源にしたがって陰影をつけます。切ると、モデルの色のまま塗ります")]
+        [Display(GroupName = Paint, Name = "陰影", Description = "光源にしたがって陰影をつけます")]
         [ToggleSlider]
         public bool IsLit { get => !IsUnlit; set => IsUnlit = !value; }
 
-        [Browsable(false)]
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        public bool IsUnlit
-        {
-            get => isUnlit;
-            set
-            {
-                Set(ref isUnlit, value);
-                OnPropertyChanged(nameof(IsLit));
-                OnPropertyChanged(nameof(IsShaded));
-            }
-        }
-        private bool isUnlit;
+        public bool IsUnlit { get; set => Set(ref field, value, nameof(IsUnlit), nameof(IsLit), nameof(IsShaded)); }
 
-        [Browsable(false)]
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        public bool IsToon
-        {
-            get => isToon;
-            set
-            {
-                Set(ref isToon, value);
-                OnPropertyChanged(nameof(IsShaded));
-                OnPropertyChanged(nameof(ToonSteps));
-            }
-        }
-        private bool isToon;
+        public bool IsToon { get; set => Set(ref field, value, nameof(IsToon), nameof(IsShaded), nameof(ToonSteps)); }
 
-        [Browsable(false)]
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        public int ToonLevels
-        {
-            get => toonLevels;
-            set
-            {
-                Set(ref toonLevels, Math.Clamp(value, 2, 8));
-                OnPropertyChanged(nameof(ToonSteps));
-            }
-        }
-        private int toonLevels = 2;
+        public int ToonLevels { get; set => Set(ref field, Math.Clamp(value, 2, 8), nameof(ToonLevels), nameof(ToonSteps)); } = 2;
 
-        [Browsable(false)]
-        [EditorBrowsable(EditorBrowsableState.Never)]
         public bool IsShaded => !IsUnlit && ToonSteps >= 2;
 
-        [Display(GroupName = Paint, Name = "つや",
-            Description = "光が映り込んだ明るい点の強さ")]
+        [Display(GroupName = Paint, Name = "つや", Description = "光が映り込んだ明るい点の強さ")]
         [AnimationSlider("F0", "%", 0, 100)]
         [ShowPropertyEditorWhen(nameof(IsUnlit), false)]
         public Animation Gloss { get; } = new(0, 0, 1000);
 
-        [Display(GroupName = Paint, Name = "つやの鋭さ",
-            Description = "大きいほど映り込みが小さく締まり、磨いたように見えます")]
+        [Display(GroupName = Paint, Name = "つやの鋭さ", Description = "映り込んだ明るい点の締まり具合")]
         [AnimationSlider("F0", "%", 0, 100)]
         [ShowPropertyEditorWhen(nameof(IsUnlit), false)]
         public Animation GlossSharpness { get; } = new(50, 0, 100);
 
-        [Display(GroupName = Toon, Name = "段数",
-            Description = "明るさを何段に分けて塗るか。1 なら段に分けず、なめらかに塗ります")]
+        [Display(GroupName = Toon, Name = "段数", Description = "明るさを何段に分けて塗るか")]
         [TextBoxSlider("F0", "段", 1, 5)]
         [ShowPropertyEditorWhen(nameof(IsUnlit), false)]
         public int ToonSteps
@@ -252,66 +185,55 @@ namespace YMM43D.Project.Model
             }
         }
 
-        [Display(GroupName = Toon, Name = "影の境目",
-            Description = "影のできる境目をずらします。上げると影が小さく、下げると大きくなります")]
+        [Display(GroupName = Toon, Name = "影の境目", Description = "影のできる境目をずらす量")]
         [AnimationSlider("F0", "%", -50, 50)]
         [ShowPropertyEditorWhen(nameof(IsUnlit), false)]
         public Animation ToonShift { get; } = new(0, -100, 100);
 
-        [Display(GroupName = Toon, Name = "境目のぼかし",
-            Description = "段の境目をどれだけぼかすか")]
+        [Display(GroupName = Toon, Name = "境目のぼかし", Description = "段の境目をどれだけぼかすか")]
         [AnimationSlider("F0", "%", 0, 100)]
         [ShowPropertyEditorWhen(nameof(IsShaded), true)]
         public Animation ToonFeather { get; } = new(DefaultFeather, 0, 100);
 
-        [Display(GroupName = Toon, Name = "影の色",
-            Description = "光の当たらないところの色に掛け合わせます。白ならモデルに書かれたまま")]
+        [Display(GroupName = Toon, Name = "影の色", Description = "光の当たらないところの色に掛け合わせる色")]
         [ColorPicker]
         [ShowPropertyEditorWhen(nameof(IsUnlit), false)]
         public Color ShadeColor { get => shadeColor; set => Set(ref shadeColor, value); }
         private Color shadeColor = Colors.White;
 
-        [Display(GroupName = Feel, Name = "凹凸",
-            Description = "モデルに入っている法線マップのでこぼこの強さ")]
+        [Display(GroupName = Feel, Name = "凹凸", Description = "モデルに入っている法線マップのでこぼこの強さ")]
         [AnimationSlider("F0", "%", 0, 200)]
         [ShowPropertyEditorWhen(nameof(IsUnlit), false)]
         public Animation Bump { get; } = new(100, 0, 10000);
 
-        [Display(GroupName = Feel, Name = "発光",
-            Description = "モデルに書かれている光り方の強さ。陰影を切っていても光ります")]
+        [Display(GroupName = Feel, Name = "発光", Description = "モデルに書かれている光り方の強さで、陰影を切っていても光ります")]
         [AnimationSlider("F0", "%", 0, 300)]
         public Animation Glow { get; } = new(100, 0, 10000);
 
-        [Display(GroupName = Feel, Name = "金属",
-            Description = "上げるほど金属らしくなり、映り込みが地の色に染まります")]
+        [Display(GroupName = Feel, Name = "金属", Description = "金属らしさ")]
         [AnimationSlider("F0", "%", 0, 100)]
         [ShowPropertyEditorWhen(nameof(IsUnlit), false)]
         public Animation Metallic { get; } = new(0, 0, 100);
 
-        [Display(GroupName = Feel, Name = "つるつる",
-            Description = "上げるほど表面がなめらかになり、映り込みがはっきりします")]
+        [Display(GroupName = Feel, Name = "つるつる", Description = "表面のなめらかさ")]
         [AnimationSlider("F0", "%", 0, 100)]
         [ShowPropertyEditorWhen(nameof(IsUnlit), false)]
         public Animation Smoothness { get; } = new(0, 0, 100);
 
-        [Display(GroupName = Feel, Name = "映り込み",
-            Description = "「3D環境」のアイテムで選んだ風景の画像を映します")]
+        [Display(GroupName = Feel, Name = "映り込み", Description = "「3D環境」のアイテムで選んだ風景の画像を映します")]
         [AnimationSlider("F0", "%", 0, 100)]
         [ShowPropertyEditorWhen(nameof(IsUnlit), false)]
         public Animation Mirror { get; } = new(0, 0, 100);
 
-        [Display(GroupName = Pattern, Name = "繰り返し",
-            Description = "模様の細かさ。200% にすると半分の大きさで 2 回くり返します")]
+        [Display(GroupName = Pattern, Name = "繰り返し", Description = "模様をくり返す細かさ")]
         [AnimationSlider("F0", "%", 10, 400)]
         public Animation PatternScale { get; } = new(100, 1, 100000);
 
-        [Display(GroupName = Pattern, Name = "横のずらし",
-            Description = "模様を横にずらします。100% で模様ひとつ分")]
+        [Display(GroupName = Pattern, Name = "横のずらし", Description = "模様を横にずらす量")]
         [AnimationSlider("F1", "%", -100, 100)]
         public Animation PatternX { get; } = new(0, -100000, 100000);
 
-        [Display(GroupName = Pattern, Name = "縦のずらし",
-            Description = "模様を縦にずらします。100% で模様ひとつ分")]
+        [Display(GroupName = Pattern, Name = "縦のずらし", Description = "模様を縦にずらす量")]
         [AnimationSlider("F1", "%", -100, 100)]
         public Animation PatternY { get; } = new(0, -100000, 100000);
 
@@ -319,29 +241,12 @@ namespace YMM43D.Project.Model
         [AnimationSlider("F1", "°", -180, 180)]
         public Animation PatternSpin { get; } = new(0, -100000, 100000);
 
-        private const float FeatherSpan = 400f;
-
-        private const float DefaultFeather = ModelPaint.DefaultFeather * FeatherSpan;
-
         [Display(GroupName = Parts, Name = "")]
         [ModelTabs]
         [ShowPropertyEditorWhen(nameof(HasParts), true)]
-        public object? TabRow => null;
+        public ModelTab TabRow => Tab;
 
-        [Browsable(false)]
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        public ModelTab Tab
-        {
-            get => tab;
-            set
-            {
-                Set(ref tab, value);
-                OnPropertyChanged(nameof(ShowsMaterials));
-                OnPropertyChanged(nameof(ShowsBones));
-                OnPropertyChanged(nameof(ShowsFaces));
-            }
-        }
-        private ModelTab tab = ModelTab.Materials;
+        public ModelTab Tab { get; set => Set(ref field, value, nameof(Tab), nameof(ShowsMaterials), nameof(ShowsBones), nameof(ShowsFaces)); } = ModelTab.Materials;
 
         private ModelTab ShownTab => Tab switch
         {
@@ -350,41 +255,49 @@ namespace YMM43D.Project.Model
             _ => Tab,
         };
 
-        [Browsable(false)]
-        [EditorBrowsable(EditorBrowsableState.Never)]
         public bool ShowsMaterials => ShownTab == ModelTab.Materials;
 
-        [Browsable(false)]
-        [EditorBrowsable(EditorBrowsableState.Never)]
         public bool ShowsBones => ShownTab == ModelTab.Bones;
 
-        [Browsable(false)]
-        [EditorBrowsable(EditorBrowsableState.Never)]
         public bool ShowsFaces => ShownTab == ModelTab.Faces;
 
         [Display(GroupName = Parts, Name = "")]
         [MaterialList]
         [ShowPropertyEditorWhen(nameof(ShowsMaterials), true)]
-        public ImmutableList<ModelMaterialSlot> Materials { get => materials; set => Set(ref materials, value); }
-        private ImmutableList<ModelMaterialSlot> materials = [];
+        public ImmutableList<ModelMaterialSlot> Materials { get; set => Set(ref field, value); } = [];
 
         [Display(GroupName = Parts, Name = "")]
         [ExpressionList]
         [ShowPropertyEditorWhen(nameof(ShowsFaces), true)]
-        public ImmutableList<ModelExpressionValue> Expressions { get => expressions; set => Set(ref expressions, value); }
-        private ImmutableList<ModelExpressionValue> expressions = [];
+        public ImmutableList<ModelExpressionValue> Expressions { get; set => Set(ref field, value); } = [];
 
         [Display(GroupName = Parts, Name = "")]
         [BonePoseList]
         [ShowPropertyEditorWhen(nameof(ShowsBones), true)]
-        public ImmutableList<ModelBonePose> Bones { get => bones; set => Set(ref bones, value); }
-        private ImmutableList<ModelBonePose> bones = [];
+        public ImmutableList<ModelBonePose> Bones { get; set => Set(ref field, value); } = [];
 
-        public Model3DParameter(SharedDataStore? sharedData) : base(sharedData)
+        public Model3DParameter() : this(null)
         {
-            SubscribeChildUndoRedoable(Materials);
-            SubscribeChildUndoRedoable(Bones);
-            SubscribeChildUndoRedoable(Expressions);
+        }
+
+        ModelData? IModelHost.Model => Model;
+
+        ModelData? IModelLook.Model => Model;
+
+        internal ModelData? Model => ModelLibrary.Find(File);
+
+        public Vector4 Tone => Tint.ToVector4();
+
+        private void TouchModel()
+        {
+            OnPropertyChanged(nameof(HasMotion));
+            OnPropertyChanged(nameof(HasBones));
+            OnPropertyChanged(nameof(HasFaces));
+            OnPropertyChanged(nameof(HasParts));
+            OnPropertyChanged(nameof(ShowsSwing));
+            OnPropertyChanged(nameof(ShowsMaterials));
+            OnPropertyChanged(nameof(ShowsBones));
+            OnPropertyChanged(nameof(ShowsFaces));
         }
 
         public override async ValueTask EndEditAsync()
@@ -412,58 +325,15 @@ namespace YMM43D.Project.Model
                 {
                     var kept = remaining.FirstOrDefault(value => value.Name == one.Name);
 
-                    if (kept is not null)
-                    {
-                        remaining.Remove(kept);
+                    if (kept is null)
+                        return new ModelExpressionValue(one.Name);
 
-                        return kept;
-                    }
+                    remaining.Remove(kept);
 
-                    return new ModelExpressionValue(one.Name);
+                    return kept;
                 }),
             ];
-
-            SubscribeChildUndoRedoable(Expressions);
         }
-
-        public IReadOnlyList<float>? GetMorphWeights(ModelData model, in FrameContext time)
-        {
-            if (!model.HasMorphs)
-                return null;
-
-            float[]? played = null;
-
-            if (FindMotion(model) is { } motion)
-            {
-                played = new float[model.Morphs.Length];
-                ModelAnimationSampler.Sample(motion, SecondsOf(motion, time), [], played);
-            }
-
-            if (Expressions.Count == 0)
-                return played;
-
-            var at = time;
-
-            var chosen = ModelExpressionWeights.Of(
-                model,
-                Expressions
-                    .Where(value => value.Name.Length > 0 && !value.IsStill(at))
-                    .Select(value => (value.Name, value.Weight.GetFloat(at) / 100f)));
-
-            if (played is null || chosen is null)
-                return chosen ?? played;
-
-            for (var i = 0; i < played.Length && i < chosen.Length; i++)
-                played[i] = Math.Clamp(played[i] + chosen[i], 0f, 1f);
-
-            return played;
-        }
-
-        private ModelAnimation? FindMotion(ModelData model) => ModelMotion.Find(model, Motion);
-
-        private float SecondsOf(ModelAnimation motion, in FrameContext time)
-            => ModelMotion.SecondsOf(
-                motion, time, MotionSpeed.GetFloat(time), MotionStart.GetFloat(time), MotionLoops);
 
         private void SyncMaterials()
         {
@@ -483,18 +353,54 @@ namespace YMM43D.Project.Model
 
             var remaining = Materials.ToList();
 
-            Materials = [.. model.Materials.Select(name =>
-            {
-                var kept = remaining.FirstOrDefault(slot => slot.Name == name);
+            Materials =
+            [
+                .. model.Materials.Select(name =>
+                {
+                    var kept = remaining.FirstOrDefault(slot => slot.Name == name);
 
-                if (kept is not null)
-                    remaining.Remove(kept);
+                    if (kept is not null)
+                        remaining.Remove(kept);
 
-                return new ModelMaterialSlot(name, kept?.Texture ?? string.Empty);
-            })];
+                    return new ModelMaterialSlot(name, kept?.Texture ?? string.Empty);
+                }),
+            ];
         }
 
-        ModelData? IModelHost.Model => Model;
+        public IReadOnlyList<float>? GetMorphWeights(ModelData model, in FrameContext time)
+        {
+            if (!model.HasMorphs)
+                return null;
+
+            float[]? played = null;
+
+            if (FindMotion(model) is { } motion)
+            {
+                played = new float[model.Morphs.Length];
+                ModelAnimationSampler.Sample(motion, SecondsOf(motion, time), [], played);
+            }
+
+            if (Expressions.Count == 0)
+                return played;
+
+            var at = time;
+            var weights = Expressions
+                .Where(value => value.Name.Length > 0 && !value.IsStill(at))
+                .Select(value => (value.Name, value.Weight.GetFloat(at) / 100f));
+            var chosen = ModelExpressionWeights.Of(model, weights);
+
+            if (played is null || chosen is null)
+                return chosen ?? played;
+
+            for (var i = 0; i < played.Length && i < chosen.Length; i++)
+                played[i] = Math.Clamp(played[i] + chosen[i], 0f, 1f);
+
+            return played;
+        }
+
+        private ModelAnimation? FindMotion(ModelData model) => ModelMotion.Find(model, MotionFile, Motion);
+
+        private float SecondsOf(ModelAnimation motion, in FrameContext time) => ModelMotion.SecondsOf(motion, time, MotionSpeed.GetFloat(time), MotionStart.GetFloat(time), MotionLoops);
 
         ModelBonePose IBoneHost.BoneFor(string name) => BoneFor(name);
 
@@ -519,7 +425,6 @@ namespace YMM43D.Project.Model
             var made = new ModelBonePose(name);
 
             Bones = Bones.Add(made);
-            SubscribeChildUndoRedoable(Bones);
 
             return made;
         }
@@ -530,17 +435,13 @@ namespace YMM43D.Project.Model
                 Bones = Bones.Remove(found);
         }
 
-        internal ModelPose.PoseFrames GetBoneFrames(ModelData model, in FrameContext time)
-            => ModelPose.Compute(model.Bones, GetPose(model, time));
+        internal ModelPose.PoseFrames GetBoneFrames(ModelData model, in FrameContext time) => ModelPose.Compute(model.Bones, GetPose(model, time));
 
-        public IReadOnlyList<Matrix4x4>? GetPose(ModelData model, in FrameContext time)
-            => GetPose(model, time, null);
+        public IReadOnlyList<Matrix4x4>? GetPose(ModelData model, in FrameContext time) => GetPose(model, time, null);
 
-        public IReadOnlyList<Matrix4x4>? GetPose(
-            ModelData model, in FrameContext time, in Matrix4x4 world, bool advance)
-            => GetPose(model, time, advance ? world : null);
+        public IReadOnlyList<Matrix4x4>? GetPose(ModelData model, in FrameContext time, in Matrix4x4 world, bool advance) => GetPose(model, time, advance ? world : null);
 
-        private IReadOnlyList<Matrix4x4>? GetPose(ModelData model, in FrameContext time, Matrix4x4? world)
+        private Matrix4x4[]? GetPose(ModelData model, in FrameContext time, Matrix4x4? world)
         {
             if (!model.HasBones)
                 return null;
@@ -553,18 +454,18 @@ namespace YMM43D.Project.Model
                 ModelAnimationSampler.Sample(motion, SecondsOf(motion, time), pose, null);
             }
 
-            return Swing(model, BonePoses.Apply(model, Bones, time, pose), time, world);
+            var posed = ModelMmd.Settle(model, BonePoses.Apply(model, Bones, time, pose));
+
+            return Swing(model, posed, time, world);
         }
 
-        private Matrix4x4[]? Swing(
-            ModelData model, Matrix4x4[]? pose, in FrameContext time, Matrix4x4? world)
-            => Swings
-                ? springs.Apply(
-                    model, Bones, pose, time, world,
-                    Softness.GetFloat(time) / 100f, Sway.GetFloat(time) / 100f)
-                : pose;
+        private Matrix4x4[]? Swing(ModelData model, Matrix4x4[]? pose, in FrameContext time, Matrix4x4? world)
+        {
+            if (!Swings)
+                return pose;
 
-        private string syncedFile = string.Empty;
+            return springs.Apply(model, Bones, pose, time, world, Softness.GetFloat(time) / 100f, Sway.GetFloat(time) / 100f);
+        }
 
         private static Matrix4x4[] Identity(int count)
         {
@@ -602,21 +503,13 @@ namespace YMM43D.Project.Model
         private ModelMaterialSlot? FindSlot(ModelData model, int material)
         {
             var slots = Materials;
+            var name = model.Materials[material];
 
-            return material < slots.Count && slots[material].Name == model.Materials[material]
-                ? slots[material]
-                : slots.FirstOrDefault(candidate => candidate.Name == model.Materials[material]);
+            if (material < slots.Count && slots[material].Name == name)
+                return slots[material];
+
+            return slots.FirstOrDefault(candidate => candidate.Name == name);
         }
-
-        public Model3DParameter() : this(null)
-        {
-        }
-
-        ModelData? IModelLook.Model => Model;
-
-        internal ModelData? Model => ModelLibrary.Find(File);
-
-        public Vector4 Tone => Tint.ToVector4();
 
         public ModelPaint GetPaint(in FrameContext time)
         {
@@ -644,46 +537,32 @@ namespace YMM43D.Project.Model
             };
         }
 
-        public SurfaceGloss GetGloss(in FrameContext time)
-            => IsUnlit ? SurfaceGloss.None : SurfaceGloss.FromPercent(Gloss.GetFloat(time), GlossSharpness.GetFloat(time));
+        public SurfaceGloss GetGloss(in FrameContext time) => IsUnlit ? SurfaceGloss.None : SurfaceGloss.FromPercent(Gloss.GetFloat(time), GlossSharpness.GetFloat(time));
 
         public Matrix4x4 GetLocalMatrix(ModelData model, in FrameContext time)
         {
             var bounds = model.Bounds;
             var extent = bounds.Max - bounds.Min;
             var longest = MathF.Max(extent.X, MathF.Max(extent.Y, extent.Z));
+            var fitted = longest > 1e-9f ? WorldScale.ToWorld(Size.GetFloat(time)) / longest : 1f;
+            var scale = IsActualSize ? Scale.GetFloat(time) / 100f : fitted;
+            var stretch = Stretch3D.Matrix(scale, ScaleX.GetFloat(time), ScaleY.GetFloat(time), ScaleZ.GetFloat(time));
 
-            var scale = IsActualSize
-                ? Scale.GetFloat(time) / 100f
-                : longest > 1e-9f ? WorldScale.ToWorld(Size.GetFloat(time)) / longest : 1f;
-
-            return Matrix4x4.CreateTranslation(-bounds.Center)
-                 * Stretch3D.Matrix(
-                       scale, ScaleX.GetFloat(time), ScaleY.GetFloat(time), ScaleZ.GetFloat(time))
-                 * Rotation3D.ForObject(RotationX.GetFloat(time), RotationY.GetFloat(time), RotationZ.GetFloat(time));
+            return Matrix4x4.CreateTranslation(-bounds.Center) * stretch * GetTurn(time);
         }
 
-        protected override Shape3DSourceBase Create3DSource(IGraphicsDevicesAndContext devices)
-            => new Model3DSource(devices, this);
+        protected override Shape3DSourceBase Create3DSource(IGraphicsDevicesAndContext devices) => new Model3DSource(devices, this);
 
         protected override IEnumerable<IAnimatable> GetAnimatables()
-            => [Size, Scale, RotationX, RotationY, RotationZ, ScaleX, ScaleY, ScaleZ,
-                MotionSpeed, MotionStart, Softness, Sway,
-                Gloss, GlossSharpness, ToonShift, ToonFeather, Bump, Glow, Metallic, Smoothness, Mirror,
-                PatternScale, PatternX, PatternY, PatternSpin,
-                CameraSyncAnimation, .. Bones, .. Expressions];
+            => [Size, Scale, RotationX, RotationY, RotationZ, ScaleX, ScaleY, ScaleZ, MotionSpeed, MotionStart, Softness, Sway, Gloss, GlossSharpness, ToonShift, ToonFeather, Bump, Glow, Metallic, Smoothness, Mirror, PatternScale, PatternX, PatternY, PatternSpin, CameraSyncAnimation, .. PivotAnimatables, .. Bones, .. Expressions];
 
-        public override IEnumerable<string> CreateMaskExoFilter(
-            int keyFrameIndex, ExoOutputDescription desc, ShapeMaskExoOutputDescription shapeMaskDesc) => [];
+        public override IEnumerable<string> CreateMaskExoFilter(int keyFrameIndex, ExoOutputDescription desc, ShapeMaskExoOutputDescription shapeMaskDesc) => [];
 
-        public override IEnumerable<string> CreateShapeItemExoFilter(
-            int keyFrameIndex, ExoOutputDescription desc) => [];
+        public override IEnumerable<string> CreateShapeItemExoFilter(int keyFrameIndex, ExoOutputDescription desc) => [];
 
-        protected override void LoadSharedData(SharedDataStore store)
-            => store.Load<SharedData>()?.CopyTo(this);
+        protected override void LoadSharedData(SharedDataStore store) => store.Load<SharedData>()?.CopyTo(this);
 
-        protected override void SaveSharedData(SharedDataStore store)
-            => store.Save(new SharedData(this));
+        protected override void SaveSharedData(SharedDataStore store) => store.Save(new SharedData(this));
 
         private sealed class SharedData
         {
@@ -807,12 +686,16 @@ namespace YMM43D.Project.Model
                 parameter.PatternX.CopyFrom(PatternX);
                 parameter.PatternY.CopyFrom(PatternY);
                 parameter.PatternSpin.CopyFrom(PatternSpin);
-                parameter.Materials = [.. MaterialNames.Select((name, i) =>
-                    new ModelMaterialSlot(name, i < MaterialTextures.Count ? MaterialTextures[i] : string.Empty)
-                    {
-                        Blend = i < MaterialBlends.Count ? MaterialBlends[i] : ModelSlotBlend.Model,
-                        Cutoff = i < MaterialCutoffs.Count ? MaterialCutoffs[i] : 0.5,
-                    })];
+                parameter.Materials = [.. MaterialNames.Select(Slot)];
+            }
+
+            private ModelMaterialSlot Slot(string name, int index)
+            {
+                var texture = index < MaterialTextures.Count ? MaterialTextures[index] : string.Empty;
+                var blend = index < MaterialBlends.Count ? MaterialBlends[index] : ModelSlotBlend.Model;
+                var cutoff = index < MaterialCutoffs.Count ? MaterialCutoffs[index] : 0.5;
+
+                return new ModelMaterialSlot(name, texture) { Blend = blend, Cutoff = cutoff };
             }
         }
     }

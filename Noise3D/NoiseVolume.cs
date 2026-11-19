@@ -14,15 +14,12 @@ namespace Noise3D
     public static class NoiseVolume
     {
         public const int Cells = 16;
-
         public const int TexelsPerCell = 8;
-
         public const int Size = Cells * TexelsPerCell;
 
         private const int MaxCached = 4;
 
         private static readonly Lock gate = new();
-
         private static readonly List<((NoiseVolumeKind Kind, int Seed) Key, ushort[] Data)> cache = [];
 
         public static NoiseVolumeKind? KindOf(Noise3DType type) => type switch
@@ -129,8 +126,7 @@ namespace Noise3D
             }
         }
 
-        private static float Random01(int x, int y, int z, uint seed, bool periodic = true)
-            => (HashCell(x, y, z, seed, periodic) >> 8) / 16777215f;
+        private static float Random01(int x, int y, int z, uint seed, bool periodic = true) => (HashCell(x, y, z, seed, periodic) >> 8) / 16777215f;
 
         private static Vector3 RandomVector01(int x, int y, int z, uint seed, bool periodic = true)
         {
@@ -172,8 +168,7 @@ namespace Noise3D
             var f = p - new Vector3(x, y, z);
             var (u, v, w) = (Fade(f.X), Fade(f.Y), Fade(f.Z));
 
-            float Corner(int dx, int dy, int dz)
-                => Vector3.Dot(Gradient(x + dx, y + dy, z + dz, seed), f - new Vector3(dx, dy, dz));
+            float Corner(int dx, int dy, int dz) => Vector3.Dot(Gradient(x + dx, y + dy, z + dz, seed), f - new Vector3(dx, dy, dz));
 
             var n = float.Lerp(
                 float.Lerp(float.Lerp(Corner(0, 0, 0), Corner(1, 0, 0), u), float.Lerp(Corner(0, 1, 0), Corner(1, 1, 0), u), v),

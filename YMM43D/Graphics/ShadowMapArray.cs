@@ -1,23 +1,20 @@
 using System.Numerics;
 using Vortice.DXGI;
+using Vortice.Direct3D;
 using Vortice.Direct3D11;
 using Vortice.Mathematics;
 using YukkuriMovieMaker.Commons;
+using YMM43D.Commons;
 
 namespace YMM43D.Graphics
 {
     public sealed class ShadowMapArray : IDisposable
     {
         public const int Slot = 2;
-
         public const int SamplerSlot = 1;
-
         public const int DefaultSize = 1024;
-
         public const int MinSize = 256;
-
         public const int MaxSize = 4096;
-
         public const int MaxSlices = 24;
 
         private static readonly DeviceResourceCache<Holder> holders = new(device => new Holder(device));
@@ -29,8 +26,6 @@ namespace YMM43D.Graphics
 
         public int SliceCount => slices.Length;
 
-        public float Texel => 1f / Size;
-
         public ID3D11ShaderResourceView View { get; }
 
         public ID3D11SamplerState Sampler { get; }
@@ -38,15 +33,14 @@ namespace YMM43D.Graphics
         public static ShadowMapArray For(ID3D11Device device, int size, int sliceCount)
             => holders.Get(device).Get(ClampSize(size), Math.Clamp(sliceCount, 1, MaxSlices));
 
-        public static int ClampSize(int size)
-            => (int)BitOperations.RoundUpToPowerOf2((uint)Math.Clamp(size, MinSize, MaxSize));
+        public static int ClampSize(int size) => (int)BitOperations.RoundUpToPowerOf2((uint)Math.Clamp(size, MinSize, MaxSize));
 
         private ShadowMapArray(ID3D11Device device, int size, int sliceCount)
         {
             Size = size;
             slices = new ID3D11DepthStencilView[sliceCount];
 
-            var texture = Collect(device.CreateTexture2D(new Texture2DDescription
+            var texture = disposer.CollectEx(device.CreateTexture2D(new Texture2DDescription
             {
                 Width = size,
                 Height = size,
@@ -60,14 +54,14 @@ namespace YMM43D.Graphics
 
             for (var i = 0; i < sliceCount; i++)
             {
-                slices[i] = Collect(device.CreateDepthStencilView(texture, new DepthStencilViewDescription(
+                slices[i] = disposer.CollectEx(device.CreateDepthStencilView(texture, new DepthStencilViewDescription(
                     texture, DepthStencilViewDimension.Texture2DArray, Format.D32_Float, 0, i, 1)));
             }
 
-            View = Collect(device.CreateShaderResourceView(texture, new ShaderResourceViewDescription
+            View = disposer.CollectEx(device.CreateShaderResourceView(texture, new ShaderResourceViewDescription
             {
                 Format = Format.R32_Float,
-                ViewDimension = Vortice.Direct3D.ShaderResourceViewDimension.Texture2DArray,
+                ViewDimension = ShaderResourceViewDimension.Texture2DArray,
                 Texture2DArray = new Texture2DArrayShaderResourceView
                 {
                     MostDetailedMip = 0,
@@ -77,7 +71,7 @@ namespace YMM43D.Graphics
                 },
             }));
 
-            Sampler = Collect(device.CreateSamplerState(new SamplerDescription
+            Sampler = disposer.CollectEx(device.CreateSamplerState(new SamplerDescription
             {
                 Filter = Filter.ComparisonMinMagLinearMipPoint,
                 AddressU = TextureAddressMode.Border,
@@ -98,14 +92,7 @@ namespace YMM43D.Graphics
             context.PSSetSampler(SamplerSlot, Sampler);
         }
 
-        public static void Unbind(ID3D11DeviceContext context)
-            => context.PSSetShaderResource(Slot, null!);
-
-        private T Collect<T>(T resource) where T : IDisposable
-        {
-            disposer.Collect(resource);
-            return resource;
-        }
+        public static void Unbind(ID3D11DeviceContext context) => context.PSSetShaderResource(Slot, null!);
 
         public void Dispose() => disposer.Dispose();
 

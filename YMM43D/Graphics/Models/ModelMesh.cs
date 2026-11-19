@@ -75,11 +75,7 @@ namespace YMM43D.Graphics.Models
             foreach (var part in source.Parts)
             {
                 var indices = source.Indices.AsSpan(part.IndexStart, part.IndexCount).ToArray();
-                var mesh = new PartMesh(
-                    vertexBuffer,
-                    D3D11Buffers.Create(device, indices, BindFlags.IndexBuffer),
-                    indices.Length,
-                    source.IsDeformed);
+                var mesh = new PartMesh(vertexBuffer, D3D11Buffers.Create(device, indices, BindFlags.IndexBuffer), indices.Length, source.IsDeformed);
                 disposer.Collect(mesh);
 
                 var texture = part.Material >= 0 && part.Material < replaced.Length ? replaced[part.Material] : null;
@@ -110,10 +106,7 @@ namespace YMM43D.Graphics.Models
             {
                 var influence = source.HasBones ? source.Influences[i] : ModelInfluence.None;
 
-                skinned[i] = new SkinnedVertex(
-                    vertices[i],
-                    influence.Bone0, influence.Bone1, influence.Bone2, influence.Bone3,
-                    influence.Weights);
+                skinned[i] = new SkinnedVertex(vertices[i], influence.Bone0, influence.Bone1, influence.Bone2, influence.Bone3, influence.Weights);
             }
 
             return skinned;
@@ -143,8 +136,7 @@ namespace YMM43D.Graphics.Models
 
             public int VertexStride => skinned ? SkinnedVertex.Stride : Vertex.Stride;
 
-            public InputElementDescription[] InputElements
-                => skinned ? SkinnedVertex.InputElements : Vertex.InputElements;
+            public InputElementDescription[] InputElements => skinned ? SkinnedVertex.InputElements : Vertex.InputElements;
 
             public PrimitiveTopology Topology => PrimitiveTopology.TriangleList;
 

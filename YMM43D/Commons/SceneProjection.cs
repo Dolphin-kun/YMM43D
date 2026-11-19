@@ -5,14 +5,12 @@ namespace YMM43D.Commons
     public static class SceneProjection
     {
         public const float DefaultFocalDistance = 10f;
-
         public const float DefaultFieldOfView = MathF.PI / 4f;
 
         private const float MinFieldOfViewDegrees = 1f;
         private const float MaxFieldOfViewDegrees = 179f;
 
         public const float NearPlane = 0.1f;
-
         private const float FarPlane = 1000f;
 
         public static float GetPixelsPerTangent(in CameraState camera, float screenHeight)
@@ -26,16 +24,12 @@ namespace YMM43D.Commons
         }
 
         public static Matrix4x4 GetTangentProjection()
-            => Matrix4x4.CreatePerspectiveOffCenter(
-                -NearPlane, NearPlane, -NearPlane, NearPlane, NearPlane, FarPlane);
+            => Matrix4x4.CreatePerspectiveOffCenter(-NearPlane, NearPlane, -NearPlane, NearPlane, NearPlane, FarPlane);
 
-        public static Matrix4x4 GetProjectionMatrix(
-            float aspectRatio, float screenHeight, float pixelsPerTangent)
-            => Matrix4x4.CreatePerspectiveFieldOfView(
-                GetFieldOfView(screenHeight, pixelsPerTangent), aspectRatio, NearPlane, FarPlane);
+        public static Matrix4x4 GetProjectionMatrix(float aspectRatio, float screenHeight, float pixelsPerTangent)
+            => Matrix4x4.CreatePerspectiveFieldOfView(GetFieldOfView(screenHeight, pixelsPerTangent), aspectRatio, NearPlane, FarPlane);
 
-        public static Matrix4x4 GetOrthographicMatrix(
-            float aspectRatio, float screenHeight, float pixelsPerTangent, float distance)
+        public static Matrix4x4 GetOrthographicMatrix(float aspectRatio, float screenHeight, float pixelsPerTangent, float distance)
         {
             var reach = MathF.Max(distance, NearPlane);
             var height = 2f * reach * MathF.Tan(GetFieldOfView(screenHeight, pixelsPerTangent) / 2f);
