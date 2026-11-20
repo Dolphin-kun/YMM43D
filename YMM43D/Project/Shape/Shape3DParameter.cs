@@ -707,7 +707,7 @@ namespace YMM43D.Project.Shape
             if (slot.Done is { } known && known.Matches(cage, hidden, angle, steps))
                 return known;
 
-            if (waits || steps.Length == 0)
+            if (waits || steps.All(step => step.IsQuick))
                 return slot.Done = Build(cage, hidden, angle, steps);
 
             Task running;

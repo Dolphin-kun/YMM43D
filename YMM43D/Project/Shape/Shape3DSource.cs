@@ -13,7 +13,7 @@ using YukkuriMovieMaker.Commons;
 namespace YMM43D.Project.Shape
 {
     internal sealed class Shape3DSource(IGraphicsDevicesAndContext devices, Shape3DParameter parameter)
-        : Shape3DSourceBase(devices), I3DGeometrySource
+        : Shape3DSourceBase(devices), I3DGeometrySource, I3DSnapshot
     {
         private readonly Shape3DParameter parameter = parameter;
         private readonly DeviceResourceCache<SolidResources> resources = new(device => new SolidResources(device));
@@ -22,12 +22,16 @@ namespace YMM43D.Project.Shape
         private Built? built;
 
         public override void Draw(in Render3DContext render, DrawContext3D item)
+            => Paint(render, item, GetLocalMatrix(item.Time), (render.IsOutput ? null : parameter.PreviewGeometry(item.Time)) ?? Geometry(item.Time));
+
+        public I3DProvider Snapshot(in FrameContext time) => new Frozen(this, Geometry(time), GetLocalMatrix(time));
+
+        private void Paint(in Render3DContext render, DrawContext3D item, Matrix4x4 local, SurfaceGeometry geometry)
         {
             if (!resources.TryGet(render.Device, out var shared))
                 return;
 
-            var world = GetLocalMatrix(item.Time) * item.World;
-            var geometry = (render.IsOutput ? null : parameter.PreviewGeometry(item.Time)) ?? Geometry(item.Time);
+            var world = local * item.World;
 
             if (geometry.Faces.Length == 0)
                 return;
@@ -91,6 +95,15 @@ namespace YMM43D.Project.Shape
             => parameter.Targets = parameter.Modifiers.Any(modifier => modifier is BooleanModifier { IsEnabled: true }) ? BooleanTargets.Resolve(description, parameter) : null;
 
         private sealed record Built(SolidShape Shape, SurfaceGeometry? Mesh, Vector2[] Outline, SurfaceGeometry Geometry);
+
+        private sealed class Frozen(Shape3DSource owner, SurfaceGeometry geometry, Matrix4x4 local) : I3DProvider, I3DBounds
+        {
+            public bool RequiresMappedTexture => false;
+
+            public void Draw(in Render3DContext render, DrawContext3D item) => owner.Paint(render, item, local, geometry);
+
+            public WorldBounds GetLocalBounds(in FrameContext itemTime) => WorldBounds.FromPoints(geometry.Vertices, local);
+        }
 
         private Matrix4x4 GetLocalMatrix(in FrameContext itemTime) => parameter.GetLocalMatrix(itemTime);
 

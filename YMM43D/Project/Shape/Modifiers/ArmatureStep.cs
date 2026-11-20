@@ -7,6 +7,8 @@ namespace YMM43D.Project.Shape.Modifiers
     {
         public override MeshTopology Apply(MeshTopology mesh) => ShapeArmature.Deformed(mesh, Skin);
 
+        public override bool IsQuick => true;
+
         public bool Equals(ArmatureStep? other) => other is not null && Skin.AsSpan().SequenceEqual(other.Skin);
 
         public override int GetHashCode() => Skin.Length;

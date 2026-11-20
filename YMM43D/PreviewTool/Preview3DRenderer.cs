@@ -104,23 +104,7 @@ namespace YMM43D.PreviewTool
 
         public void Compose(int width, int height, float pixelScale, PreviewScene scene)
         {
-            var groups = GroupLookup.Build(scene.Environment.Scene?.Timeline, scene.Time.Frame, scene.Time.Fps);
-
-            var entries = new List<(PreviewItem Item, DrawContext3D Context)>(scene.Items.Count);
-
-            foreach (var previewItem in scene.Items)
-            {
-                var built = contextBuilder.Build(
-                    previewItem.Item,
-                    previewItem.GetItemTime(scene.Time),
-                    scene.Environment,
-                    previewItem.Provider,
-                    groups);
-
-                foreach (var drawContext in built)
-                    entries.Add((previewItem, drawContext));
-            }
-
+            var entries = Entries(scene);
             var viewPose = scene.ViewPose;
 
             var pixelsPerTangent = SceneProjection.GetPixelsPerTangent(scene.SceneCamera, scene.ScreenHeight);
@@ -130,16 +114,6 @@ namespace YMM43D.PreviewTool
             var projection = scene.IsOrthographic
                 ? SceneProjection.GetOrthographicMatrix(aspect, scene.ScreenHeight, pixelsPerTangent, scene.ViewDistance)
                 : SceneProjection.GetProjectionMatrix(aspect, scene.ScreenHeight, pixelsPerTangent);
-
-            var casters = new List<SceneDepthCollector.Occluder>(entries.Count);
-
-            foreach (var (previewItem, drawContext) in entries)
-            {
-                if (ReferenceEquals(previewItem.Provider, flatItemProvider))
-                    continue;
-
-                casters.Add(new SceneDepthCollector.Occluder(previewItem.Provider, drawContext.World, drawContext.Time));
-            }
 
             var sceneCameraPose = scene.SceneCameraPose;
             var screenTangent = scene.GetScreenTangent(pixelsPerTangent);
@@ -225,7 +199,7 @@ namespace YMM43D.PreviewTool
             lastHeight = height;
 
             composed = new ComposedFrame(
-                scene, entries, casters, projection, width, height, pixelScale, sceneCameraPose, screenTangent,
+                scene, projection, width, height, pixelScale, sceneCameraPose, screenTangent,
                 Bones, Outline, Handles, meshFrame, Gizmo, lastGizmoStyle, lastTurnsInThreeAxes, View);
         }
 
@@ -244,17 +218,19 @@ namespace YMM43D.PreviewTool
 
             var scene = frame.Scene;
             var viewPose = scene.ViewPose;
+            var entries = Entries(scene);
+            var casters = Casters(entries);
 
             context.OMSetRenderTargets(renderTarget, depthStencil);
             context.ClearRenderTargetView(renderTarget, BackgroundColor);
             context.ClearDepthStencilView(depthStencil, DepthStencilClearFlags.Depth, 1f, 0);
             context.RSSetViewport(new Viewport(0, 0, frame.Width * frame.PixelScale, frame.Height * frame.PixelScale));
 
-            var lit = SceneShadows.Build(device, context, scene.Lighting, frame.Casters, this);
+            var lit = SceneShadows.Build(device, context, scene.Lighting, casters, this);
 
             var render = new Render3DContext(device, context, viewPose.ViewMatrix, frame.Projection, lit)
             {
-                Scene = frame.Casters,
+                Scene = casters,
                 SceneDepth = depthView,
             }.BindLights();
 
@@ -267,7 +243,7 @@ namespace YMM43D.PreviewTool
 
             try
             {
-                foreach (var (previewItem, drawContext) in frame.Entries)
+                foreach (var (previewItem, drawContext) in entries)
                 {
                     RenderStates.IsMeshMode = scene.ShowsMesh && IsModel(previewItem.Item);
 
@@ -319,8 +295,6 @@ namespace YMM43D.PreviewTool
 
         private sealed record ComposedFrame(
             PreviewScene Scene,
-            List<(PreviewItem Item, DrawContext3D Context)> Entries,
-            List<SceneDepthCollector.Occluder> Casters,
             Matrix4x4 Projection,
             int Width,
             int Height,
@@ -335,6 +309,42 @@ namespace YMM43D.PreviewTool
             GizmoStyle GizmoStyle,
             bool TurnsInThreeAxes,
             ViewSnapshot View);
+
+        private List<(PreviewItem Item, DrawContext3D Context)> Entries(PreviewScene scene)
+        {
+            var groups = GroupLookup.Build(scene.Environment.Scene?.Timeline, scene.Time.Frame, scene.Time.Fps);
+            var entries = new List<(PreviewItem Item, DrawContext3D Context)>(scene.Items.Count);
+
+            foreach (var previewItem in scene.Items)
+            {
+                var built = contextBuilder.Build(
+                    previewItem.Item,
+                    previewItem.GetItemTime(scene.Time),
+                    scene.Environment,
+                    previewItem.Provider,
+                    groups);
+
+                foreach (var drawContext in built)
+                    entries.Add((previewItem, drawContext));
+            }
+
+            return entries;
+        }
+
+        private List<SceneDepthCollector.Occluder> Casters(List<(PreviewItem Item, DrawContext3D Context)> entries)
+        {
+            var casters = new List<SceneDepthCollector.Occluder>(entries.Count);
+
+            foreach (var (previewItem, drawContext) in entries)
+            {
+                if (ReferenceEquals(previewItem.Provider, flatItemProvider))
+                    continue;
+
+                casters.Add(new SceneDepthCollector.Occluder(previewItem.Provider, drawContext.World, drawContext.Time));
+            }
+
+            return casters;
+        }
 
         private static DrawContext3D Textured(I3DProvider provider, DrawContext3D context, ID3D11Device device)
         {
