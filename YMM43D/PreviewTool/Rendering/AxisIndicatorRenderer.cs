@@ -48,7 +48,7 @@ namespace YMM43D.PreviewTool.Rendering
             resources = new DeviceResourceCache<IndicatorResources>(device => new IndicatorResources(device));
         }
 
-        public void Draw(in Render3DContext render, in CameraPose pose, float width, float height, float pixelScale)
+        public void Place(in CameraPose pose, float width, float height)
         {
             lastTransform = null;
 
@@ -65,21 +65,25 @@ namespace YMM43D.PreviewTool.Rendering
             var view = Matrix4x4.CreateLookAt(-forward * ViewDistance, Vector3.Zero, up);
             var projection = Matrix4x4.CreateOrthographic(ViewSize, ViewSize, 0.1f, ViewDistance * 2f);
 
-            var shared = resources.Get(render.Device);
-            var transform = view * projection;
+            lastTransform = view * projection;
+            lastOrigin = new Vector2(width - size - Margin, height - size - Margin);
+            lastSize = size;
+        }
 
+        public void Draw(in Render3DContext render, float width, float height, float pixelScale)
+        {
+            if (lastTransform is not { } transform)
+                return;
+
+            var shared = resources.Get(render.Device);
             var settings = new DrawSettings { IgnoreDepth = true, SkipDepthWrite = true };
 
-            render.Context.RSSetViewport(new Viewport((width - size - Margin) * pixelScale, (height - size - Margin) * pixelScale, size * pixelScale, size * pixelScale));
+            render.Context.RSSetViewport(new Viewport(lastOrigin.X * pixelScale, lastOrigin.Y * pixelScale, lastSize * pixelScale, lastSize * pixelScale));
 
             foreach (var mesh in shared.Axes)
                 shared.Pipeline.Draw(render.Context, TransformConstants.CreateUnlit(transform, 1f), settings, mesh);
 
             render.Context.RSSetViewport(new Viewport(0, 0, width * pixelScale, height * pixelScale));
-
-            lastTransform = transform;
-            lastOrigin = new Vector2(width - size - Margin, height - size - Margin);
-            lastSize = size;
         }
 
         public ViewDirection? Pick(Vector2 position)

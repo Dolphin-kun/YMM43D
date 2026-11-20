@@ -40,6 +40,27 @@ namespace YMM43D.PreviewTool
 
         public bool HasHidden => hiddenVertices.Count > 0 || hiddenEdges.Count > 0 || hiddenFaces.Count > 0;
 
+        public MeshSelection Copy()
+        {
+            var copy = new MeshSelection
+            {
+                mesh = mesh,
+                Part = Part,
+                Active = Active,
+                Revision = Revision,
+                HiddenRevision = HiddenRevision,
+            };
+
+            copy.vertices.UnionWith(vertices);
+            copy.edges.UnionWith(edges);
+            copy.faces.UnionWith(faces);
+            copy.hiddenVertices.UnionWith(hiddenVertices);
+            copy.hiddenEdges.UnionWith(hiddenEdges);
+            copy.hiddenFaces.UnionWith(hiddenFaces);
+
+            return copy;
+        }
+
         public void Bind(MeshTopology current)
         {
             if (ReferenceEquals(mesh, current))

@@ -4,6 +4,7 @@ using Vortice.Direct2D1;
 using Vortice.Direct3D11;
 using Vortice.DXGI;
 using YMM43D.Commons;
+using YMM43D.Plugin;
 using YukkuriMovieMaker.Commons;
 
 namespace YMM43D.Player
@@ -13,7 +14,7 @@ namespace YMM43D.Player
         private const long MaxTexturePixels = 4096L * 4096L;
 
         private readonly Lock gate = new();
-        private readonly Dictionary<object, SharedItemTexture> cache = [];
+        private readonly Dictionary<object, TexturePair> cache = [];
         private readonly PrivateD2DContext privateContext = new();
 
         public ID3D11ShaderResourceView? GetTexture(ID3D11Device targetDevice, IGraphicsDevicesAndContext ymmDevices, ID2D1Image image, object key, out RawRectF bounds)
@@ -88,28 +89,59 @@ namespace YMM43D.Player
         {
             lock (gate)
             {
-                if (cache.TryGetValue(key, out var texture) && !texture.Matches(width, height, ymmDevices.D3D.Device))
+                if (cache.TryGetValue(key, out var pair) && !pair.Matches(width, height, ymmDevices.D3D.Device))
                 {
-                    texture.Dispose();
+                    pair.Dispose();
                     cache.Remove(key);
-                    texture = null;
+                    pair = null;
                 }
 
-                if (texture is null)
+                SharedItemTexture texture;
+
+                try
                 {
-                    try
-                    {
-                        texture = cache[key] = new SharedItemTexture(targetDevice, ymmDevices, deviceContext, width, height);
-                    }
-                    catch
-                    {
-                        cache.Remove(key);
-                        return null;
-                    }
+                    pair ??= cache[key] = new TexturePair(new SharedItemTexture(targetDevice, ymmDevices, deviceContext, width, height));
+                    texture = pair.Next(YMM43DSettings.Default.UsesDoubleBuffer, () => new SharedItemTexture(targetDevice, ymmDevices, deviceContext, width, height));
+                }
+                catch
+                {
+                    pair?.Dispose();
+                    cache.Remove(key);
+                    return null;
                 }
 
                 texture.Update(ymmDevices, deviceContext, image, bounds, scale);
                 return texture.ShaderResourceView;
+            }
+        }
+
+        private sealed class TexturePair(SharedItemTexture first) : IDisposable
+        {
+            private SharedItemTexture? second;
+            private bool usesSecond;
+
+            public bool Matches(int width, int height, ID3D11Device ymmDevice) => first.Matches(width, height, ymmDevice) && (second?.Matches(width, height, ymmDevice) ?? true);
+
+            public SharedItemTexture Next(bool doubles, Func<SharedItemTexture> make)
+            {
+                if (!doubles)
+                {
+                    second?.Dispose();
+                    second = null;
+                    usesSecond = false;
+
+                    return first;
+                }
+
+                usesSecond = !usesSecond;
+
+                return usesSecond ? second ??= make() : first;
+            }
+
+            public void Dispose()
+            {
+                first.Dispose();
+                second?.Dispose();
             }
         }
 

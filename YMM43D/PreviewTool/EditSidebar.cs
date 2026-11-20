@@ -1,5 +1,4 @@
 using System.Numerics;
-using System.Windows.Input;
 using YukkuriMovieMaker.Commons;
 
 namespace YMM43D.PreviewTool
@@ -22,12 +21,41 @@ namespace YMM43D.PreviewTool
 
         public event Action<int>? KeyChosen;
 
+        public event Action<int, float>? WeightAssigned;
+
+        public event Action<int>? WeightChosen;
+
         public EditSidebar()
         {
             AssignMaterialCommand = new ActionCommand(_ => HasSelection && MaterialIndex >= 0, _ => MaterialAssigned?.Invoke(MaterialIndex));
             SelectMaterialCommand = new ActionCommand(_ => MaterialIndex >= 0, _ => MaterialChosen?.Invoke(MaterialIndex, true));
             DeselectMaterialCommand = new ActionCommand(_ => MaterialIndex >= 0, _ => MaterialChosen?.Invoke(MaterialIndex, false));
+            AssignWeightCommand = new ActionCommand(_ => HasSelection && BoneIndex >= 0, _ => WeightAssigned?.Invoke(BoneIndex, (float)(Weight / 100)));
+            RemoveWeightCommand = new ActionCommand(_ => HasSelection && BoneIndex >= 0, _ => WeightAssigned?.Invoke(BoneIndex, 0f));
+            SelectWeightCommand = new ActionCommand(_ => BoneIndex >= 0, _ => WeightChosen?.Invoke(BoneIndex));
         }
+
+        public IReadOnlyList<string> Bones { get; private set => Set(ref field, value, nameof(Bones), nameof(HasBones)); } = [];
+
+        public bool HasBones => Bones.Count > 0;
+
+        public int BoneIndex
+        {
+            get;
+            set
+            {
+                if (Set(ref field, value))
+                    RefreshCommands();
+            }
+        } = -1;
+
+        public double Weight { get; set => Set(ref field, Math.Clamp(value, 0, 100)); } = 100;
+
+        public ActionCommand AssignWeightCommand { get; }
+
+        public ActionCommand RemoveWeightCommand { get; }
+
+        public ActionCommand SelectWeightCommand { get; }
 
         public IReadOnlyList<string> Materials { get; private set => Set(ref field, value, nameof(Materials), nameof(HasMaterials)); } = [];
 
@@ -184,8 +212,16 @@ namespace YMM43D.PreviewTool
             }
         }
 
-        public void Show(bool editing, Vector3? chosenCenter, Vector3 cursorAt, float? reach, IReadOnlyList<string> materials, IReadOnlyList<string> keys, int activeKey, bool uv, Vector2? uvAt)
+        public void Show(bool editing, Vector3? chosenCenter, Vector3 cursorAt, float? reach, IReadOnlyList<string> materials, IReadOnlyList<string> keys, int activeKey, bool uv, Vector2? uvAt, IReadOnlyList<string> bones)
         {
+            if (!bones.SequenceEqual(Bones))
+            {
+                var keep = BoneIndex;
+
+                Bones = bones;
+                BoneIndex = bones.Count == 0 ? -1 : Math.Clamp(keep, 0, bones.Count - 1);
+            }
+
             IsEditing = editing;
             IsUv = uv;
             HasUvSelection = uvAt is not null;
@@ -248,6 +284,9 @@ namespace YMM43D.PreviewTool
             AssignMaterialCommand.RaiseCanExecuteChanged();
             SelectMaterialCommand.RaiseCanExecuteChanged();
             DeselectMaterialCommand.RaiseCanExecuteChanged();
+            AssignWeightCommand.RaiseCanExecuteChanged();
+            RemoveWeightCommand.RaiseCanExecuteChanged();
+            SelectWeightCommand.RaiseCanExecuteChanged();
         }
     }
 }

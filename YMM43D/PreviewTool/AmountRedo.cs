@@ -31,7 +31,7 @@ namespace YMM43D.PreviewTool
 
         public bool IsFactor => spec.Unit is AmountUnit.Factor;
 
-        public string AmountLabel => IsAngle ? "角度" : "量";
+        public string AmountLabel => spec.AmountLabel.Length > 0 ? spec.AmountLabel : IsAngle ? "角度" : "量";
 
         public string AmountUnitText => IsAngle ? "°" : IsFactor ? string.Empty : "px";
 

@@ -4,7 +4,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using YukkuriMovieMaker.Commons;
 
-namespace YMM43D.Controls
+namespace YMM43D.Controls.ControlPoints
 {
     public partial class ControlPointsEditor : UserControl, IPropertyEditorControl
     {

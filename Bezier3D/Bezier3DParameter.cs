@@ -3,7 +3,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Numerics;
 using System.Windows.Media;
 using YMM43D.Commons;
-using YMM43D.Controls;
+using YMM43D.Controls.ControlPoints;
 using YMM43D.Plugin;
 using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Controls;

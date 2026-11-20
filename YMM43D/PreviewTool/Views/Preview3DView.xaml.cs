@@ -56,13 +56,13 @@ namespace YMM43D.PreviewTool.Views
             SidebarFrame.Width = viewModel.SidebarWidth;
         }
 
-        private void OnMenuRequested(MeshMenu menu)
+        private void OnMenuRequested(IReadOnlyList<MeshMenuEntry> entries)
         {
             if (DataContext is not Preview3DViewModel viewModel || Resources["MeshPopup"] is not ContextMenu popup)
                 return;
 
             popup.DataContext = viewModel;
-            popup.ItemsSource = viewModel.MeshMenus.Entries(menu);
+            popup.ItemsSource = entries;
             popup.PlacementTarget = this;
             popup.Placement = PlacementMode.MousePoint;
             popup.IsOpen = true;

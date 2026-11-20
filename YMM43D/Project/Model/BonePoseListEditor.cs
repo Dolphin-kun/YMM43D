@@ -128,7 +128,7 @@ namespace YMM43D.Project.Model
 
         private void OnOwnerPropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
-            if (e.PropertyName == property?.Name)
+            if (e.PropertyName == property?.Name || e.PropertyName == nameof(IModelHost.Model))
                 Refresh();
         }
 

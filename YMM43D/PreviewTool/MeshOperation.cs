@@ -27,6 +27,7 @@ namespace YMM43D.PreviewTool
         RotateEdge,
         RotateEdgeBack,
         Connect,
+        SmoothVertices,
         Knife,
         Bisect,
         BisectClear,

@@ -58,9 +58,9 @@ namespace YMM43D.Project.Shape
 
                     foreach (var (corner, _, _) in triangle)
                     {
-                        var known = tangents.GetValueOrDefault((slot, corner));
+                        var (knownAlong, knownAcross) = tangents.GetValueOrDefault((slot, corner));
 
-                        tangents[(slot, corner)] = (known.Along + along, known.Across + across);
+                        tangents[(slot, corner)] = (knownAlong + along, knownAcross + across);
                     }
 
                     triangles[slot].Add(triangle);
@@ -81,10 +81,10 @@ namespace YMM43D.Project.Shape
                 {
                     foreach (var (corner, normal, uv) in triangle)
                     {
-                        var summed = tangents.GetValueOrDefault((slot, corner));
-                        var along = summed.Along - normal * Vector3.Dot(summed.Along, normal);
+                        var (summedAlong, summedAcross) = tangents.GetValueOrDefault((slot, corner));
+                        var along = summedAlong - normal * Vector3.Dot(summedAlong, normal);
                         var tangent = along.LengthSquared() > 1e-12f ? Vector3.Normalize(along) : Vector3.UnitX;
-                        var hand = Vector3.Dot(Vector3.Cross(normal, tangent), summed.Across) < 0f ? -1f : 1f;
+                        var hand = Vector3.Dot(Vector3.Cross(normal, tangent), summedAcross) < 0f ? -1f : 1f;
 
                         vertices.Add(new Vertex(geometry.Vertices[corner], color, uv, normal, new Vector4(tangent, hand)));
                     }

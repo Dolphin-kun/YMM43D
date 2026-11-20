@@ -63,11 +63,11 @@ namespace YMM43D.PreviewTool.ViewModels
         private IItem? selectedMarker;
         private int selectedBone = -1;
         private ImmutableList<IItem>? lastItems;
-        private PreviewScene? preparedScene;
         private Point? toggleClickAt;
 
         private float snapStep = SnapGrid.DefaultStep;
         private bool hadSelectedItem;
+        private bool couldEditMesh;
         private bool isEditingMesh;
         private MeshSelection meshSelection = new();
         private Shape3DParameter? hiddenOn;
@@ -265,6 +265,9 @@ namespace YMM43D.PreviewTool.ViewModels
                     _ => "頂点",
                 };
 
+                if (EditsBones)
+                    return "編集モード：骨の付け根・先・線をドラッグして動かす";
+
                 if (boxOnce)
                     return "編集モード：範囲で選ぶ";
 
@@ -367,6 +370,9 @@ namespace YMM43D.PreviewTool.ViewModels
                 if (Mode is GizmoMode.LoopCut or GizmoMode.Inflate)
                     Mode = GizmoMode.Move;
             }
+
+            if (!wanted)
+                EditsBones = false;
 
             OnPropertyChanged(nameof(IsEditingMesh));
             OnPropertyChanged(nameof(SlidesMesh));
@@ -772,7 +778,6 @@ namespace YMM43D.PreviewTool.ViewModels
             disposer.RemoveAndDispose(ref d3dHost);
             disposer.RemoveAndDispose(ref sourceAndDevices);
             D3DHost = null;
-            preparedScene = null;
 
             toolInfo = info;
             timeline = info.Timeline;
@@ -994,7 +999,7 @@ namespace YMM43D.PreviewTool.ViewModels
             if (d3dHost is not null && HoldsMouse)
                 d3dHost.PollMouse();
 
-            if (d3dHost is null || timeline is null || !ShouldRender(d3dHost))
+            if (d3dHost is null || timeline is null || d3dHost.IsDrawing || !ShouldRender(d3dHost))
                 return;
 
             renderRequested = false;
@@ -1010,45 +1015,52 @@ namespace YMM43D.PreviewTool.ViewModels
                 SyncSelectionState();
                 UpdateSourceDescription();
                 UpdatePreviewItems();
-                d3dHost.RenderFrame();
+                d3dHost.RenderFrameInBackground();
             }
         }
 
         private void OnPreparing(ID3D11Device device)
         {
-            preparedScene = CreatePreviewScene(device);
+            renderer.ClearFrame();
 
-            if (preparedScene is not null)
-                renderer.Prepare(preparedScene);
-        }
+            var prepared = CreatePreviewScene(device);
 
-        private void OnRender(ID3D11Device device, ID3D11DeviceContext context, int width, int height)
-        {
-            if (d3dHost?.RenderTargetView is not { } renderTarget
-                || d3dHost.DepthStencilView is not { } depthStencil
-                || preparedScene is not { } prepared
-                || width <= 0 || height <= 0)
-            {
+            if (prepared is not null)
+                renderer.Prepare(prepared);
+
+            if (d3dHost is not { RenderTargetView: not null, DepthStencilView: not null } host || prepared is null)
                 return;
-            }
 
-            renderer.Draw(
-                device, context, renderTarget, depthStencil, width, height, d3dHost.PixelScale, prepared, d3dHost.DepthView);
+            var width = (int)host.ActualWidth;
+            var height = (int)host.ActualHeight;
 
-            d3dHost.UvSheet = UvSheet(width, height);
+            if (width <= 0 || height <= 0)
+                return;
 
-            d3dHost.Labels = Labels();
+            renderer.Compose(width, height, host.PixelScale, prepared);
+
+            host.UvSheet = UvSheet(width, height);
+
+            host.Labels = Labels();
 
             if (meshSelection.Revision != menuRevision)
             {
                 menuRevision = meshSelection.Revision;
                 meshCommand.RaiseCanExecuteChanged();
             }
-            d3dHost.SidebarOpen = IsSidebarOpen;
+            host.SidebarOpen = IsSidebarOpen;
             ShowSidebar();
 
             if (redo is { IsCurrent: false })
                 SetRedo(null);
+        }
+
+        private void OnRender(ID3D11Device device, ID3D11DeviceContext context, bool resolvesPick)
+        {
+            if (d3dHost?.RenderTargetView is not { } renderTarget || d3dHost.DepthStencilView is not { } depthStencil)
+                return;
+
+            renderer.Draw(device, context, renderTarget, depthStencil, d3dHost.DepthView, resolvesPick);
         }
 
         private PreviewScene? CreatePreviewScene(ID3D11Device device)
@@ -1140,6 +1152,8 @@ namespace YMM43D.PreviewTool.ViewModels
                 return;
             }
 
+            TrackContextClick(position, kind);
+
             if (!HandleItemDrag(position, kind) && !HoldsToggleClick(position, kind))
             {
                 var modifiers = Keyboard.Modifiers;
@@ -1186,6 +1200,13 @@ namespace YMM43D.PreviewTool.ViewModels
 
                 case D3D11Host.MouseEventKind.Up when meshSlide.IsDragging:
                     meshSlide.End();
+                    return true;
+
+                case D3D11Host.MouseEventKind.Move when jointDrag is not null:
+                    return DragJoint(ToVector(position));
+
+                case D3D11Host.MouseEventKind.Up when jointDrag is not null:
+                    EndJoint();
                     return true;
 
                 case D3D11Host.MouseEventKind.Move when meshDrag.IsDragging:
@@ -1402,6 +1423,9 @@ namespace YMM43D.PreviewTool.ViewModels
 
         private bool GrabMesh(in MeshEditTarget edit, Vector2 screen, ModifierKeys modifiers)
         {
+            if (EditsBones)
+                return GrabJoint(edit, screen);
+
             var twice = clicks.Twice(Environment.TickCount64, screen);
             var pick = renderer.MeshPick;
 
@@ -2092,10 +2116,11 @@ namespace YMM43D.PreviewTool.ViewModels
                 return false;
 
             var fps = Math.Max(1, timeline.VideoInfo.FPS);
+            var groups = GroupLookup.Build(timeline, timeline.CurrentFrame, fps);
 
             return itemDrag.Begin(
                 [.. items.Select(item => new DragTarget(
-                    item, GetEditScope(item), FrameContext.ForItem(item, timeline.CurrentFrame, fps)))],
+                    item, GetEditScope(item), FrameContext.ForItem(item, timeline.CurrentFrame, fps), FromWorld(groups.GetTransform(item))))],
                 primary,
                 FrameContext.ForItem(primary, timeline.CurrentFrame, fps),
                 gizmo,
@@ -2104,6 +2129,8 @@ namespace YMM43D.PreviewTool.ViewModels
                 freeCamera.State.Forward,
                 UsesLocalSpace ? GizmoSpace.Local : GizmoSpace.World);
         }
+
+        private static Matrix4x4 FromWorld(in Matrix4x4 transform) => Matrix4x4.Invert(transform, out var back) ? back : Matrix4x4.Identity;
 
         private SnapGrid CurrentSnap()
             => new SnapGrid(SnapsToGrid, snapStep, SnapGrid.DefaultAngleStep)
@@ -2523,7 +2550,13 @@ namespace YMM43D.PreviewTool.ViewModels
             if (isEditingMesh && EditableShape() is null)
                 SetEditMode(false);
 
-            OnPropertyChanged(nameof(CanEditMesh));
+            var canEdit = CanEditMesh;
+
+            if (canEdit != couldEditMesh)
+            {
+                couldEditMesh = canEdit;
+                OnPropertyChanged(nameof(CanEditMesh));
+            }
 
             var has = HasSelectedItem;
 
@@ -2561,6 +2594,8 @@ namespace YMM43D.PreviewTool.ViewModels
                 return;
 
             isDisposed = true;
+            disposer.RemoveAndDisposeAction(d3dHost);
+            disposer.RemoveAndDispose(ref d3dHost);
             disposer.Dispose();
             timeline = null;
             toolInfo = null;

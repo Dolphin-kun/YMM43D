@@ -13,7 +13,7 @@ namespace YMM43D.Graphics.Meshes
                 if (mesh.FindEdge(points[0], points[1]) >= 0)
                     return null;
 
-                return (new MeshTopology(mesh.Points, mesh.Faces, mesh.Groups, mesh.Smooth, mesh.GroupCount, [.. mesh.LooseEdges, new MeshEdge(points[0], points[1])], mesh.Marks, mesh.Uvs, mesh.Keys), points);
+                return (new MeshTopology(mesh.Points, mesh.Faces, mesh.Groups, mesh.Smooth, mesh.GroupCount, [.. mesh.LooseEdges, new MeshEdge(points[0], points[1])], mesh.Marks, mesh.Uvs, mesh.Keys, mesh.Weights), points);
             }
 
             if (points.Length < 3)

@@ -44,7 +44,7 @@ namespace YMM43D.Project.Shape
             foreach (var point in geometry.Vertices)
                 text.AppendLine(Invariant, $"v {point.X:R} {point.Y:R} {point.Z:R}");
 
-            int Number<T>(Dictionary<T, int> known, T value, StringBuilder lines, Func<T, string> format) where T : notnull
+            static int Number<T>(Dictionary<T, int> known, T value, StringBuilder lines, Func<T, string> format) where T : notnull
             {
                 if (known.TryGetValue(value, out var found))
                     return found;

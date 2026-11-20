@@ -11,7 +11,6 @@ namespace YMM43D.Player
     public sealed class RenderSurface3D : IDisposable
     {
         private const int SizeGranularity = 128;
-        private const int RetiredGenerations = 2;
 
         private readonly List<DisposeCollector> retired = [];
 
@@ -22,6 +21,7 @@ namespace YMM43D.Player
         private nint ymmDeviceKey;
         private bool holdsReadLock;
         private bool isBroken;
+        private int retiredKept;
 
         public ID3D11RenderTargetView? RenderTargetView { get; private set; }
 
@@ -33,9 +33,11 @@ namespace YMM43D.Player
 
         public (int Width, int Height) Size { get; private set; }
 
-        public void Resize(IGraphicsDevicesAndContext ymmDevices, ID2D1DeviceContext deviceContext, int width, int height)
+        public void Resize(IGraphicsDevicesAndContext ymmDevices, ID2D1DeviceContext deviceContext, int width, int height, int keepsRetired)
         {
             var ymmDevice = ymmDevices.D3D.Device;
+
+            retiredKept = keepsRetired;
 
             if (!isBroken
                 && RenderTargetView is not null
@@ -172,7 +174,7 @@ namespace YMM43D.Player
 
             disposer = null;
 
-            while (retired.Count > RetiredGenerations)
+            while (retired.Count > retiredKept)
             {
                 retired[0].Dispose();
                 retired.RemoveAt(0);

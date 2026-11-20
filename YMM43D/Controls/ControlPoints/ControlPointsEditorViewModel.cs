@@ -4,7 +4,7 @@ using System.Windows.Input;
 using YMM43D.Commons;
 using YukkuriMovieMaker.Commons;
 
-namespace YMM43D.Controls
+namespace YMM43D.Controls.ControlPoints
 {
     public sealed class ControlPointsEditorViewModel : Bindable, IDisposable
     {

@@ -1,7 +1,9 @@
-﻿using System.Numerics;
+﻿using System.Collections.Immutable;
+using System.Numerics;
 using YMM43D.Commons;
 using YMM43D.Graphics.Models;
 using YMM43D.Project.Model;
+using YMM43D.Project.Shape;
 using YMM43D.Project.Tachie;
 using YukkuriMovieMaker.Project.Items;
 
@@ -9,9 +11,9 @@ namespace YMM43D.PreviewTool
 {
     internal static class BoneOverlay
     {
-        public static IReadOnlyList<PreviewBone> Resolve(IVideoItem item, in FrameContext itemTime, in Matrix4x4 itemWorld)
+        public static IReadOnlyList<PreviewBone> Resolve(IVideoItem item, in FrameContext itemTime, in Matrix4x4 itemWorld, bool rest)
         {
-            if (Posed(item, itemTime) is not { } found)
+            if (Posed(item, itemTime, rest) is not { } found)
                 return [];
 
             var (parameter, model, pose, local) = found;
@@ -23,7 +25,9 @@ namespace YMM43D.PreviewTool
             for (var i = 0; i < model.Bones.Length; i++)
                 positions[i] = Vector3.Transform(Vector3.Zero, pose.Globals[i] * model.Root * world);
 
-            var tails = Tails(model.Bones, positions);
+            var tails = item is ShapeItem { ShapeParameter: Shape3DParameter shape }
+                ? OwnTails(shape.Bones, model.Bones, pose, model.Root * world)
+                : Tails(model.Bones, positions);
 
             for (var i = 0; i < model.Bones.Length; i++)
             {
@@ -42,8 +46,30 @@ namespace YMM43D.PreviewTool
             return bones;
         }
 
-        private static (IBoneHost Host, ModelData Model, ModelPose.PoseFrames Pose, Matrix4x4 Local)? Posed(IVideoItem item, in FrameContext itemTime)
+        private static (Vector3 Tail, bool HasChildren)[] OwnTails(ImmutableList<ShapeBone> shapeBones, ModelBone[] bones, ModelPose.PoseFrames pose, in Matrix4x4 world)
         {
+            var made = new (Vector3 Tail, bool HasChildren)[bones.Length];
+
+            for (var i = 0; i < bones.Length && i < shapeBones.Count; i++)
+            {
+                var length = Vector3.Distance(shapeBones[i].Head, shapeBones[i].Tail);
+                var index = i;
+
+                made[i] = (Vector3.Transform(new Vector3(0f, length, 0f), pose.Globals[i] * world), bones.Any(bone => bone.Parent == index));
+            }
+
+            return made;
+        }
+
+        private static (IBoneHost Host, ModelData Model, ModelPose.PoseFrames Pose, Matrix4x4 Local)? Posed(IVideoItem item, in FrameContext itemTime, bool rest)
+        {
+            if (item is ShapeItem { ShapeParameter: Shape3DParameter shape })
+            {
+                return ShapeArmature.Build(shape.Bones) is { } armature
+                    ? (shape, armature, ModelPose.Compute(armature.Bones, rest ? null : BonePoses.Apply(armature, shape.BonePoses, itemTime, null)), shape.GetLocalMatrix(itemTime))
+                    : null;
+            }
+
             if (item is ShapeItem { ShapeParameter: Model3DParameter parameter })
             {
                 return parameter.Model is { HasBones: true } model

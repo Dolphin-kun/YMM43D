@@ -1,5 +1,7 @@
 ﻿using System.Numerics;
 using YMM43D.Commons;
+using YMM43D.Plugin;
+using YMM43D.Project.Shape;
 using YukkuriMovieMaker.Project;
 using YukkuriMovieMaker.Project.Items;
 
@@ -7,9 +9,20 @@ namespace YMM43D.Player
 {
     public readonly struct GroupLookup
     {
-        private readonly Placed[]? groups;
+        private const int MaxParentDepth = 16;
 
-        private GroupLookup(Placed[] groups) => this.groups = groups;
+        private readonly Placed[]? groups;
+        private readonly IVideoItem[]? alive;
+        private readonly int frame;
+        private readonly int fps;
+
+        private GroupLookup(Placed[]? groups, IVideoItem[] alive, int frame, int fps)
+        {
+            this.groups = groups;
+            this.alive = alive;
+            this.frame = frame;
+            this.fps = fps;
+        }
 
         public bool IsEmpty => groups is null || groups.Length == 0;
 
@@ -19,9 +32,13 @@ namespace YMM43D.Player
                 return default;
 
             List<Placed>? found = null;
+            var alive = new List<IVideoItem>();
 
             foreach (var item in items)
             {
+                if (item is IVideoItem video && FrameContext.IsAlive(video, frame))
+                    alive.Add(video);
+
                 if (item is not GroupItem group || !Applies(timeline, group, frame))
                     continue;
 
@@ -30,17 +47,60 @@ namespace YMM43D.Player
                 (found ??= []).Add(new Placed(group, ItemPlacement.GetWorldMatrix(group, groupTime)));
             }
 
-            return found is null ? default : new GroupLookup([.. found]);
+            return new GroupLookup(found?.ToArray(), [.. alive], frame, fps);
         }
 
-        public Matrix4x4 GetTransform(IItem item)
+        public Matrix4x4 GetTransform(IItem item) => GetTransform(item, 0);
+
+        private Matrix4x4 GetTransform(IItem item, int depth)
         {
+            if (depth < MaxParentDepth && ParentOf(item) is { } parent)
+                return BoneOf(item, parent) * ParentMatrix(parent, depth + 1);
+
             var transform = Matrix4x4.Identity;
 
-            foreach (var parent in Parents(item))
-                transform *= groups![parent].World;
+            foreach (var group in Parents(item))
+                transform *= groups![group].World;
 
             return transform;
+        }
+
+        private Matrix4x4 ParentMatrix(IVideoItem parent, int depth)
+        {
+            var time = FrameContext.ForItem(parent, frame, fps);
+            var turn = parent is ShapeItem { ShapeParameter: ShapeParameter3DBase shape } ? shape.GetTurn(time) : Matrix4x4.Identity;
+
+            return turn * ItemPlacement.GetWorldMatrix(parent, time) * GetTransform(parent, depth);
+        }
+
+        private Matrix4x4 BoneOf(IItem child, IVideoItem parent)
+        {
+            if (child is not ShapeItem { ShapeParameter: ShapeParameter3DBase { ParentBone.Length: > 0 } shape }
+                || parent is not ShapeItem { ShapeParameter: Shape3DParameter owner })
+            {
+                return Matrix4x4.Identity;
+            }
+
+            return owner.BoneShift(shape.ParentBone, FrameContext.ForItem(parent, frame, fps)) ?? Matrix4x4.Identity;
+        }
+
+        private IVideoItem? ParentOf(IItem item)
+        {
+            if (alive is null || item is not ShapeItem { ShapeParameter: ShapeParameter3DBase { HasParent: true } shape })
+                return null;
+
+            IVideoItem? found = null;
+
+            foreach (var other in alive)
+            {
+                if (ReferenceEquals(other, item) || other is not ShapeItem { ShapeParameter: ShapeParameter3DBase candidate } || candidate.ItemId != shape.ParentId)
+                    continue;
+
+                if (found is null || Math.Abs(other.Layer - item.Layer) < Math.Abs(found.Layer - item.Layer))
+                    found = other;
+            }
+
+            return found;
         }
 
         public IReadOnlyList<GroupItem> GetGroups(IItem item)

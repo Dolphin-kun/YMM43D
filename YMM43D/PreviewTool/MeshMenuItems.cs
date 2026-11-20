@@ -41,6 +41,7 @@ namespace YMM43D.PreviewTool
                 ("頂点をつなぐ", MeshOperation.Connect, PreviewAction.Connect, "同じ面にある選んだ頂点どうしを辺で結び、面を分けます。"),
                 ("面を張る", MeshOperation.Fill, PreviewAction.Fill, "選んだ頂点を囲む面を 1 枚作ります。2 点なら辺を引きます。"),
                 ("頂点だけ押し出す", MeshOperation.ExtrudeVertices, null, "選んだ頂点を引き出して、辺を伸ばします。"),
+                ("頂点をスムーズに", MeshOperation.SmoothVertices, null, "選んだ頂点を、となりの頂点の真ん中へ寄せて、でこぼこや揺れをならします。"),
                 ("近いものどうしをくっつける", MeshOperation.MergeDistance, null, "決めた距離より近い頂点どうしをまとめます。"),
                 ("頂点を溶かす", MeshOperation.DissolveVertices, null, "穴を空けずに頂点だけを取り除きます。"),
             ],
@@ -115,9 +116,21 @@ namespace YMM43D.PreviewTool
         public IReadOnlyList<MeshMenuEntry> this[string menu]
             => Enum.TryParse<MeshMenu>(menu, out var parsed) ? Entries(parsed) : [];
 
+        public static MeshMenuEntry Separator { get; } = new(string.Empty, null, string.Empty, string.Empty, null, true);
+
         public IReadOnlyList<MeshMenuEntry> Entries(MeshMenu menu)
-            => [.. Table[menu].Select(one => one.Operation is { } operation
-                ? new MeshMenuEntry(one.Header, command, operation.ToString(), one.Key is { } key ? PreviewShortcuts.TextOf(key) : string.Empty, one.Tip, false)
-                : new MeshMenuEntry(string.Empty, null, string.Empty, string.Empty, null, true))];
+            => [.. Table[menu].Select(one => one.Operation is { } operation ? Make(one.Header, operation, one.Key, one.Tip) : Separator)];
+
+        public MeshMenuEntry Entry(MeshOperation operation, string? header = null)
+        {
+            var row = Table.Values.SelectMany(rows => rows).First(one => one.Operation == operation);
+
+            return Make(header ?? row.Header, operation, row.Key, row.Tip);
+        }
+
+        public MeshMenuEntry Entry(string header, MeshOperation operation, PreviewAction? key, string tip) => Make(header, operation, key, tip);
+
+        private MeshMenuEntry Make(string header, MeshOperation operation, PreviewAction? key, string? tip)
+            => new(header, command, operation.ToString(), key is { } shortcut ? PreviewShortcuts.TextOf(shortcut) : string.Empty, tip, false);
     }
 }

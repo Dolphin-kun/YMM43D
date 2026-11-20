@@ -94,8 +94,9 @@ namespace YMM43D.Graphics.Meshes
             Vector2[][]? uvs = mesh.Uvs is null && other.Uvs is null ? null : [.. mesh.UvsOrGenerated(), .. other.UvsOrGenerated().Select(face => flipped ? [.. face.Reverse()] : face)];
 
             Vector3[][]? keys = mesh.Keys is { } known ? [.. known.Select(key => (Vector3[])[.. key, .. new Vector3[other.Points.Length]])] : null;
+            float[][]? weights = mesh.Weights is { } held ? [.. held.Select(weight => (float[])[.. weight, .. new float[other.Points.Length]])] : null;
 
-            return new MeshTopology(points, faces, groups, smooth, mesh.GroupCount, loose, marks, uvs, keys);
+            return new MeshTopology(points, faces, groups, smooth, mesh.GroupCount, loose, marks, uvs, keys, weights);
         }
     }
 }
