@@ -1,7 +1,7 @@
 using YMM43D.Project.Shape;
 using YukkuriMovieMaker.Commons;
 
-namespace YMM43D.Controls
+namespace YMM43D.Controls.MaterialSlots
 {
     public sealed class MaterialSlotsEditorViewModel(ItemProperty[] properties) : ListEditorViewModel<ShapeMaterial>(properties)
     {

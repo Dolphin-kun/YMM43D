@@ -6,6 +6,7 @@ using Vortice.Direct3D11;
 using Vortice.Mathematics;
 using YMM43D.Commons;
 using YMM43D.Graphics;
+using YMM43D.Plugin;
 using YukkuriMovieMaker.Commons;
 
 namespace YMM43D.Player
@@ -14,12 +15,15 @@ namespace YMM43D.Player
     {
         private const int CommandListRetention = 3;
 
-        private readonly RenderSurface3D surface = new();
+        private readonly RenderSurface3D[] surfaces = [new(), new()];
         private readonly PrivateD2DContext privateContext = new();
         private readonly ID2D1CommandList?[] commandLists = new ID2D1CommandList?[CommandListRetention];
         private readonly ID3D11RenderTargetView?[] previousTargets = new ID3D11RenderTargetView?[1];
 
         private int commandListIndex;
+        private int surfaceIndex;
+        private int buffered = 2;
+        private int unusedRenders;
         private Viewport[] previousViewports = new Viewport[8];
 
         public ID2D1Image RenderEmpty(IGraphicsDevicesAndContext ymmDevices) => BuildEmpty(ymmDevices, Vector2.Zero);
@@ -54,7 +58,25 @@ namespace YMM43D.Player
                     return BuildEmpty(ymmDevices, offset);
 
                 var d2dContext = privateContext.For(ymmDevices);
-                surface.Resize(ymmDevices, d2dContext, pixelWidth, pixelHeight);
+                var wanted = YMM43DSettings.Default.UsesDoubleBuffer ? surfaces.Length : 1;
+
+                if (wanted != buffered)
+                {
+                    buffered = wanted;
+                    surfaceIndex = 0;
+                    unusedRenders = 0;
+                }
+
+                if (buffered < surfaces.Length && unusedRenders++ == CommandListRetention)
+                {
+                    for (var i = buffered; i < surfaces.Length; i++)
+                        surfaces[i].Dispose();
+                }
+
+                var surface = surfaces[surfaceIndex];
+
+                surfaceIndex = (surfaceIndex + 1) % buffered;
+                surface.Resize(ymmDevices, d2dContext, pixelWidth, pixelHeight, (CommandListRetention + buffered - 1) / buffered - 1);
 
                 if (surface.RenderTargetView is null)
                     return BuildEmpty(ymmDevices, offset);
@@ -122,7 +144,8 @@ namespace YMM43D.Player
 
         public void Dispose()
         {
-            surface.Dispose();
+            foreach (var surface in surfaces)
+                surface.Dispose();
 
             lock (D2DGate.Sync)
             {

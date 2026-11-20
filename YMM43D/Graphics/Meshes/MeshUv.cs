@@ -101,26 +101,16 @@ namespace YMM43D.Graphics.Meshes
             if (from.Keys is not { } keys)
                 return null;
 
-            var places = new Dictionary<(long, long, long), int>();
-
-            for (var i = 0; i < from.Points.Length; i++)
-                places.TryAdd(KeyOf(from.Points[i]), i);
-
-            FaceGrid? grid = null;
+            var blends = Blends(to, from);
             var result = keys.Select(_ => new Vector3[to.Points.Length]).ToArray();
 
-            for (var i = 0; i < to.Points.Length; i++)
+            for (var i = 0; i < blends.Length; i++)
             {
-                var point = to.Points[i];
-                var blend = places.TryGetValue(KeyOf(point), out var same)
-                    ? [(same, 1f)]
-                    : AlongEdge(from, point) ?? WithinFace(from, grid ??= new FaceGrid(from), point) ?? [(NearestPoint(from, point), 1f)];
-
                 for (var k = 0; k < keys.Length; k++)
                 {
                     var offset = Vector3.Zero;
 
-                    foreach (var (index, weight) in blend)
+                    foreach (var (index, weight) in blends[i])
                         offset += keys[k][index] * weight;
 
                     result[k][i] = offset;
@@ -128,6 +118,52 @@ namespace YMM43D.Graphics.Meshes
             }
 
             return result;
+        }
+
+        public static float[][]? CarriedWeights(MeshTopology to, MeshTopology from)
+        {
+            if (from.Weights is not { } weights)
+                return null;
+
+            var blends = Blends(to, from);
+            var result = weights.Select(_ => new float[to.Points.Length]).ToArray();
+
+            for (var i = 0; i < blends.Length; i++)
+            {
+                for (var k = 0; k < weights.Length; k++)
+                {
+                    var sum = 0f;
+
+                    foreach (var (index, weight) in blends[i])
+                        sum += weights[k][index] * weight;
+
+                    result[k][i] = sum;
+                }
+            }
+
+            return result;
+        }
+
+        private static (int Index, float Weight)[][] Blends(MeshTopology to, MeshTopology from)
+        {
+            var places = new Dictionary<(long, long, long), int>();
+
+            for (var i = 0; i < from.Points.Length; i++)
+                places.TryAdd(KeyOf(from.Points[i]), i);
+
+            FaceGrid? grid = null;
+            var blends = new (int Index, float Weight)[to.Points.Length][];
+
+            for (var i = 0; i < to.Points.Length; i++)
+            {
+                var point = to.Points[i];
+
+                blends[i] = places.TryGetValue(KeyOf(point), out var same)
+                    ? [(same, 1f)]
+                    : AlongEdge(from, point) ?? WithinFace(from, grid ??= new FaceGrid(from), point) ?? [(NearestPoint(from, point), 1f)];
+            }
+
+            return blends;
         }
 
         private static (int Index, float Weight)[]? AlongEdge(MeshTopology from, Vector3 point)
@@ -286,9 +322,9 @@ namespace YMM43D.Graphics.Meshes
             if (!corners.TryGetValue(KeyOf(point), out var list))
                 return null;
 
-            var best = list.MaxBy(one => Vector3.Dot(from.NormalOf(one.Face), normal));
+            var (face, corner) = list.MaxBy(one => Vector3.Dot(from.NormalOf(one.Face), normal));
 
-            return uvs[best.Face][best.Corner];
+            return uvs[face][corner];
         }
 
         private static Vector2 Nearest(MeshTopology from, Vector2[][] uvs, Vector3 point)
@@ -361,9 +397,9 @@ namespace YMM43D.Graphics.Meshes
 
             public int Host(Vector3 point, Vector3 normal)
             {
-                var key = CellOf(point);
+                var (x, y, z) = CellOf(point);
 
-                if (!cells.TryGetValue((key.X, key.Y, key.Z), out var faces))
+                if (!cells.TryGetValue((x, y, z), out var faces))
                     return -1;
 
                 foreach (var face in faces)

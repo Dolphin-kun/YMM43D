@@ -1,8 +1,10 @@
 using System.ComponentModel.DataAnnotations;
 using System.Numerics;
 using YMM43D.Commons;
+using YMM43D.Controls.ParentItem;
 using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Controls;
+using YukkuriMovieMaker.ItemEditor.CustomVisibilityAttributes;
 using YukkuriMovieMaker.Player.Video;
 using YukkuriMovieMaker.Plugin.Shape;
 using YukkuriMovieMaker.Project;
@@ -31,6 +33,19 @@ namespace YMM43D.Plugin
         [Display(GroupName = Rotation, Name = "中心Z", Description = "回すときの中心を奥行き方向にずらす量で、手前が正です")]
         [AnimationSlider("F1", "px", -500, 500)]
         public Animation PivotZ { get; } = new(0, -1000000, 1000000);
+
+        public string ItemId { get; set => Set(ref field, value ?? string.Empty); } = Guid.NewGuid().ToString("N");
+
+        [Display(GroupName = Rotation, Name = "親", Description = "ほかの 3D のアイテムを親にしてその移動と回転についていき、X・Y・Z は親からのずれになります")]
+        [ParentItemSelector]
+        public string ParentId { get; set => Set(ref field, value ?? string.Empty, nameof(ParentId), nameof(HasParent)); } = string.Empty;
+
+        public bool HasParent => ParentId.Length > 0;
+
+        [Display(GroupName = Rotation, Name = "親の骨", Description = "親の 3D アイテムの骨の名前を入れるとその骨の動きに、空なら親全体についていきます")]
+        [TextEditor(AcceptsReturn = false)]
+        [ShowPropertyEditorWhen(nameof(HasParent), true)]
+        public string ParentBone { get; set => Set(ref field, value ?? string.Empty); } = string.Empty;
 
         public Animation CameraSyncAnimation => cameraSync.Value;
 

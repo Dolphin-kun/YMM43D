@@ -1,0 +1,158 @@
+<UserControl x:Class="YMM43D.Controls.ShapeBones.ShapeBonesEditor"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:local="clr-namespace:YMM43D.Controls.ShapeBones"
+             xmlns:s="clr-namespace:YMM43D.Project.Shape"
+             xmlns:c="clr-namespace:YukkuriMovieMaker.Controls;assembly=YukkuriMovieMaker.Plugin"
+             xmlns:icons="clr-namespace:YukkuriMovieMaker.Resources.Icons;assembly=YukkuriMovieMaker.Plugin"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance local:ShapeBonesEditorViewModel}"
+             d:DesignWidth="300">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="VisibleWhenTrue"/>
+
+        <Style x:Key="Icon" TargetType="Path">
+            <Setter Property="Stretch" Value="Uniform"/>
+            <Setter Property="Width" Value="10"/>
+            <Setter Property="Height" Value="10"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Fill" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+        </Style>
+
+        <Style x:Key="SmallButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Width" Value="24"/>
+            <Setter Property="Height" Value="24"/>
+            <Setter Property="Margin" Value="0"/>
+        </Style>
+
+        <Style x:Key="RowLabel" TargetType="Label">
+            <Setter Property="Margin" Value="6,0"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <DataTemplate DataType="{x:Type s:ShapeBone}">
+            <StackPanel>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="80"/>
+                        <ColumnDefinition/>
+                    </Grid.ColumnDefinitions>
+                    <Label Style="{StaticResource RowLabel}" Content="名前"/>
+                    <TextBox Grid.Column="1" VerticalContentAlignment="Center" Text="{Binding Name, UpdateSourceTrigger=LostFocus}" GotKeyboardFocus="Text_GotKeyboardFocus" LostKeyboardFocus="Text_LostKeyboardFocus"/>
+                </Grid>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="80"/>
+                        <ColumnDefinition/>
+                    </Grid.ColumnDefinitions>
+                    <Label Style="{StaticResource RowLabel}" Content="親の骨"/>
+                    <ComboBox VerticalContentAlignment="Center" Grid.Column="1" ItemsSource="{Binding DataContext.ParentChoices, RelativeSource={RelativeSource AncestorType=UserControl}}" DisplayMemberPath="Name" SelectedValuePath="Value" SelectedValue="{Binding Parent}"/>
+                </Grid>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="80"/>
+                        <ColumnDefinition/>
+                    </Grid.ColumnDefinitions>
+                    <Label Style="{StaticResource RowLabel}" Content="変形に使う"/>
+                    <c:ToggleSlider Grid.Column="1" Value="{Binding Deforms, Mode=TwoWay}" BeginEdit="Slider_BeginEdit" EndEdit="Slider_EndEdit" ToolTip="切るとウエイトを追加してもこの骨は形を曲げず、ほかのアイテムの「親の骨」にするだけの骨になります"/>
+                </Grid>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="80"/>
+                        <ColumnDefinition/>
+                    </Grid.ColumnDefinitions>
+                    <Label Style="{StaticResource RowLabel}" Content="付け根 X"/>
+                    <c:TextBoxSlider Grid.Column="1" Value="{Binding HeadX, Mode=TwoWay}" Unit="px" StringFormat="F1" Delta="1" Min="-100000" Max="100000" DefaultMin="-500" DefaultMax="500" BeginEdit="Slider_BeginEdit" EndEdit="Slider_EndEdit"/>
+                </Grid>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="80"/>
+                        <ColumnDefinition/>
+                    </Grid.ColumnDefinitions>
+                    <Label Style="{StaticResource RowLabel}" Content="付け根 Y"/>
+                    <c:TextBoxSlider Grid.Column="1" Value="{Binding HeadY, Mode=TwoWay}" Unit="px" StringFormat="F1" Delta="1" Min="-100000" Max="100000" DefaultMin="-500" DefaultMax="500" BeginEdit="Slider_BeginEdit" EndEdit="Slider_EndEdit"/>
+                </Grid>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="80"/>
+                        <ColumnDefinition/>
+                    </Grid.ColumnDefinitions>
+                    <Label Style="{StaticResource RowLabel}" Content="付け根 Z"/>
+                    <c:TextBoxSlider Grid.Column="1" Value="{Binding HeadZ, Mode=TwoWay}" Unit="px" StringFormat="F1" Delta="1" Min="-100000" Max="100000" DefaultMin="-500" DefaultMax="500" BeginEdit="Slider_BeginEdit" EndEdit="Slider_EndEdit"/>
+                </Grid>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="80"/>
+                        <ColumnDefinition/>
+                    </Grid.ColumnDefinitions>
+                    <Label Style="{StaticResource RowLabel}" Content="先 X"/>
+                    <c:TextBoxSlider Grid.Column="1" Value="{Binding TailX, Mode=TwoWay}" Unit="px" StringFormat="F1" Delta="1" Min="-100000" Max="100000" DefaultMin="-500" DefaultMax="500" BeginEdit="Slider_BeginEdit" EndEdit="Slider_EndEdit"/>
+                </Grid>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="80"/>
+                        <ColumnDefinition/>
+                    </Grid.ColumnDefinitions>
+                    <Label Style="{StaticResource RowLabel}" Content="先 Y"/>
+                    <c:TextBoxSlider Grid.Column="1" Value="{Binding TailY, Mode=TwoWay}" Unit="px" StringFormat="F1" Delta="1" Min="-100000" Max="100000" DefaultMin="-500" DefaultMax="500" BeginEdit="Slider_BeginEdit" EndEdit="Slider_EndEdit"/>
+                </Grid>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="80"/>
+                        <ColumnDefinition/>
+                    </Grid.ColumnDefinitions>
+                    <Label Style="{StaticResource RowLabel}" Content="先 Z"/>
+                    <c:TextBoxSlider Grid.Column="1" Value="{Binding TailZ, Mode=TwoWay}" Unit="px" StringFormat="F1" Delta="1" Min="-100000" Max="100000" DefaultMin="-500" DefaultMax="500" BeginEdit="Slider_BeginEdit" EndEdit="Slider_EndEdit"/>
+                </Grid>
+            </StackPanel>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <StackPanel>
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <ListBox x:Name="BoneList"
+                     Height="96"
+                     SelectionMode="Single"
+                     PreviewMouseWheel="BoneList_PreviewMouseWheel"
+                     ItemsSource="{Binding Items}"
+                     SelectedIndex="{Binding SelectedIndex}">
+                <ListBox.ItemTemplate>
+                    <DataTemplate DataType="{x:Type s:ShapeBone}">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Right" Margin="6,0,0,0" VerticalAlignment="Center" Opacity="0.6" Text="{Binding Parent}"/>
+                            <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
+                        </DockPanel>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+
+            <StackPanel Grid.Column="1">
+                <Button Style="{StaticResource SmallButton}" ToolTip="骨を足す（選んでいる骨があれば、その先から同じ向きに伸ばします）" Command="{Binding AddCommand}">
+                    <Path Style="{StaticResource Icon}" Data="{DynamicResource {x:Static icons:GeometryKeys.Plus}}"/>
+                </Button>
+                <Button Style="{StaticResource SmallButton}" ToolTip="選んだ骨を消す" Command="{Binding RemoveCommand}">
+                    <Path Style="{StaticResource Icon}" Data="{DynamicResource {x:Static icons:GeometryKeys.Minus}}"/>
+                </Button>
+                <Button Style="{StaticResource SmallButton}" ToolTip="上へ" Command="{Binding MoveUpCommand}">
+                    <Path Style="{StaticResource Icon}" Data="{DynamicResource {x:Static icons:GeometryKeys.MenuUp}}"/>
+                </Button>
+                <Button Style="{StaticResource SmallButton}" ToolTip="下へ" Command="{Binding MoveDownCommand}">
+                    <Path Style="{StaticResource Icon}" Data="{DynamicResource {x:Static icons:GeometryKeys.MenuDown}}"/>
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <Button Content="ウエイトを追加" ToolTip="形のそれぞれの点がどの骨にどれだけついていくかを骨の位置から決め、編集モードで割り当てた分は上書きします。" Command="{Binding AutoWeightsCommand}"/>
+
+        <ContentControl Margin="0,4,0,0" Content="{Binding Selected}" Visibility="{Binding HasSelection, Converter={StaticResource VisibleWhenTrue}}"/>
+    </StackPanel>
+</UserControl>

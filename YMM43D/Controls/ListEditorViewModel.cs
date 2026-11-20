@@ -103,7 +103,7 @@ namespace YMM43D.Controls
 
         protected void Editing(Action work)
         {
-            BeginEdit?.Invoke(this, EventArgs.Empty);
+            BeginEditing();
 
             try
             {
@@ -111,9 +111,13 @@ namespace YMM43D.Controls
             }
             finally
             {
-                EndEdit?.Invoke(this, EventArgs.Empty);
+                EndEditing();
             }
         }
+
+        protected void BeginEditing() => BeginEdit?.Invoke(this, EventArgs.Empty);
+
+        protected void EndEditing() => EndEdit?.Invoke(this, EventArgs.Empty);
 
         protected void Edit(Func<ImmutableList<T>, ImmutableList<T>> change, int select)
         {

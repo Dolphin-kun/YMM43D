@@ -1,4 +1,5 @@
-﻿using System.Runtime.InteropServices;
+﻿using System.Runtime.ExceptionServices;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -47,6 +48,8 @@ namespace YMM43D.PreviewTool.Views
         private ID3D11DeviceContext? deviceContext;
         private IDXGISwapChain? swapChain;
         private PreviewLabelRenderer? labels;
+        private readonly Lock frameGate = new();
+        private Task? drawing;
         private bool listensKeys;
         private bool engaged;
 
@@ -63,14 +66,14 @@ namespace YMM43D.PreviewTool.Views
         public bool SidebarOpen { get; set; }
 
         private Point? polled;
+        private Size hostPixels = Size.Empty;
 
         public void PollMouse()
         {
             if (Handle == 0 || !GetCursorPos(out var screen) || !ScreenToClient(Handle, ref screen))
                 return;
 
-            var dpi = VisualTreeHelper.GetDpi(this);
-            var at = InDips(new Point(screen.X, screen.Y), dpi.DpiScaleX, dpi.DpiScaleY);
+            var at = ToDips(new Point(screen.X, screen.Y));
 
             if (polled == at)
                 return;
@@ -80,7 +83,7 @@ namespace YMM43D.PreviewTool.Views
         }
 
         public float PixelScale { get; private set; } = 1f;
-        public event Action<ID3D11Device, ID3D11DeviceContext, int, int>? Render;
+        public event Action<ID3D11Device, ID3D11DeviceContext, bool>? Render;
         public event Action<Point, MouseEventKind, int>? MouseAction;
 
         public Func<Key, ModifierKeys, bool>? KeyHandler { get; set; }
@@ -95,23 +98,70 @@ namespace YMM43D.PreviewTool.Views
 
         public void InitializeIndependent()
         {
-            if (lease is not null)
-                return;
+            lock (frameGate)
+            {
+                if (lease is not null)
+                    return;
 
-            var acquired = GraphicsDevicePool.Acquire();
-            lease = acquired;
-            device = acquired.Device;
-            deviceContext = acquired.Context;
+                var acquired = GraphicsDevicePool.Acquire();
+                lease = acquired;
+                device = acquired.Device;
+                deviceContext = acquired.Context;
 
-            CreateSwapChain();
+                CreateSwapChain();
+            }
+        }
+
+        public bool IsDrawing
+        {
+            get
+            {
+                if (drawing is { IsFaulted: true } failed)
+                {
+                    drawing = null;
+                    ExceptionDispatchInfo.Capture(failed.Exception.InnerException ?? failed.Exception).Throw();
+                }
+
+                return drawing is { IsCompleted: false };
+            }
         }
 
         public void RenderFrame()
         {
-            if (device is null || deviceContext is null || swapChain is null)
+            lock (frameGate)
+            {
+                if (device is null || swapChain is null)
+                    return;
+
+                Preparing?.Invoke(device);
+                Draw(Capture(), true);
+            }
+        }
+
+        public void RenderFrameInBackground()
+        {
+            if (device is null || swapChain is null || IsDrawing)
                 return;
 
             Preparing?.Invoke(device);
+
+            var overlay = Capture();
+
+            drawing = Task.Run(() =>
+            {
+                lock (frameGate)
+                    Draw(overlay, false);
+            });
+        }
+
+        private Overlay Capture() => new(UvSheet, Labels, SidebarOpen, ThemeColor(SystemColors.ControlBrushKey), ThemeColor(SystemColors.ControlTextBrushKey));
+
+        private void Draw(Overlay overlay, bool resolvesPick)
+        {
+            if (device is null || deviceContext is null || swapChain is null)
+                return;
+
+            using var muted = SceneRevision.Mute();
 
             lock (D2DGate.Sync)
             lock (device)
@@ -121,8 +171,8 @@ namespace YMM43D.PreviewTool.Views
 
                 try
                 {
-                    Render?.Invoke(device, deviceContext, (int)ActualWidth, (int)ActualHeight);
-                    labels?.Draw(UvSheet, Labels, SidebarOpen, ThemeColor(SystemColors.ControlBrushKey), ThemeColor(SystemColors.ControlTextBrushKey));
+                    Render?.Invoke(device, deviceContext, resolvesPick);
+                    labels?.Draw(overlay.UvSheet, overlay.Labels, overlay.SidebarOpen, overlay.Back, overlay.Fore);
                     swapChain.Present(0, PresentFlags.None);
                 }
                 catch (SharpGenException) when (DeviceHealth.IsLost(device, "3Dプレビュー", out _))
@@ -130,6 +180,8 @@ namespace YMM43D.PreviewTool.Views
                 }
             }
         }
+
+        private sealed record Overlay(UvSheet? UvSheet, IReadOnlyList<PreviewLabel> Labels, bool SidebarOpen, Color4 Back, Color4 Fore);
 
         protected override HandleRef BuildWindowCore(HandleRef hwndParent)
         {
@@ -205,8 +257,11 @@ namespace YMM43D.PreviewTool.Views
 
         private void DisposeAll()
         {
-            CleanupSwapChain();
-            ReleaseDevice();
+            lock (frameGate)
+            {
+                CleanupSwapChain();
+                ReleaseDevice();
+            }
         }
 
         private void ReleaseDevice()
@@ -222,15 +277,15 @@ namespace YMM43D.PreviewTool.Views
 
         private void CreateSwapChain()
         {
-            if (device is null || Handle == nint.Zero || ActualWidth <= 0 || ActualHeight <= 0)
+            if (device is null || Handle == nint.Zero || ActualWidth <= 0 || ActualHeight <= 0 || hostPixels.IsEmpty)
                 return;
 
             CleanupSwapChain();
 
-            PixelScale = (float)VisualTreeHelper.GetDpi(this).DpiScaleX;
+            PixelScale = (float)(hostPixels.Width / ActualWidth);
 
-            var width = Math.Max(1, (int)Math.Round(ActualWidth * PixelScale));
-            var height = Math.Max(1, (int)Math.Round(ActualHeight * PixelScale));
+            var width = (int)hostPixels.Width;
+            var height = (int)hostPixels.Height;
 
             try
             {
@@ -289,24 +344,15 @@ namespace YMM43D.PreviewTool.Views
             DepthView = null;
         }
 
-        public static Point InDips(Point device, double scaleX, double scaleY)
-            => new(device.X / (scaleX > 0.01 ? scaleX : 1.0), device.Y / (scaleY > 0.01 ? scaleY : 1.0));
-
-        private Point GetPoint(nint lParam)
+        private Point ToDips(Point device)
         {
-            var device = new Point((short)((int)lParam & 0xFFFF), (short)((int)lParam >> 16));
-
-            try
-            {
-                var dpi = VisualTreeHelper.GetDpi(this);
-
-                return InDips(device, dpi.DpiScaleX, dpi.DpiScaleY);
-            }
-            catch (Exception)
-            {
+            if (hostPixels.IsEmpty || ActualWidth <= 0 || ActualHeight <= 0)
                 return device;
-            }
+
+            return new Point(device.X * ActualWidth / hostPixels.Width, device.Y * ActualHeight / hostPixels.Height);
         }
+
+        private Point GetPoint(nint lParam) => ToDips(new Point((short)((int)lParam & 0xFFFF), (short)((int)lParam >> 16)));
 
         private Color4 ThemeColor(object key)
         {
@@ -315,16 +361,19 @@ namespace YMM43D.PreviewTool.Views
                 : new Color4(0.5f, 0.5f, 0.5f, 1f);
         }
 
-        protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
+        protected override void OnWindowPositionChanged(Rect rcBoundingBox)
         {
-            base.OnDpiChanged(oldDpi, newDpi);
-            CreateSwapChain();
-        }
+            base.OnWindowPositionChanged(rcBoundingBox);
 
-        protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
-        {
-            base.OnRenderSizeChanged(sizeInfo);
-            CreateSwapChain();
+            var pixels = new Size(Math.Max(1, Math.Round(rcBoundingBox.Width)), Math.Max(1, Math.Round(rcBoundingBox.Height)));
+
+            if (pixels == hostPixels && swapChain is not null)
+                return;
+
+            hostPixels = pixels;
+
+            lock (frameGate)
+                CreateSwapChain();
         }
 
         protected override nint WndProc(nint hwnd, int msg, nint wParam, nint lParam, ref bool handled)

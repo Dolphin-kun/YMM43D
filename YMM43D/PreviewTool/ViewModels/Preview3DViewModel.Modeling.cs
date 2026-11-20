@@ -21,6 +21,8 @@ namespace YMM43D.PreviewTool.ViewModels
         private const float WeldRatio = 0.25f;
         private const int SpinSteps = 12;
         private const float SmartAngle = 66f;
+        private const float WeightFloor = 0.001f;
+        private const float SmoothFactor = 0.5f;
 
         private static readonly Color4 HintColor = new(1f, 0.718f, 0.302f, 1f);
         private static readonly Color4 BoneColor = new(1f, 0.835f, 0.31f, 1f);
@@ -33,7 +35,7 @@ namespace YMM43D.PreviewTool.ViewModels
         private AmountRedo? redo;
         private Vector2? bisectStart;
 
-        public event Action<MeshMenu>? MenuRequested;
+        public event Action<IReadOnlyList<MeshMenuEntry>>? MenuRequested;
 
         public Bindable Sidebar => sidebar;
 
@@ -66,7 +68,7 @@ namespace YMM43D.PreviewTool.ViewModels
             return string.Join("/", parts);
         }
 
-        private ActionCommand meshCommand = null!;
+        private readonly ActionCommand meshCommand = null!;
         private long menuRevision = -1;
 
         private bool HoldsMouse => isEditingMesh && (modal.IsActive || amount.IsActive || uvEditor.IsMoving);
@@ -254,7 +256,8 @@ namespace YMM43D.PreviewTool.ViewModels
             return operation switch
             {
                 MeshOperation.DeleteVertices or MeshOperation.DissolveVertices or MeshOperation.MergeCenter or MeshOperation.MergeCursor or MeshOperation.MergeCollapse
-                    or MeshOperation.MergeDistance or MeshOperation.ExtrudeVertices or MeshOperation.ExtrudeRegion or MeshOperation.Duplicate or MeshOperation.Separate or MeshOperation.Spin => vertices > 0,
+                    or MeshOperation.MergeDistance or MeshOperation.ExtrudeVertices or MeshOperation.ExtrudeRegion or MeshOperation.Duplicate or MeshOperation.Separate or MeshOperation.Spin
+                    or MeshOperation.SmoothVertices => vertices > 0,
                 MeshOperation.MergeActive => meshSelection.Part is MeshPart.Vertices && meshSelection.Active >= 0,
                 MeshOperation.Connect or MeshOperation.Fill => vertices > 1,
                 MeshOperation.DeleteEdges or MeshOperation.DeleteOnlyEdgesAndFaces or MeshOperation.DissolveEdges or MeshOperation.ExtrudeEdges or MeshOperation.Subdivide
@@ -331,9 +334,42 @@ namespace YMM43D.PreviewTool.ViewModels
                 Change(mesh => mesh.Assigned(faces, slot));
             };
             sidebar.MaterialChosen += ChooseMaterial;
+            sidebar.WeightAssigned += AssignWeight;
+            sidebar.WeightChosen += ChooseWeighted;
             sidebar.KeyChosen += ChooseShapeKey;
             sidebar.UvMoved += MoveUvsTo;
             uvEditor.Committed += StoreUvs;
+        }
+
+        private void AssignWeight(int bone, float weight)
+        {
+            if (!isEditingMesh || renderer.MeshEdit is not { } edit || edit.Item.IsLocked)
+                return;
+
+            var vertices = meshSelection.Vertices;
+
+            SeparateHistory();
+            edit.Parameter.SetWeights(vertices, bone, weight);
+            Refresh();
+            SeparateHistory();
+        }
+
+        private void ChooseWeighted(int bone)
+        {
+            if (!isEditingMesh || renderer.MeshEdit is not { } edit || edit.Parameter.EnsureMesh().Weights is not { } weights || bone < 0 || bone >= weights.Length)
+                return;
+
+            var mesh = edit.Parameter.EnsureMesh();
+            var vertices = Enumerable.Range(0, mesh.Points.Length).Where(vertex => weights[bone][vertex] > WeightFloor);
+            IEnumerable<int> parts = meshSelection.Part switch
+            {
+                MeshPart.Faces => Enumerable.Range(0, mesh.Faces.Length).Where(face => mesh.Faces[face].All(vertex => weights[bone][vertex] > WeightFloor)),
+                MeshPart.Edges => Enumerable.Range(0, mesh.Edges.Length).Where(edge => weights[bone][mesh.Edges[edge].A] > WeightFloor && weights[bone][mesh.Edges[edge].B] > WeightFloor),
+                _ => vertices,
+            };
+
+            meshSelection.Apply(parts, SelectOp.Add);
+            RequestRender();
         }
 
         private void ChooseShapeKey(int key)
@@ -377,14 +413,16 @@ namespace YMM43D.PreviewTool.ViewModels
 
             var uvAt = isEditingMesh && uvEditor.IsOn && renderer.MeshEdit is { } uvTarget ? UvEditor.Center(uvTarget.Mesh, meshSelection) : null;
 
-            sidebar.Show(isEditingMesh, center, WorldScale.ToPixelOffset(cursor), reach, materials, keys, shape?.ActiveShapeKey ?? -1, isEditingMesh && uvEditor.IsOn, uvAt);
+            IReadOnlyList<string> bones = shape is null ? [] : [.. shape.Bones.Select(bone => bone.Name)];
+
+            sidebar.Show(isEditingMesh, center, WorldScale.ToPixelOffset(cursor), reach, materials, keys, shape?.ActiveShapeKey ?? -1, isEditingMesh && uvEditor.IsOn, uvAt, bones);
             sidebar.ShowHidden(isEditingMesh ? HiddenText() : string.Empty);
         }
 
         private void OpenMenu(MeshMenu menu)
         {
             if (isEditingMesh)
-                MenuRequested?.Invoke(menu);
+                MenuRequested?.Invoke(MeshMenus.Entries(menu));
         }
 
         private void RunMesh(object? parameter)
@@ -506,6 +544,10 @@ namespace YMM43D.PreviewTool.ViewModels
 
                 case MeshOperation.Connect:
                     Change(mesh => mesh.Connect(vertices));
+                    break;
+
+                case MeshOperation.SmoothVertices:
+                    SmoothVertices();
                     break;
 
                 case MeshOperation.Knife:
@@ -734,11 +776,24 @@ namespace YMM43D.PreviewTool.ViewModels
             }, () => parameter.TakeMaterials(imported.Materials));
         }
 
+        private void SmoothVertices()
+        {
+            if (!isEditingMesh || renderer.MeshEdit is not { } edit || edit.Item.IsLocked)
+                return;
+
+            meshSelection.Bind(edit.Parameter.EnsureMesh());
+
+            var parts = new ChosenParts([.. meshSelection.Vertices], [], []);
+
+            RunWithRedo(edit, new AmountSpec("頂点をスムーズに", AmountUnit.Factor, SmoothFactor, CountLabel: "繰り返し", Count: 1, LeastCount: 1, AmountLabel: "なめらかさ"), parts, (mesh, chosen, value) => mesh.Smoothed(chosen.Vertices, value.Amount, value.Count));
+        }
+
         private void AddMesh(in MeshEditTarget edit, AmountSpec spec, Func<MeshTopology, AmountValue, (MeshTopology Mesh, int[] Added)?> make, Action? also = null)
+            => RunWithRedo(edit, spec, new ChosenParts([], [], []), (mesh, _, chosen) => make(mesh, chosen), also);
+
+        private void RunWithRedo(in MeshEditTarget edit, AmountSpec spec, ChosenParts parts, Func<MeshTopology, ChosenParts, AmountValue, (MeshTopology Mesh, int[] Added)?> work, Action? also = null)
         {
             var value = new AmountValue(spec.Start, spec.Count, 0);
-            Func<MeshTopology, ChosenParts, AmountValue, (MeshTopology Mesh, int[] Added)?> work = (mesh, _, chosen) => make(mesh, chosen);
-            var parts = new ChosenParts([], [], []);
             var mesh = edit.Parameter.EnsureMesh();
 
             meshSelection.Bind(mesh);

@@ -32,7 +32,9 @@ namespace YMM43D.Graphics.Meshes
 
         public Vector3[][]? Keys { get; }
 
-        public MeshTopology(Vector3[] points, int[][] faces, int[] groups, bool[] smooth, int groupCount, IEnumerable<MeshEdge>? looseEdges = null, IReadOnlyDictionary<MeshEdge, EdgeMark>? marks = null, Vector2[][]? uvs = null, Vector3[][]? keys = null)
+        public float[][]? Weights { get; }
+
+        public MeshTopology(Vector3[] points, int[][] faces, int[] groups, bool[] smooth, int groupCount, IEnumerable<MeshEdge>? looseEdges = null, IReadOnlyDictionary<MeshEdge, EdgeMark>? marks = null, Vector2[][]? uvs = null, Vector3[][]? keys = null, float[][]? weights = null)
         {
             Points = points;
             Faces = faces;
@@ -109,6 +111,7 @@ namespace YMM43D.Graphics.Meshes
                 .ToDictionary(group => group.Key, group => group.Last().Value);
             Uvs = uvs is not null && uvs.Length == faces.Length && uvs.Select((one, face) => one.Length == faces[face].Length).All(fits => fits) ? uvs : null;
             Keys = keys is { Length: > 0 } && keys.All(key => key.Length == points.Length) ? keys : null;
+            Weights = weights is { Length: > 0 } && weights.All(weight => weight.Length == points.Length) ? weights : null;
             FaceEdges = faceEdges;
             EdgeFaces = [.. edgeFaces.Select(one => one.ToArray())];
             VertexEdges = [.. vertexEdges.Select(one => one.ToArray())];
@@ -118,13 +121,16 @@ namespace YMM43D.Graphics.Meshes
             => new(points, [.. faces], [.. groups], [.. smooth], GroupCount, LooseEdges, Marks);
 
         public MeshTopology WithMarks(IReadOnlyDictionary<MeshEdge, EdgeMark> marks)
-            => new(Points, Faces, Groups, Smooth, GroupCount, LooseEdges, marks, Uvs, Keys);
+            => new(Points, Faces, Groups, Smooth, GroupCount, LooseEdges, marks, Uvs, Keys, Weights);
 
         public MeshTopology WithUvs(Vector2[][]? uvs)
-            => new(Points, Faces, Groups, Smooth, GroupCount, LooseEdges, Marks, uvs, Keys);
+            => new(Points, Faces, Groups, Smooth, GroupCount, LooseEdges, Marks, uvs, Keys, Weights);
 
         public MeshTopology WithKeys(Vector3[][]? keys)
-            => new(Points, Faces, Groups, Smooth, GroupCount, LooseEdges, Marks, Uvs, keys);
+            => new(Points, Faces, Groups, Smooth, GroupCount, LooseEdges, Marks, Uvs, keys, Weights);
+
+        public MeshTopology WithWeights(float[][]? weights)
+            => new(Points, Faces, Groups, Smooth, GroupCount, LooseEdges, Marks, Uvs, Keys, weights);
 
         public static MeshEdge Key(int a, int b) => a < b ? new MeshEdge(a, b) : new MeshEdge(b, a);
 
@@ -524,6 +530,7 @@ namespace YMM43D.Graphics.Meshes
             Marks = from.Marks;
             Uvs = from.Uvs;
             Keys = from.Keys;
+            Weights = from.Weights;
         }
 
         public MeshTopology WithPoints(Vector3[] points) => points.Length != Points.Length ? this : new MeshTopology(this, points);

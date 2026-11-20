@@ -1,7 +1,7 @@
 using YMM43D.Project.Shape;
 using YukkuriMovieMaker.Commons;
 
-namespace YMM43D.Controls
+namespace YMM43D.Controls.ShapeKeys
 {
     public sealed class ShapeKeysEditorViewModel(ItemProperty[] properties) : ListEditorViewModel<ShapeKey>(properties)
     {

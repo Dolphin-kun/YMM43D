@@ -84,7 +84,7 @@ namespace YMM43D.Graphics.Meshes
             var gone = new HashSet<int>(droppedLoose);
             var loose = mesh.LooseEdges.Where(edge => !gone.Contains(mesh.FindEdge(edge.A, edge.B))).ToList();
             var draft = new MeshTopology(mesh.Points, [.. faces], [.. groups], [.. smooth], mesh.GroupCount, loose);
-            var straight = removable.Where(vertex => removesAll || IsInLine(draft, vertex)).ToHashSet();
+            var straight = removable.Where(vertex => removesAll || IsPassedThrough(draft, vertex)).ToHashSet();
 
             if (made.Count == 0 && gone.Count == 0 && straight.Count == 0)
                 return null;
@@ -98,10 +98,13 @@ namespace YMM43D.Graphics.Meshes
 
         private static bool Spreads(MeshTopology mesh, HashSet<int> chosen, int vertex) => chosen.Contains(vertex) && mesh.VertexEdges[vertex].Length > 2;
 
-        private static bool IsInLine(MeshTopology mesh, int vertex)
+        private static bool IsPassedThrough(MeshTopology mesh, int vertex)
         {
             if (vertex >= mesh.Points.Length || mesh.VertexEdges[vertex].Length != 2)
                 return false;
+
+            if (mesh.VertexEdges[vertex].All(edge => mesh.EdgeFaces[edge].Length == 2))
+                return true;
 
             var here = mesh.Points[vertex];
             var first = mesh.Points[mesh.Edges[mesh.VertexEdges[vertex][0]].Other(vertex)] - here;

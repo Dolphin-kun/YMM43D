@@ -28,7 +28,7 @@ namespace YMM43D.PreviewTool
             I3DProvider provider,
             ImmutableList<IVideoEffect> effects)
         {
-            var needsImage = provider.RequiresMappedTexture && GetProviderTexture(provider, environment) is null;
+            var needsImage = provider.RequiresMappedTexture && !HasProviderTexture(provider, environment);
 
             var rendered = pipeline.Render(
                 item, itemTime, environment, needsImage, allParts: needsImage, provider, effects,
@@ -65,7 +65,7 @@ namespace YMM43D.PreviewTool
             I3DProvider provider,
             in GroupLookup groups)
         {
-            var providerTexture = GetProviderTexture(provider, environment);
+            var hasProviderTexture = HasProviderTexture(provider, environment);
 
             var parts = prepared.TryGetValue((item, provider), out var found) && found.Length > 0
                 ? found
@@ -76,8 +76,8 @@ namespace YMM43D.PreviewTool
             for (var i = 0; i < parts.Length; i++)
             {
                 var ready = parts[i];
-                var texture = providerTexture ?? (provider.RequiresMappedTexture ? ready.ImageTexture : null);
-                var imageBounds = providerTexture is null && texture is not null ? ready.ImageBounds : null;
+                var texture = provider.RequiresMappedTexture ? ready.ImageTexture : null;
+                var imageBounds = !hasProviderTexture && texture is not null ? ready.ImageBounds : null;
 
                 var world = provider is I3DPlacedInstance placed
                     && placed.TryGetPlacement(out var own)
@@ -101,8 +101,8 @@ namespace YMM43D.PreviewTool
             return contexts;
         }
 
-        private static ID3D11ShaderResourceView? GetProviderTexture(I3DProvider provider, PreviewEnvironment environment)
-            => provider is I3DTextureProvider textureProvider ? textureProvider.GetTexture(environment.Device) : null;
+        private static bool HasProviderTexture(I3DProvider provider, PreviewEnvironment environment)
+            => provider is I3DTextureProvider textureProvider && textureProvider.HasTexture(environment.Device);
 
         public void Reset()
         {

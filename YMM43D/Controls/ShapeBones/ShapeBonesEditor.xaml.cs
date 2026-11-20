@@ -3,32 +3,32 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using YukkuriMovieMaker.Commons;
 
-namespace YMM43D.Controls
+namespace YMM43D.Controls.ShapeBones
 {
-    public partial class ShapeKeysEditor : UserControl, IPropertyEditorControl
+    public partial class ShapeBonesEditor : UserControl, IPropertyEditorControl
     {
         public event EventHandler? BeginEdit;
 
         public event EventHandler? EndEdit;
 
-        public ShapeKeysEditor()
+        public ShapeBonesEditor()
         {
             InitializeComponent();
 
             DataContextChanged += OnDataContextChanged;
         }
 
-        public void SetFocus() => KeyList.Focus();
+        public void SetFocus() => BoneList.Focus();
 
         private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
         {
-            if (e.OldValue is ShapeKeysEditorViewModel before)
+            if (e.OldValue is ShapeBonesEditorViewModel before)
             {
                 before.BeginEdit -= Slider_BeginEdit;
                 before.EndEdit -= Slider_EndEdit;
             }
 
-            if (e.NewValue is ShapeKeysEditorViewModel after)
+            if (e.NewValue is ShapeBonesEditorViewModel after)
             {
                 after.BeginEdit += Slider_BeginEdit;
                 after.EndEdit += Slider_EndEdit;
@@ -43,6 +43,6 @@ namespace YMM43D.Controls
 
         private void Text_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e) => EndEdit?.Invoke(this, EventArgs.Empty);
 
-        private void KeyList_PreviewMouseWheel(object sender, MouseWheelEventArgs e) => ListWheel.PassOn(KeyList, e);
+        private void BoneList_PreviewMouseWheel(object sender, MouseWheelEventArgs e) => ListWheel.PassOn(BoneList, e);
     }
 }

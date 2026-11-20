@@ -30,7 +30,7 @@ namespace YMM43D.Graphics.Meshes
 
             var flags = mesh.Smooth.Select((flag, face) => chosen.Contains(face) ? smooth : flag);
 
-            return (mesh.With(mesh.Points, mesh.Faces, mesh.Groups, flags).WithUvs(mesh.Uvs).WithKeys(mesh.Keys), [.. chosen.SelectMany(face => mesh.Faces[face]).Distinct()]);
+            return (mesh.With(mesh.Points, mesh.Faces, mesh.Groups, flags).WithUvs(mesh.Uvs).WithKeys(mesh.Keys).WithWeights(mesh.Weights), [.. chosen.SelectMany(face => mesh.Faces[face]).Distinct()]);
         }
 
         public static (MeshTopology Mesh, int[] Added)? Assigned(this MeshTopology mesh, IReadOnlyCollection<int> faces, int group)
@@ -42,7 +42,7 @@ namespace YMM43D.Graphics.Meshes
 
             var groups = mesh.Groups.Select((known, face) => chosen.Contains(face) ? group : known);
 
-            return (mesh.With(mesh.Points, mesh.Faces, groups, mesh.Smooth).WithUvs(mesh.Uvs).WithKeys(mesh.Keys), [.. chosen.SelectMany(face => mesh.Faces[face]).Distinct()]);
+            return (mesh.With(mesh.Points, mesh.Faces, groups, mesh.Smooth).WithUvs(mesh.Uvs).WithKeys(mesh.Keys).WithWeights(mesh.Weights), [.. chosen.SelectMany(face => mesh.Faces[face]).Distinct()]);
         }
 
         public static int[] FacesOf(this MeshTopology mesh, int group)
@@ -57,14 +57,15 @@ namespace YMM43D.Graphics.Meshes
 
         public static MeshTopology Carry(this MeshTopology to, MeshTopology from)
         {
-            if ((from.Marks.Count == 0 && from.Uvs is null && from.Keys is null) || (ReferenceEquals(to.Points, from.Points) && ReferenceEquals(to.Faces, from.Faces)))
+            if ((from.Marks.Count == 0 && from.Uvs is null && from.Keys is null && from.Weights is null) || (ReferenceEquals(to.Points, from.Points) && ReferenceEquals(to.Faces, from.Faces)))
                 return to;
 
             var uvs = to.Uvs ?? MeshUv.Carried(to, from);
             var keys = to.Keys ?? MeshUv.CarriedKeys(to, from);
+            var weights = to.Weights ?? MeshUv.CarriedWeights(to, from);
 
             if (from.Marks.Count == 0)
-                return to.WithUvs(uvs).WithKeys(keys);
+                return to.WithUvs(uvs).WithKeys(keys).WithWeights(weights);
 
             var places = new Dictionary<(long, long, long), int>();
 
@@ -109,7 +110,7 @@ namespace YMM43D.Graphics.Meshes
                 }
             }
 
-            return to.WithMarks(marks).WithUvs(uvs).WithKeys(keys);
+            return to.WithMarks(marks).WithUvs(uvs).WithKeys(keys).WithWeights(weights);
         }
 
         private static bool OnSegment(Vector3 point, Vector3 a, Vector3 b)

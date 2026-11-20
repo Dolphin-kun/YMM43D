@@ -72,6 +72,7 @@ namespace YMM43D.PreviewTool
         private ID3D11RenderTargetView? pickView;
         private ID3D11Texture2D? pickStaging;
         private nint pickDeviceKey;
+        private ComposedFrame? composed;
 
         public I3DProvider DefaultProvider => flatItemProvider;
 
@@ -101,16 +102,7 @@ namespace YMM43D.PreviewTool
             }
         }
 
-        public void Draw(
-            ID3D11Device device,
-            ID3D11DeviceContext context,
-            ID3D11RenderTargetView renderTarget,
-            ID3D11DepthStencilView depthStencil,
-            int width,
-            int height,
-            float pixelScale,
-            PreviewScene scene,
-            ID3D11ShaderResourceView? depthView = null)
+        public void Compose(int width, int height, float pixelScale, PreviewScene scene)
         {
             var groups = GroupLookup.Build(scene.Environment.Scene?.Timeline, scene.Time.Frame, scene.Time.Fps);
 
@@ -128,11 +120,6 @@ namespace YMM43D.PreviewTool
                 foreach (var drawContext in built)
                     entries.Add((previewItem, drawContext));
             }
-
-            context.OMSetRenderTargets(renderTarget, depthStencil);
-            context.ClearRenderTargetView(renderTarget, BackgroundColor);
-            context.ClearDepthStencilView(depthStencil, DepthStencilClearFlags.Depth, 1f, 0);
-            context.RSSetViewport(new Viewport(0, 0, width * pixelScale, height * pixelScale));
 
             var viewPose = scene.ViewPose;
 
@@ -154,43 +141,13 @@ namespace YMM43D.PreviewTool
                 casters.Add(new SceneDepthCollector.Occluder(previewItem.Provider, drawContext.World, drawContext.Time));
             }
 
-            var lit = SceneShadows.Build(device, context, scene.Lighting, casters, this);
-
-            var render = new Render3DContext(device, context, viewPose.ViewMatrix, projection, lit)
-            {
-                Scene = casters,
-                SceneDepth = depthView,
-            }.BindLights();
-
             var sceneCameraPose = scene.SceneCameraPose;
             var screenTangent = scene.GetScreenTangent(pixelsPerTangent);
-
-            if (scene.ShowsGrid)
-                grid.Draw(render, viewPose.Position);
-
-            cameraGizmo.Draw(render, sceneCameraPose, screenTangent);
 
             frustumApex = sceneCameraPose.Position;
             frustumCorners = CameraFrustum.WorldCorners(sceneCameraPose, screenTangent);
 
             pickMarkers = scene.Markers;
-            markers.Draw(render, scene.Markers, scene.SelectedMarker);
-
-            try
-            {
-                foreach (var (previewItem, drawContext) in entries)
-                {
-                    RenderStates.IsMeshMode = scene.ShowsMesh && IsModel(previewItem.Item);
-
-                    var seeThrough = scene.IsEditingMesh && scene.XRay && scene.Selection.Contains(previewItem.Item);
-
-                    previewItem.Provider.Draw(render, seeThrough ? Faded(drawContext) : drawContext);
-                }
-            }
-            finally
-            {
-                RenderStates.IsMeshMode = false;
-            }
 
             pickTargets =
             [
@@ -205,17 +162,10 @@ namespace YMM43D.PreviewTool
             GizmoMarker = FindGizmoMarker(scene);
 
             Bones = ResolveBones(entries, scene);
-            boneRenderer.Draw(render, Bones, scene.SelectedBone);
 
             Outline = ResolveOutline(entries, scene);
 
-            if (Outline is { } shownOutline)
-                outlineRenderer.Draw(render, shownOutline.Points, viewPose.Position);
-
             Handles = ResolveHandles(entries, scene);
-
-            if (Handles is { } shownHandles)
-                outlineRenderer.Draw(render, shownHandles.Points, viewPose.Position);
 
             lastSingle = SinglePlacement(entries, scene);
             MeshEdit = scene.IsEditingMesh ? ResolveMeshShape() : null;
@@ -224,12 +174,14 @@ namespace YMM43D.PreviewTool
             View = new ViewSnapshot(viewPose.ViewMatrix * projection, width, height, viewPose.Position, Forward(viewPose.ViewMatrix), scene.IsOrthographic);
             MeshPick = null;
 
+            MeshFrame? meshFrame = null;
+
             if (MeshEdit is { } shownMesh)
             {
                 var (right, up) = LocalScreenAxes(shownMesh.ToWorld, viewPose);
                 var overlay = new MeshOverlay(right, up, scene.CutEdge, scene.ShowsInflateHandle, scene.XRay, scene.MeshRevision);
 
-                meshEditRenderer.Draw(render, shownMesh.ToWorld, shownMesh.Mesh, scene.MeshSelection, overlay);
+                meshFrame = new MeshFrame(shownMesh.ToWorld, shownMesh.Mesh, scene.MeshSelection.Copy(), overlay);
 
                 lastInflate = scene.ShowsInflateHandle
                     && MeshEditRenderer.HandleAt(shownMesh.Mesh, scene.MeshSelection.Vertices, right) is { } grip
@@ -262,35 +214,143 @@ namespace YMM43D.PreviewTool
             if (SelectedBone(scene) is not null)
                 lastTurnsInThreeAxes = true;
 
-            if (Gizmo is { } gizmo)
-            {
-                transformGizmo.Draw(render, gizmo, scene.ActiveHandle, lastGizmoStyle, lastTurnsInThreeAxes);
-            }
-
-            if (scene.Overlay is { } shownOverlay)
-            {
-                var (cameraRight, cameraUp) = CameraAxes(viewPose.ViewMatrix);
-
-                overlayRenderer.Draw(render, shownOverlay, View, cameraRight, cameraUp);
-            }
-
-            axisIndicator.Draw(render, viewPose, width, height, pixelScale);
+            axisIndicator.Place(viewPose, width, height);
 
             lastViewProjection = viewPose.ViewMatrix * projection;
             lastViewPosition = viewPose.Position;
             lastView = viewPose.ViewMatrix;
             lastProjection = projection;
             lastLighting = scene.Lighting;
-            lastDevice = device;
-            lastContext = context;
             lastWidth = width;
             lastHeight = height;
 
-            if (pendingPick is { } cursor)
+            composed = new ComposedFrame(
+                scene, entries, casters, projection, width, height, pixelScale, sceneCameraPose, screenTangent,
+                Bones, Outline, Handles, meshFrame, Gizmo, lastGizmoStyle, lastTurnsInThreeAxes, View);
+        }
+
+        public void ClearFrame() => composed = null;
+
+        public void Draw(
+            ID3D11Device device,
+            ID3D11DeviceContext context,
+            ID3D11RenderTargetView renderTarget,
+            ID3D11DepthStencilView depthStencil,
+            ID3D11ShaderResourceView? depthView,
+            bool resolvesPick)
+        {
+            if (composed is not { } frame)
+                return;
+
+            var scene = frame.Scene;
+            var viewPose = scene.ViewPose;
+
+            context.OMSetRenderTargets(renderTarget, depthStencil);
+            context.ClearRenderTargetView(renderTarget, BackgroundColor);
+            context.ClearDepthStencilView(depthStencil, DepthStencilClearFlags.Depth, 1f, 0);
+            context.RSSetViewport(new Viewport(0, 0, frame.Width * frame.PixelScale, frame.Height * frame.PixelScale));
+
+            var lit = SceneShadows.Build(device, context, scene.Lighting, frame.Casters, this);
+
+            var render = new Render3DContext(device, context, viewPose.ViewMatrix, frame.Projection, lit)
+            {
+                Scene = frame.Casters,
+                SceneDepth = depthView,
+            }.BindLights();
+
+            if (scene.ShowsGrid)
+                grid.Draw(render, viewPose.Position);
+
+            cameraGizmo.Draw(render, frame.SceneCameraPose, frame.ScreenTangent);
+
+            markers.Draw(render, scene.Markers, scene.SelectedMarker);
+
+            try
+            {
+                foreach (var (previewItem, drawContext) in frame.Entries)
+                {
+                    RenderStates.IsMeshMode = scene.ShowsMesh && IsModel(previewItem.Item);
+
+                    var seeThrough = scene.IsEditingMesh && scene.XRay && scene.Selection.Contains(previewItem.Item);
+                    var textured = Textured(previewItem.Provider, drawContext, device);
+
+                    previewItem.Provider.Draw(render, seeThrough ? Faded(textured) : textured);
+                }
+            }
+            finally
+            {
+                RenderStates.IsMeshMode = false;
+            }
+
+            boneRenderer.Draw(render, frame.Bones, scene.SelectedBone);
+
+            if (frame.Outline is { } shownOutline)
+                outlineRenderer.Draw(render, shownOutline.Points, viewPose.Position);
+
+            if (frame.Handles is { } shownHandles)
+                outlineRenderer.Draw(render, shownHandles.Points, viewPose.Position);
+
+            if (frame.Mesh is { } mesh)
+                meshEditRenderer.Draw(render, mesh.ToWorld, mesh.Mesh, mesh.Selection, mesh.Overlay);
+
+            if (frame.Gizmo is { } gizmo)
+                transformGizmo.Draw(render, gizmo, scene.ActiveHandle, frame.GizmoStyle, frame.TurnsInThreeAxes);
+
+            if (scene.Overlay is { } shownOverlay)
+            {
+                var (cameraRight, cameraUp) = CameraAxes(viewPose.ViewMatrix);
+
+                overlayRenderer.Draw(render, shownOverlay, frame.View, cameraRight, cameraUp);
+            }
+
+            axisIndicator.Draw(render, frame.Width, frame.Height, frame.PixelScale);
+
+            lastDevice = device;
+            lastContext = context;
+
+            if (resolvesPick && pendingPick is { } cursor)
             {
                 pendingPick = null;
                 pickResult = ResolvePick(cursor);
             }
+        }
+
+        private sealed record MeshFrame(Matrix4x4 ToWorld, MeshTopology Mesh, MeshSelection Selection, MeshOverlay Overlay);
+
+        private sealed record ComposedFrame(
+            PreviewScene Scene,
+            List<(PreviewItem Item, DrawContext3D Context)> Entries,
+            List<SceneDepthCollector.Occluder> Casters,
+            Matrix4x4 Projection,
+            int Width,
+            int Height,
+            float PixelScale,
+            CameraPose SceneCameraPose,
+            Vector2 ScreenTangent,
+            IReadOnlyList<PreviewBone> Bones,
+            PreviewOutline? Outline,
+            PreviewHandles? Handles,
+            MeshFrame? Mesh,
+            TransformGizmo? Gizmo,
+            GizmoStyle GizmoStyle,
+            bool TurnsInThreeAxes,
+            ViewSnapshot View);
+
+        private static DrawContext3D Textured(I3DProvider provider, DrawContext3D context, ID3D11Device device)
+        {
+            if (provider is not I3DTextureProvider textureProvider || textureProvider.GetTexture(device) is not { } texture)
+                return context;
+
+            return new DrawContext3D
+            {
+                World = context.World,
+                Opacity = context.Opacity,
+                Blend = context.Blend,
+                IsAlwaysOnTop = context.IsAlwaysOnTop,
+                DepthOnly = context.DepthOnly,
+                Time = context.Time,
+                Texture = texture,
+            };
         }
 
         private static (IVideoItem Item, FrameContext Time, Matrix4x4 World)? SinglePlacement(
@@ -508,7 +568,7 @@ namespace YMM43D.PreviewTool
                     if (!ReferenceEquals(previewItem.Item, selected))
                         continue;
 
-                    if (BoneOverlay.Resolve(selected, context.Time, context.World) is { Count: > 0 } bones)
+                    if (BoneOverlay.Resolve(selected, context.Time, context.World, scene.IsEditingMesh) is { Count: > 0 } bones)
                         return bones;
                 }
             }
@@ -991,7 +1051,7 @@ namespace YMM43D.PreviewTool
 
                 var render = new Render3DContext(device, context, lastView, lastProjection, lastLighting).BindLights();
 
-                target.Provider.Draw(render, AsOpaque(target.Context));
+                target.Provider.Draw(render, AsOpaque(Textured(target.Provider, target.Context, device)));
 
                 context.OMSetRenderTargets([], null);
                 context.CopyResource(staging, surface);

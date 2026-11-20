@@ -176,6 +176,8 @@ namespace YMM43D.Plugin
         public virtual ID3D11ShaderResourceView? GetTexture(ID3D11Device device)
             => Processor is I3DTextureProvider provider ? provider.GetTexture(device) : null;
 
+        public virtual bool HasTexture(ID3D11Device device) => Processor is I3DTextureProvider provider && provider.HasTexture(device);
+
         public virtual bool TryGetLocalMatrix(out Matrix4x4 matrix)
         {
             if (Processor is I3DLocalTransform provider)

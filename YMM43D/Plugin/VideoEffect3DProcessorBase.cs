@@ -1,4 +1,5 @@
-﻿using System.Numerics;
+﻿using System.Diagnostics.CodeAnalysis;
+using System.Numerics;
 using Vortice.Direct2D1;
 using Vortice.Direct3D11;
 using YMM43D.Player;
@@ -15,7 +16,6 @@ namespace YMM43D.Plugin
         private readonly D2DTextureBridge textureBridge = new();
         private readonly Output3DRenderer renderer = new();
 
-        private ID2D1Image? output;
         private Vector2 inputSize;
         private Vector2 inputOffset;
         private Matrix4x4? localMatrix;
@@ -35,17 +35,19 @@ namespace YMM43D.Plugin
 
         protected virtual Matrix4x4 GetGroupParentMatrix(in FrameContext time) => Matrix4x4.Identity;
 
-        protected bool IsGroupEffect { get; private set; }
+        private GroupMember member = GroupMember.None;
 
-        protected bool IsChainedEffect { get; private set; }
+        protected bool IsGroupEffect => member.IsGroup;
 
-        protected bool IsOwnSolid { get; private set; }
+        protected bool IsChainedEffect => member.IsChained;
+
+        protected bool IsOwnSolid => member.IsOwn;
 
         protected virtual bool AcceptsOwnSolid(I3DProvider solid, in FrameContext itemTime) => false;
 
-        protected I3DProvider? GroupMemberSolid { get; private set; }
+        protected I3DProvider? GroupMemberSolid => member.Solid;
 
-        protected VideoEffect3DProcessorBase? GroupMemberProcessor { get; private set; }
+        protected VideoEffect3DProcessorBase? GroupMemberProcessor => member.Solid as VideoEffect3DProcessorBase;
 
         internal IGraphicsDevicesAndContext SourceDevices => Devices;
 
@@ -55,7 +57,8 @@ namespace YMM43D.Plugin
 
         internal int PlacedFrame { get; private set; } = -1;
 
-        public ID2D1Image Output => output ?? throw new InvalidOperationException("まだ画像が生成されていません。Update を先に呼んでください。");
+        [AllowNull]
+        public ID2D1Image Output { get => field ?? throw new InvalidOperationException("まだ画像が生成されていません。Update を先に呼んでください。"); private set; }
 
         public virtual bool RequiresMappedTexture => false;
 
@@ -103,7 +106,7 @@ namespace YMM43D.Plugin
             localMatrix = world;
             PlacedFrame = effectDescription.TimelinePosition.Frame;
 
-            output = renderer.Render(Devices, effectDescription, Bounds(itemTime), world, Draw, out var imageReach, self: (I3DProvider?)owner ?? this, placement: placement);
+            Output = renderer.Render(Devices, effectDescription, Bounds(itemTime), world, Draw, out var imageReach, self: (I3DProvider?)owner ?? this, placement: placement);
 
             SceneRevision.Advance();
 
@@ -161,35 +164,31 @@ namespace YMM43D.Plugin
             return true;
         }
 
-        private void FindGroupMemberSolid(EffectDescription description)
-        {
-            IsGroupEffect = false;
-            IsChainedEffect = false;
-            IsOwnSolid = false;
-            GroupMemberSolid = null;
-            GroupMemberProcessor = null;
+        private void FindGroupMemberSolid(EffectDescription description) => member = LocateGroupMember(description);
 
+        private GroupMember LocateGroupMember(EffectDescription description)
+        {
             if (!KeepsGroupMemberSolid || owner is null || SceneDepthCollector.FindOwner(description) is not { } item)
-                return;
+                return GroupMember.None;
 
             if (GroupEffectSource.IsOnGroup(item, owner))
-            {
-                IsGroupEffect = true;
-                GroupMemberSolid = GroupEffectSource.Find(item, description, owner, Devices, this);
-            }
-            else if (GroupEffectSource.FindInChain(item, description, owner, Devices, this) is { } chained)
-            {
-                GroupMemberSolid = chained;
-                IsChainedEffect = true;
-            }
-            else if (GroupEffectSource.FindOwnSolid(item, Devices, this) is { } own
+                return new GroupMember(GroupEffectSource.Find(item, description, owner, Devices, this), true, false, false);
+
+            if (GroupEffectSource.FindInChain(item, description, owner, Devices, this) is { } chained)
+                return new GroupMember(chained, false, true, false);
+
+            if (GroupEffectSource.FindOwnSolid(item, Devices, this) is { } own
                 && AcceptsOwnSolid(own, FrameContext.FromItem(description)))
             {
-                GroupMemberSolid = own;
-                IsOwnSolid = true;
+                return new GroupMember(own, false, false, true);
             }
 
-            GroupMemberProcessor = GroupMemberSolid as VideoEffect3DProcessorBase;
+            return GroupMember.None;
+        }
+
+        private sealed record GroupMember(I3DProvider? Solid, bool IsGroup, bool IsChained, bool IsOwn)
+        {
+            public static GroupMember None { get; } = new(null, false, false, false);
         }
 
         protected bool TryDrawGroupMemberSolid(in Render3DContext render, in DrawContext3D item)
@@ -259,6 +258,8 @@ namespace YMM43D.Plugin
             }
         }
 
+        public bool HasTexture(ID3D11Device device) => !Volatile.Read(ref isDisposed) && Volatile.Read(ref bakedDeviceKey) == device.NativePointer;
+
         public bool TryGetLocalMatrix(out Matrix4x4 matrix)
         {
             matrix = localMatrix ?? Matrix4x4.Identity;
@@ -286,7 +287,7 @@ namespace YMM43D.Plugin
                 bakedTexture = null;
                 bakedDeviceKey = nint.Zero;
                 Input = null;
-                output = null;
+                Output = null;
             }
 
             owner?.DetachProcessor(this);

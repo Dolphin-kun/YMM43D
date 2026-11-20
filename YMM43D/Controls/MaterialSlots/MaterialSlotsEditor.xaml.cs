@@ -3,7 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using YukkuriMovieMaker.Commons;
 
-namespace YMM43D.Controls
+namespace YMM43D.Controls.MaterialSlots
 {
     public partial class MaterialSlotsEditor : UserControl, IPropertyEditorControl
     {

@@ -1,7 +1,7 @@
 using System.Windows;
 using YukkuriMovieMaker.Commons;
 
-namespace YMM43D.Controls
+namespace YMM43D.Controls.ControlPoints
 {
     [AttributeUsage(AttributeTargets.Property)]
     public sealed class ControlPointsEditorAttribute : PropertyEditorAttribute2

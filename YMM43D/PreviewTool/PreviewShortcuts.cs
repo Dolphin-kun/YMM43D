@@ -92,6 +92,7 @@ namespace YMM43D.PreviewTool
             new(PreviewAction.InvertSelection, Key.I, Ctrl, true, PreviewContext.Edit),
             new(PreviewAction.GrowSelection, Key.Add, Ctrl, true, PreviewContext.Edit),
             new(PreviewAction.GrowSelection, Key.OemPlus, Ctrl, false, PreviewContext.Edit),
+            new(PreviewAction.GrowSelection, Key.OemPlus, Ctrl | Shift, false, PreviewContext.Edit),
             new(PreviewAction.ShrinkSelection, Key.Subtract, Ctrl, true, PreviewContext.Edit),
             new(PreviewAction.ShrinkSelection, Key.OemMinus, Ctrl, false, PreviewContext.Edit),
 

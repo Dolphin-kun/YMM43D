@@ -1,11 +1,17 @@
 ﻿using System.Collections.Immutable;
+using System.ComponentModel;
 using System.Numerics;
 using System.ComponentModel.DataAnnotations;
 using System.Windows.Media;
 using YMM43D.Graphics.Meshes;
 using YMM43D.Commons;
-using YMM43D.Controls;
+using YMM43D.Controls.MaterialSlots;
+using YMM43D.Controls.ModifierStack;
+using YMM43D.Controls.ShapeBones;
+using YMM43D.Controls.ShapeKeys;
+using YMM43D.Graphics.Models;
 using YMM43D.Plugin;
+using YMM43D.Project.Model;
 using YMM43D.Project.Shape.Modifiers;
 using YukkuriMovieMaker.Commons;
 using YukkuriMovieMaker.Controls;
@@ -16,7 +22,7 @@ using YukkuriMovieMaker.Project;
 
 namespace YMM43D.Project.Shape
 {
-    internal sealed class Shape3DParameter(SharedDataStore? sharedData) : ShapeParameter3DBase(sharedData), ISceneRotation3D
+    internal sealed class Shape3DParameter(SharedDataStore? sharedData) : ShapeParameter3DBase(sharedData), ISceneRotation3D, IBoneHost
     {
         private const string Body = "";
         private const string Rotation = "3D回転";
@@ -24,6 +30,7 @@ namespace YMM43D.Project.Shape
         private const string Paint = "色";
         private const string Modify = "モディファイア";
         private const string Keys = "シェイプキー";
+        private const string Rig = "骨";
         private const int AppliedFps = 60;
         private const int SharpBit = 1;
         private const int SeamBit = 2;
@@ -125,6 +132,12 @@ namespace YMM43D.Project.Shape
             set { Set(ref field, value ?? []); Forget(); }
         } = [];
 
+        public ImmutableList<double> MeshWeights
+        {
+            get;
+            set { Set(ref field, value ?? []); Forget(); }
+        } = [];
+
         public bool HasMesh => MeshPoints.Count >= 3;
 
         private MeshTopology? edited;
@@ -216,6 +229,143 @@ namespace YMM43D.Project.Shape
                 shown = null;
             }
         } = -1;
+
+        [Display(GroupName = Rig, Name = "")]
+        [ShapeBonesEditor]
+        [ShowPropertyEditorWhen(nameof(IsCustom), false)]
+        public ImmutableList<ShapeBone> Bones
+        {
+            get;
+            set
+            {
+                foreach (var bone in field)
+                    bone.PropertyChanged -= OnBoneChanged;
+
+                Set(ref field, value, nameof(Bones), nameof(HasBones), nameof(IModelHost.Model));
+
+                foreach (var bone in field)
+                    bone.PropertyChanged += OnBoneChanged;
+            }
+        } = [];
+
+        [Display(GroupName = Rig, Name = "")]
+        [BonePoseList]
+        [ShowPropertyEditorWhen(nameof(HasBones), true)]
+        public ImmutableList<ModelBonePose> BonePoses { get; set => Set(ref field, value); } = [];
+
+        public bool HasBones => Bones.Count > 0;
+
+        private void OnBoneChanged(object? sender, PropertyChangedEventArgs e) => OnPropertyChanged(nameof(IModelHost.Model));
+
+        ModelData? IModelHost.Model => ShapeArmature.Build(Bones);
+
+        ModelBonePose IBoneHost.BoneFor(string name)
+        {
+            if (BonePoses.FirstOrDefault(pose => pose.Name == name) is { } found)
+                return found;
+
+            var made = new ModelBonePose(name);
+
+            BonePoses = BonePoses.Add(made);
+
+            return made;
+        }
+
+        void IBoneHost.DropBoneIfUntouched(string name)
+        {
+            if (BonePoses.FirstOrDefault(pose => pose.Name == name) is { IsUntouched: true } found)
+                BonePoses = BonePoses.Remove(found);
+        }
+
+        internal Matrix4x4[]? SkinAt(in FrameContext time) => ShapeArmature.Build(Bones) is { } model ? ShapeArmature.Skin(model, BonePoses, time) : null;
+
+        internal Matrix4x4? BoneShift(string name, in FrameContext time)
+        {
+            if (ShapeArmature.Build(Bones) is not { } model)
+                return null;
+
+            var index = Array.FindIndex(model.Bones, bone => bone.Name == name);
+
+            if (index < 0)
+                return null;
+
+            var scale = Matrix4x4.CreateScale(WorldScale.ToWorld(Size.GetFloat(time)));
+
+            return Matrix4x4.Invert(scale, out var back) ? back * ShapeArmature.Skin(model, BonePoses, time)[index] * scale : null;
+        }
+
+        internal void AddBone(ShapeBone bone)
+        {
+            var count = HasMesh ? Basis().Points.Length : 0;
+
+            if (count > 0 && MeshWeights.Count == Bones.Count * count)
+                MeshWeights = MeshWeights.AddRange(Enumerable.Repeat(0.0, count));
+
+            Bones = Bones.Add(bone);
+        }
+
+        internal void RemoveBone(int index)
+        {
+            if (index < 0 || index >= Bones.Count)
+                return;
+
+            var count = HasMesh ? Basis().Points.Length : 0;
+
+            if (count > 0 && MeshWeights.Count == Bones.Count * count)
+                MeshWeights = MeshWeights.RemoveRange(index * count, count);
+
+            Bones = Bones.RemoveAt(index);
+        }
+
+        internal void MoveBone(int from, int to)
+        {
+            if (from < 0 || to < 0 || from >= Bones.Count || to >= Bones.Count || from == to)
+                return;
+
+            var count = HasMesh ? Basis().Points.Length : 0;
+
+            if (count > 0 && MeshWeights.Count == Bones.Count * count)
+            {
+                var flat = MeshWeights.ToBuilder();
+
+                for (var i = 0; i < count; i++)
+                {
+                    flat[from * count + i] = MeshWeights[to * count + i];
+                    flat[to * count + i] = MeshWeights[from * count + i];
+                }
+
+                MeshWeights = flat.ToImmutable();
+            }
+
+            Bones = Bones.SetItem(from, Bones[to]).SetItem(to, Bones[from]);
+        }
+
+        internal void AutoWeights()
+        {
+            if (Bones.Count == 0)
+                return;
+
+            MeshWeights = FlattenWeights(ShapeArmature.AutoWeights(Basis(), Bones));
+        }
+
+        internal void SetWeights(IReadOnlyCollection<int> vertices, int bone, float weight)
+        {
+            if (bone < 0 || bone >= Bones.Count)
+                return;
+
+            var basis = Basis();
+            var weights = basis.Weights is { } known && known.Length == Bones.Count ? known.Select(one => (float[])one.Clone()).ToArray() : [.. Bones.Select(_ => new float[basis.Points.Length])];
+
+            foreach (var vertex in vertices)
+            {
+                if (vertex >= 0 && vertex < basis.Points.Length)
+                    weights[bone][vertex] = weight;
+            }
+
+            MeshWeights = FlattenWeights(weights);
+        }
+
+        private static ImmutableList<double> FlattenWeights(float[][] weights) => [.. weights.SelectMany(weight => weight.Select(value => (double)value))];
 
         internal bool IsEditing { get; set; }
 
@@ -544,7 +694,7 @@ namespace YMM43D.Project.Shape
         {
             var size = Size.GetFloat(time);
 
-            return new ModifierContext(time, size > 0f ? 1f / size : 0f, targets ? Targets : null);
+            return new ModifierContext(time, size > 0f ? 1f / size : 0f, targets ? Targets : null, SkinAt(time));
         }
 
         private Evaluation Evaluate(IReadOnlySet<int>? hidden, in FrameContext time, bool targets, EvaluationSlot slot, bool waits)
@@ -615,7 +765,8 @@ namespace YMM43D.Project.Shape
             var kept = Enumerable.Range(0, mesh.Faces.Length).Where(face => !hidden.Contains(face)).ToArray();
 
             return mesh.With(mesh.Points, kept.Select(face => mesh.Faces[face]), kept.Select(face => mesh.Groups[face]), kept.Select(face => mesh.Smooth[face]))
-                .WithUvs(mesh.Uvs is { } uvs ? [.. kept.Select(face => uvs[face])] : null);
+                .WithUvs(mesh.Uvs is { } uvs ? [.. kept.Select(face => uvs[face])] : null)
+                .WithWeights(mesh.Weights);
         }
 
         private sealed record Evaluation(MeshTopology Cage, IReadOnlySet<int>? Hidden, float? Angle, ModifierStep[] Steps, MeshTopology Mesh, SurfaceGeometry Geometry)
@@ -635,6 +786,9 @@ namespace YMM43D.Project.Shape
         {
             if (ShapeKeys.Count > 0 && built.Keys is null && HasMesh)
                 built = built.WithKeys(MeshUv.CarriedKeys(built, ShownMesh()));
+
+            if (Bones.Count > 0 && built.Weights is null && HasMesh)
+                built = built.WithWeights(MeshUv.CarriedWeights(built, ShownMesh()));
 
             var display = built;
 
@@ -661,6 +815,7 @@ namespace YMM43D.Project.Shape
                 MeshMarks = [.. built.Marks.SelectMany(pair => new double[] { pair.Key.A, pair.Key.B, (pair.Value.Sharp ? SharpBit : 0) | (pair.Value.Seam ? SeamBit : 0), pair.Value.Crease })];
                 MeshUvs = built.Uvs is { } uvs ? [.. uvs.SelectMany(face => face.SelectMany(uv => new double[] { uv.X, uv.Y }))] : [];
                 MeshKeys = built.Keys is { } keys && ShapeKeys.Count == keys.Length ? [.. keys.SelectMany(Flatten)] : [];
+                MeshWeights = built.Weights is { } weights && Bones.Count == weights.Length ? FlattenWeights(weights) : [];
             });
 
             return display;
@@ -705,6 +860,7 @@ namespace YMM43D.Project.Shape
             MeshMarks = [];
             MeshUvs = [];
             MeshKeys = [];
+            MeshWeights = [];
             ShapeKeys = [];
             ActiveShapeKey = -1;
         }
@@ -781,7 +937,27 @@ namespace YMM43D.Project.Shape
                 marks[MeshTopology.Key((int)storedMarks[i], (int)storedMarks[i + 1])] = new EdgeMark((flags & SharpBit) != 0, (float)storedMarks[i + 3], (flags & SeamBit) != 0);
             }
 
-            return new MeshTopology(points, faces, groups, smooth, GroupCount, loose, marks, ReadUvs(faces), ReadKeys(points.Length));
+            return new MeshTopology(points, faces, groups, smooth, GroupCount, loose, marks, ReadUvs(faces), ReadKeys(points.Length), ReadWeights(points.Length));
+        }
+
+        private float[][]? ReadWeights(int count)
+        {
+            var (stored, bones) = (MeshWeights, Bones.Count);
+
+            if (bones == 0 || stored.Count != bones * count)
+                return null;
+
+            var weights = new float[bones][];
+
+            for (var b = 0; b < bones; b++)
+            {
+                weights[b] = new float[count];
+
+                for (var i = 0; i < count; i++)
+                    weights[b][i] = (float)stored[b * count + i];
+            }
+
+            return weights;
         }
 
         private Vector3[][]? ReadKeys(int count)
@@ -946,7 +1122,7 @@ namespace YMM43D.Project.Shape
 
         protected override Shape3DSourceBase Create3DSource(IGraphicsDevicesAndContext devices) => new Shape3DSource(devices, this);
 
-        protected override IEnumerable<IAnimatable> GetAnimatables() => [Size, RotationX, RotationY, RotationZ, Gloss, GlossSharpness, CameraSyncAnimation, .. PivotAnimatables, .. Outline, .. Modifiers, .. Materials, .. ShapeKeys];
+        protected override IEnumerable<IAnimatable> GetAnimatables() => [Size, RotationX, RotationY, RotationZ, Gloss, GlossSharpness, CameraSyncAnimation, .. PivotAnimatables, .. Outline, .. Modifiers, .. Materials, .. ShapeKeys, .. Bones, .. BonePoses];
 
         public override IEnumerable<string> CreateMaskExoFilter(int keyFrameIndex, ExoOutputDescription desc, ShapeMaskExoOutputDescription shapeMaskDesc) => [];
 

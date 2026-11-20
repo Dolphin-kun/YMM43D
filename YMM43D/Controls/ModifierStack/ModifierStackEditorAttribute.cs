@@ -1,27 +1,27 @@
 using System.Windows;
 using YukkuriMovieMaker.Commons;
 
-namespace YMM43D.Controls
+namespace YMM43D.Controls.ModifierStack
 {
     [AttributeUsage(AttributeTargets.Property)]
-    public sealed class MaterialSlotsEditorAttribute : PropertyEditorAttribute2
+    public sealed class ModifierStackEditorAttribute : PropertyEditorAttribute2
     {
-        public MaterialSlotsEditorAttribute()
+        public ModifierStackEditorAttribute()
         {
             PropertyEditorSize = PropertyEditorSize.FullWidth;
         }
 
-        public override FrameworkElement Create() => new MaterialSlotsEditor();
+        public override FrameworkElement Create() => new ModifierStackEditor();
 
         public override void SetBindings(FrameworkElement control, ItemProperty[] properties)
         {
-            if (control is MaterialSlotsEditor editor)
-                editor.DataContext = new MaterialSlotsEditorViewModel(properties);
+            if (control is ModifierStackEditor editor)
+                editor.DataContext = new ModifierStackEditorViewModel(properties);
         }
 
         public override void ClearBindings(FrameworkElement control)
         {
-            if (control is not MaterialSlotsEditor editor)
+            if (control is not ModifierStackEditor editor)
                 return;
 
             (editor.DataContext as IDisposable)?.Dispose();

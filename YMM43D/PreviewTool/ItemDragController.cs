@@ -244,7 +244,7 @@ namespace YMM43D.PreviewTool
             }
 
             foreach (var target in targets)
-                target.Scope.NudgePosition(target.Item.X, target.Item.Y, target.Item.Z, delta);
+                target.Scope.NudgePosition(target.Item.X, target.Item.Y, target.Item.Z, Vector3.TransformNormal(delta, target.FromWorld));
 
             return true;
         }

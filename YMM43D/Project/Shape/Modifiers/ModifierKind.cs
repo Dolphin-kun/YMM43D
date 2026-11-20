@@ -8,5 +8,6 @@ namespace YMM43D.Project.Shape.Modifiers
         Solidify,
         Bevel,
         Boolean,
+        Armature,
     }
 }

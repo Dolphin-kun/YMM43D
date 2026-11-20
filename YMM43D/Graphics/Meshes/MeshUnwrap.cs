@@ -13,12 +13,12 @@ namespace YMM43D.Graphics.Meshes
         public static (MeshTopology Mesh, int[] Added)? Unwrapped(this MeshTopology mesh, IReadOnlyCollection<int> faces)
             => Apply(mesh, faces, chosen =>
             {
-                Func<int, int, int, bool> joins = (edge, _, _) => !mesh.MarkOf(edge).Seam;
+                bool Joins(int edge, int first, int second) => !mesh.MarkOf(edge).Seam;
                 var islands = new List<Island>();
 
-                foreach (var island in Islands(mesh, chosen, joins))
+                foreach (var island in Islands(mesh, chosen, Joins))
                 {
-                    if (IsClosed(mesh, island, joins))
+                    if (IsClosed(mesh, island, Joins))
                     {
                         islands.AddRange(Smart(mesh, [.. island.Faces], float.DegreesToRadians(ClosedAngle)));
                         continue;

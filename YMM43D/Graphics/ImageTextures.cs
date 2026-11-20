@@ -68,10 +68,10 @@ namespace YMM43D.Graphics
 
         public void Dispose()
         {
-            foreach (var one in kept)
+            foreach (var (_, texture, view, _) in kept)
             {
-                one.View.Dispose();
-                one.Texture.Dispose();
+                view.Dispose();
+                texture.Dispose();
             }
 
             kept.Clear();

@@ -95,6 +95,8 @@
             <Setter Property="CommandParameter" Value="{Binding Parameter}"/>
             <Setter Property="InputGestureText" Value="{Binding Gesture}"/>
             <Setter Property="ToolTip" Value="{Binding ToolTip}"/>
+            <Setter Property="ItemsSource" Value="{Binding Items}"/>
+            <Setter Property="ItemContainerStyle" Value="{DynamicResource MeshEntry}"/>
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsSeparator}" Value="True">
                     <Setter Property="IsEnabled" Value="False"/>
@@ -383,6 +385,11 @@
                               IsChecked="{Binding SlidesMesh}"
                               InputGestureText="{Binding Keys[ToggleSlide]}"
                               ToolTip="入れている間、ドラッグすると選んだところが隣の辺に沿って滑ります。ループカットの位置をずらすときに使ってください。"/>
+
+                    <MenuItem Header="骨を編集"
+                              IsCheckable="True"
+                              IsChecked="{Binding EditsBones}"
+                              ToolTip="入れている間は骨の付け根・先・線をドラッグして動かせ、つながった骨は一緒に動きます。"/>
                 </MenuItem>
 
                 <MenuItem Header="選び方" IsEnabled="{Binding IsEditingMesh}">
@@ -863,16 +870,34 @@
 
                             <StackPanel Visibility="{Binding HasShapeKeys, Converter={StaticResource VisibleWhenTrue}}" Margin="0,0,0,8">
                                 <TextBlock Text="シェイプキー" Style="{StaticResource SideHeader}"/>
-                                <ComboBox ItemsSource="{Binding ShapeKeys}" SelectedIndex="{Binding ShapeKeyIndex}" ToolTip="編集する形。「基準」以外を選ぶと、動かした量がそのキーの形として覚えられます"/>
+                                <ComboBox VerticalContentAlignment="Center" ItemsSource="{Binding ShapeKeys}" SelectedIndex="{Binding ShapeKeyIndex}" ToolTip="編集する形で、「基準」以外を選ぶと動かした量がそのキーの形として覚えられます"/>
                             </StackPanel>
 
                             <StackPanel Visibility="{Binding HasMaterials, Converter={StaticResource VisibleWhenTrue}}" Margin="0,0,0,8">
                                 <TextBlock Text="材質" Style="{StaticResource SideHeader}"/>
-                                <ComboBox Margin="0,0,0,2" ItemsSource="{Binding Materials}" SelectedIndex="{Binding MaterialIndex}"/>
+                                <ComboBox VerticalContentAlignment="Center" Margin="0,0,0,2" ItemsSource="{Binding Materials}" SelectedIndex="{Binding MaterialIndex}"/>
                                 <UniformGrid Columns="3">
                                     <Button Content="割り当て" ToolTip="選んだ面をこの材質で塗ります" Command="{Binding AssignMaterialCommand}"/>
                                     <Button Content="選ぶ" ToolTip="この材質の面を選びます" Command="{Binding SelectMaterialCommand}"/>
                                     <Button Content="外す" ToolTip="この材質の面を選びから外します" Command="{Binding DeselectMaterialCommand}"/>
+                                </UniformGrid>
+                            </StackPanel>
+
+                            <StackPanel Visibility="{Binding HasBones, Converter={StaticResource VisibleWhenTrue}}" Margin="0,0,0,8">
+                                <TextBlock Text="ウエイト" Style="{StaticResource SideHeader}"/>
+                                <ComboBox VerticalContentAlignment="Center" Margin="0,0,0,2" ItemsSource="{Binding Bones}" SelectedIndex="{Binding BoneIndex}"/>
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="80"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Label Content="つき具合" Style="{StaticResource SideLabel}"/>
+                                    <c:TextBoxSlider Grid.Column="1" Value="{Binding Weight, Mode=TwoWay}" Unit="%" StringFormat="F0" Delta="1" Min="0" Max="100" DefaultMin="0" DefaultMax="100"/>
+                                </Grid>
+                                <UniformGrid Columns="3">
+                                    <Button Content="割り当て" ToolTip="選んだ頂点が、この骨にこのつき具合でついていくようにします" Command="{Binding AssignWeightCommand}"/>
+                                    <Button Content="選ぶ" ToolTip="この骨についていく頂点を選びます" Command="{Binding SelectWeightCommand}"/>
+                                    <Button Content="外す" ToolTip="選んだ頂点を、この骨についていかないようにします" Command="{Binding RemoveWeightCommand}"/>
                                 </UniformGrid>
                             </StackPanel>
 
