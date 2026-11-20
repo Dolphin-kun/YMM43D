@@ -68,6 +68,7 @@ namespace YMM43D.Player
             var ownerTime = FrameContext.ForItem(owner, frame, fps);
 
             var casters = new List<Occluder>();
+            var below = new List<Occluder>();
             var found = new List<I3DProvider>();
 
             foreach (var item in items)
@@ -97,22 +98,31 @@ namespace YMM43D.Player
                         ? GetLocalMatrix(provider) * own * groupTransform
                         : GetLocalMatrix(provider) * placement;
 
-                    casters.Add(new Occluder(provider, world, itemTime));
+                    var occluder = new Occluder(provider, world, itemTime);
+
+                    casters.Add(occluder);
+
+                    if (video.Layer < owner.Layer)
+                        below.Add(occluder);
                 }
             }
 
             var flattened = flattening.Flattens(owner);
-            var occluders = new List<Occluder>(casters.Count);
+            var occluders = new List<Occluder>(below.Count);
 
             if (!flattened && IsPlacedIn3D(owner, self) && !IsOverriddenByGroup(owner, self, groups, devices))
             {
                 found.Clear();
                 FindProviders(owner, found, groups, devices);
 
-                foreach (var caster in casters)
+                foreach (var occluder in below)
                 {
-                    if (!found.Contains(caster.Provider))
-                        occluders.Add(caster);
+                    if (found.Contains(occluder.Provider))
+                        continue;
+
+                    occluders.Add(occluder.Provider is I3DSnapshot snapshot
+                        ? occluder with { Provider = snapshot.Snapshot(occluder.Time) }
+                        : occluder);
                 }
             }
 
