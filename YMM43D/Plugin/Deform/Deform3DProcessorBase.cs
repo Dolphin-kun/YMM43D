@@ -63,6 +63,20 @@ namespace YMM43D.Plugin
                 return;
             }
 
+            if (GroupMemberSolid is I3DFlatSource flat
+                && flat.TryGetFlat(time, render.Device, out var flatLocal, out var flatTexture)
+                && resources.TryGet(render.Device, out var flatReady))
+            {
+                flatReady.Pipeline.Draw(
+                    render.Context,
+                    render.CreateConstants(Bent(flatLocal) * item.World, item, IsUnlit, GetGloss(time)),
+                    GetConstants(time),
+                    item.ToDrawSettings(FaceCulling.None, flatTexture),
+                    flatReady.GetMesh(GetGrid(time)));
+
+                return;
+            }
+
             if (TryDrawGroupMemberSolid(render, item))
                 return;
 
@@ -93,6 +107,13 @@ namespace YMM43D.Plugin
                 return new WorldBounds(new Vector3(-half), new Vector3(half)).Transform(Matrix4x4.CreateScale(span) * Matrix4x4.CreateTranslation(center) * local);
             }
 
+            if (GroupMemberSolid is I3DFlatSource flat)
+            {
+                var reach = MathF.Max(extent.Depth, 0f);
+
+                return new WorldBounds(new Vector3(-half, -half, -reach), new Vector3(half, half, reach)).Transform(Bent(flat.GetFlatLocal(itemTime)));
+            }
+
             if (GroupMemberSolid is I3DBounds bounded)
                 return bounded.GetLocalBounds(itemTime);
 
@@ -100,6 +121,9 @@ namespace YMM43D.Plugin
 
             return new WorldBounds(new Vector3(-half, -half, -depth), new Vector3(half, half, depth));
         }
+
+        private static Matrix4x4 Bent(in Matrix4x4 flatLocal)
+            => Matrix4x4.CreateScale(1f, 1f, new Vector3(flatLocal.M11, flatLocal.M12, flatLocal.M13).Length()) * flatLocal;
 
         public override void Dispose()
         {

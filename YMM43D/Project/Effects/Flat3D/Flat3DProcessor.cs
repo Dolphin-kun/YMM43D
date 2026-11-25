@@ -58,6 +58,8 @@ namespace YMM43D.Project.Effects.Flat3D
             return texture is not null;
         }
 
+        public Matrix4x4 GetFlatLocal(in FrameContext itemTime) => GetLocalMatrix(itemTime);
+
         private Matrix4x4 GetRotation(in FrameContext time)
             => Rotation3D.ForObject(-effect.RotationX.GetFloat(time), -effect.RotationY.GetFloat(time), -effect.RotationZ.GetFloat(time));
 

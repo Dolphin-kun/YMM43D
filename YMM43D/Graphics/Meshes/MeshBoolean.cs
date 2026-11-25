@@ -58,17 +58,22 @@ namespace YMM43D.Graphics.Meshes
         {
             public static Plane? Through(Vector3[] points)
             {
+                var origin = points[0];
                 var normal = Vector3.Zero;
+                var center = Vector3.Zero;
 
                 for (var i = 0; i < points.Length; i++)
-                    normal += Vector3.Cross(points[(i + 1) % points.Length], points[i]);
+                {
+                    normal += Vector3.Cross(points[(i + 1) % points.Length] - origin, points[i] - origin);
+                    center += points[i] - origin;
+                }
 
                 if (normal.LengthSquared() < 1e-20f)
                     return null;
 
                 normal = Vector3.Normalize(normal);
 
-                return new Plane(normal, Vector3.Dot(normal, points[0]));
+                return new Plane(normal, Vector3.Dot(normal, origin + center / points.Length));
             }
 
             public Plane Flipped => new(-Normal, -W);
@@ -263,13 +268,20 @@ namespace YMM43D.Graphics.Meshes
                     if (items.Count == 0)
                         continue;
 
-                    node.plane ??= items[0].Plane;
+                    var start = 0;
+
+                    if (node.plane is null)
+                    {
+                        node.plane = items[0].Plane;
+                        node.polygons.Add(items[0]);
+                        start = 1;
+                    }
 
                     var frontList = new List<Polygon>();
                     var backList = new List<Polygon>();
 
-                    foreach (var polygon in items)
-                        Split(node.plane.Value, polygon, node.polygons, node.polygons, frontList, backList);
+                    for (var i = start; i < items.Count; i++)
+                        Split(node.plane.Value, items[i], node.polygons, node.polygons, frontList, backList);
 
                     if (frontList.Count > 0)
                         work.Push((node.front ??= new Node(), frontList));
